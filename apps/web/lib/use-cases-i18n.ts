@@ -32,6 +32,16 @@ export const useCaseText: Record<SupportedLocale, UseCaseText> = {
     cardReadMore: "阅读 →",
     tableOfContents: "目录",
   },
+  ru: {
+    indexTitle: "Кейсы",
+    indexSubtitle:
+      "Посмотрите, как команды организуют людей и агентов вместе с помощью Multica.",
+    indexMetadataTitle: "Кейсы",
+    indexMetadataDescription:
+      "Посмотрите, как команды объединяют людей и агентов для совместной работы с Multica.",
+    cardReadMore: "Читать →",
+    tableOfContents: "На этой странице",
+  },
 };
 
 // Secondary CTA points at the docs entry that matches the active locale,

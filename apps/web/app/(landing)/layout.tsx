@@ -1,5 +1,5 @@
 import { Instrument_Serif, Noto_Serif_SC } from "next/font/google";
-import { LocaleProvider } from "@/features/landing/i18n";
+import { LocaleProvider, type Locale } from "@/features/landing/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
 
 const instrumentSerif = Instrument_Serif({
@@ -44,7 +44,9 @@ export default async function LandingLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const initialLocale = await getRequestLocale();
+  const supportedLocale = await getRequestLocale();
+  // Landing only ships en + zh-Hans dictionaries; fall back to en for any other app locale (e.g. ru).
+  const initialLocale: Locale = supportedLocale == "zh-Hans" ? "zh-Hans" : "en";
 
   return (
     <>

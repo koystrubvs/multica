@@ -10,7 +10,8 @@
       "title": "Language",
       "english": "English",
       "chinese": "中文",
-      "sync_failed": "Language saved on this device, but failed to sync to your account. Other devices may show the previous language."
+      "sync_failed": "Language saved on this device, but failed to sync to your account. Other devices may show the previous language.",
+      "russian": "Russian"
     },
     "timezone": {
       "title": "Viewing Timezone",

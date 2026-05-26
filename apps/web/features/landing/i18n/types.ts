@@ -1,6 +1,4 @@
-import type { SupportedLocale } from "@multica/core/i18n";
-
-export type Locale = SupportedLocale;
+export type Locale = "en" | "zh-Hans";
 export type LandingDictionaryLocale = "en" | "zh";
 
 export const locales: Locale[] = ["en", "zh-Hans"];
