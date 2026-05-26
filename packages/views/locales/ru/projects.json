@@ -1,0 +1,99 @@
+{
+  "page": {
+    "title": "Проекты",
+    "new_project": "Новый проект",
+    "empty": "Пока нет проектов",
+    "create_first": "Создайте свой первый проект",
+    "view_compact": "Компактный",
+    "view_comfortable": "Просторный",
+    "search_placeholder": "Поиск проектов...",
+    "no_search_results": "Ничего не соответствует поиску"
+  },
+  "table": {
+    "name": "Название",
+    "priority": "Приоритет",
+    "status": "Статус",
+    "progress": "Прогресс",
+    "lead": "Ответственный",
+    "created": "Создан"
+  },
+  "status": {
+    "planned": "Запланирован",
+    "in_progress": "В работе",
+    "paused": "Приостановлен",
+    "completed": "Выполнен",
+    "cancelled": "Отменён"
+  },
+  "priority": {
+    "urgent": "Срочный",
+    "high": "Высокий",
+    "medium": "Средний",
+    "low": "Низкий",
+    "none": "Без приоритета"
+  },
+  "lead": {
+    "no_lead": "Нет ответственного",
+    "assign_placeholder": "Назначить ответственного...",
+    "members_group": "Участники",
+    "agents_group": "Агенты",
+    "no_results": "Ничего не найдено"
+  },
+  "relative_date": {
+    "today": "Сегодня",
+    "one_day_ago": "1 д назад",
+    "days_ago": "{{count}} д назад",
+    "months_ago": "{{count}} мес назад"
+  },
+  "detail": {
+    "not_found": "Проект не найден",
+    "breadcrumb_fallback": "Проекты",
+    "title_placeholder": "Название проекта",
+    "icon_tooltip": "Изменить иконку",
+    "pin_tooltip": "Закрепить в боковой панели",
+    "unpin_tooltip": "Открепить из боковой панели",
+    "sidebar_tooltip": "Переключить боковую панель",
+    "copy_link": "Скопировать ссылку",
+    "delete_action": "Удалить проект",
+    "section_properties": "Свойства",
+    "section_progress": "Прогресс",
+    "section_description": "Описание",
+    "description_placeholder": "Добавьте описание...",
+    "empty_issues_title": "Issues не привязаны",
+    "empty_issues_hint": "Создайте новый issue или привяжите существующие к этому проекту.",
+    "empty_issues_new_button": "Новый issue",
+    "no_issues_yet": "Пока нет issues",
+    "toast_link_copied": "Ссылка скопирована",
+    "toast_project_deleted": "Проект удалён",
+    "toast_move_issue_failed": "Не удалось переместить issue"
+  },
+  "resources": {
+    "section_header": "Ресурсы",
+    "empty": "Ресурсы не прикреплены.",
+    "add_button": "Добавить ресурс",
+    "popover_title": "Прикрепить репозиторий GitHub",
+    "repos_search_placeholder": "Поиск репозиториев...",
+    "repos_search_empty": "Нет репозиториев, соответствующих поиску.",
+    "attached_badge": "прикреплён",
+    "remove_tooltip": "Удалить",
+    "url_placeholder": "https://github.com/owner/repo или git@github.com:owner/repo.git",
+    "url_submit": "Добавить",
+    "toast_attached": "Репозиторий прикреплён",
+    "toast_attach_failed": "Не удалось прикрепить",
+    "toast_removed": "Ресурс удалён",
+    "toast_remove_failed": "Не удалось удалить ресурс"
+  },
+  "delete_dialog": {
+    "title": "Удалить проект",
+    "description": "Это удалит проект. Issues не будут удалены, но будут отвязаны от проекта.",
+    "confirm": "Удалить",
+    "cancel": "Отмена"
+  },
+  "picker": {
+    "no_project": "Без проекта",
+    "remove": "Убрать из проекта",
+    "empty": "Пока нет проектов"
+  },
+  "chip": {
+    "fallback_label": "Проект"
+  }
+}

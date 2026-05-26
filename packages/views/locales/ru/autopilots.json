@@ -1,0 +1,344 @@
+{
+  "page": {
+    "title": "Автопилот",
+    "new_autopilot": "Новый автопилот",
+    "start_blank": "Начать с нуля",
+    "table": {
+      "name": "Название",
+      "agent": "Агент",
+      "mode": "Режим",
+      "status": "Статус",
+      "last_run": "Последний запуск"
+    },
+    "last_run_empty": "--",
+    "empty": {
+      "title": "Пока нет автопилотов",
+      "hint": "Запланируйте регулярные tasks для AI-агентов. Выберите шаблон или начните с нуля."
+    }
+  },
+  "status": {
+    "active": "Активен",
+    "paused": "Приостановлен",
+    "archived": "Архивирован"
+  },
+  "execution_mode": {
+    "create_issue": "Создать issue",
+    "run_only": "Только запуск"
+  },
+  "relative_date": {
+    "today": "Сегодня",
+    "one_day_ago": "1 д назад",
+    "days_ago": "{{count}} д назад",
+    "months_ago": "{{count}} мес назад"
+  },
+  "templates": {
+    "daily_news": {
+      "title": "Ежедневный дайджест новостей",
+      "summary": "Найти и суммировать новости дня для команды"
+    },
+    "pr_review": {
+      "title": "Напоминание о ревью PR",
+      "summary": "Отметить «зависшие» pull requests, которым нужно ревью"
+    },
+    "bug_triage": {
+      "title": "Триаж багов",
+      "summary": "Оценить и приоритизировать новые баг-репорты"
+    },
+    "weekly_progress": {
+      "title": "Еженедельный отчёт о прогрессе",
+      "summary": "Собрать недельную сводку прогресса команды"
+    },
+    "dependency_audit": {
+      "title": "Аудит зависимостей",
+      "summary": "Просканировать на уязвимости и устаревшие пакеты"
+    },
+    "documentation_check": {
+      "title": "Проверка документации",
+      "summary": "Просмотреть недавние изменения на предмет пробелов в документации"
+    }
+  },
+  "detail": {
+    "not_found": "Автопилот не найден",
+    "pause_aria": "Приостановить автопилот",
+    "activate_aria": "Активировать автопилот",
+    "edit": "Редактировать",
+    "run_now": "Запустить сейчас",
+    "running": "Выполняется...",
+    "toast_triggered": "Автопилот запущен",
+    "toast_trigger_failed": "Не удалось запустить автопилот",
+    "section_properties": "Свойства",
+    "section_triggers": "Триггеры",
+    "section_run_history": "История запусков",
+    "section_danger": "Опасная зона",
+    "field_agent": "Агент",
+    "field_output_mode": "Режим вывода",
+    "field_project": "Проект",
+    "no_project": "Без проекта",
+    "project_unavailable": "Проект недоступен",
+    "field_prompt": "Промпт",
+    "add_trigger": "Добавить триггер",
+    "no_triggers": "Триггеры не настроены. Добавьте расписание для автоматического запуска.",
+    "no_runs": "Запусков пока нет. Нажмите «Запустить сейчас», чтобы вызвать вручную.",
+    "delete_button": "Удалить автопилот",
+    "toast_deleted": "Автопилот удалён",
+    "toast_delete_failed": "Не удалось удалить автопилот",
+    "delete_dialog": {
+      "title": "Удалить автопилот",
+      "description": "Это удалит «{{title}}» вместе с триггерами и историей запусков навсегда. Действие нельзя отменить.",
+      "cancel": "Отмена",
+      "confirm": "Удалить",
+      "deleting": "Удаление..."
+    }
+  },
+  "run_status": {
+    "issue_created": "Issue создан",
+    "running": "Выполняется",
+    "skipped": "Пропущено",
+    "completed": "Выполнено",
+    "failed": "Ошибка"
+  },
+  "run_source": {
+    "schedule": "Расписание",
+    "manual": "Вручную",
+    "webhook": "Webhook",
+    "api": "API"
+  },
+  "run": {
+    "issue_linked": "Issue привязан",
+    "view_log": "Открыть лог выполнения",
+    "skipped_group": {
+      "label": "Пропущенные",
+      "summary": "{{count}} пропущенных запусков"
+    }
+  },
+  "webhook_payload": {
+    "label": "Webhook-событие:",
+    "unknown_event": "webhook.received",
+    "payload": "Payload",
+    "content_type": "Content-Type: {{type}}",
+    "copy": "Скопировать",
+    "copied": "Payload webhook скопирован",
+    "copied_short": "Скопировано",
+    "copy_failed": "Не удалось скопировать",
+    "truncated_marker": "[обрезано — нажмите Скопировать, чтобы получить полный payload]"
+  },
+  "trigger_kind": {
+    "schedule": "Расписание",
+    "webhook": "Webhook",
+    "api": "API"
+  },
+  "trigger_row": {
+    "disabled_badge": "Отключён",
+    "deprecated_badge": "Устарел",
+    "next_label": "Далее: {{date}}",
+    "webhook_url_label": "Webhook URL",
+    "copy_url": "Скопировать URL",
+    "url_copied": "Webhook URL скопирован",
+    "url_copy_failed": "Не удалось скопировать",
+    "rotate_url": "Перевыпустить URL",
+    "rotate_confirm_title": "Перевыпустить webhook URL",
+    "rotate_confirm_description": "Текущий URL перестанет работать немедленно. Все внешние системы, которые его вызывают, должны быть обновлены на новый URL. Продолжить?",
+    "rotate_confirm_cancel": "Отмена",
+    "rotate_confirm_action": "Перевыпустить URL",
+    "rotate_in_progress": "Перевыпуск...",
+    "toast_rotated": "Webhook URL перевыпущен",
+    "toast_rotate_failed": "Не удалось перевыпустить URL",
+    "toast_deleted": "Триггер удалён",
+    "toast_delete_failed": "Не удалось удалить триггер",
+    "delete_dialog": {
+      "title": "Удалить триггер",
+      "description": "Этот триггер будет удалён, и автопилот перестанет срабатывать по этому расписанию. Действие нельзя отменить.",
+      "cancel": "Отмена",
+      "confirm": "Удалить",
+      "deleting": "Удаление..."
+    }
+  },
+  "deliveries": {
+    "section_title": "Доставки webhook",
+    "empty": "Доставок webhook пока нет. Отправьте POST на webhook URL, чтобы увидеть записи здесь.",
+    "row": {
+      "attempts": "{{count}}× попыток",
+      "replay_badge": "Повтор"
+    },
+    "status": {
+      "queued": "В очереди",
+      "dispatched": "Отправлено",
+      "rejected": "Отклонено",
+      "ignored": "Проигнорировано",
+      "failed": "Ошибка"
+    },
+    "signature": {
+      "not_required": "Без подписи",
+      "valid": "Подпись валидна",
+      "invalid": "Подпись невалидна",
+      "missing": "Подпись отсутствует"
+    },
+    "detail": {
+      "title": "Доставка",
+      "received_at": "Получено",
+      "last_attempt_at": "Последняя попытка",
+      "attempt_count": "Попыток",
+      "response_status": "Ответ",
+      "dedupe_key": "Ключ дедупликации",
+      "dedupe_source": "Источник дедупликации",
+      "content_type": "Content-Type",
+      "replayed_from": "Повторено из",
+      "error_label": "Ошибка",
+      "raw_body": "Сырое тело",
+      "selected_headers": "Заголовки",
+      "response_body": "Тело ответа"
+    },
+    "replay": {
+      "action": "Повторить",
+      "in_progress": "Повтор...",
+      "toast_success": "Доставка повторена",
+      "toast_failed": "Не удалось повторить",
+      "disabled_invalid_signature": "Нельзя повторить — подпись была невалидна",
+      "disabled_rejected": "Нельзя повторить отклонённую доставку",
+      "disabled_queued": "Ещё в очереди — повторите, когда обработается"
+    }
+  },
+  "add_trigger_dialog": {
+    "title": "Добавить триггер",
+    "type_label": "Тип",
+    "type_schedule": "Расписание",
+    "type_webhook": "Webhook",
+    "label_field": "Метка (опционально)",
+    "label_placeholder": "напр. Утро будних дней",
+    "webhook_help": "Multica сгенерирует webhook URL после сохранения. Отправьте POST с любым JSON, чтобы запустить автопилот.",
+    "submit": "Добавить триггер",
+    "submitting": "Добавление...",
+    "toast_added_schedule": "Триггер по расписанию добавлен",
+    "toast_added_webhook": "Webhook-триггер добавлен",
+    "toast_add_failed": "Не удалось добавить триггер"
+  },
+  "dialog": {
+    "sr_create": "Новый автопилот",
+    "sr_edit": "Редактировать автопилот",
+    "header_create": "Новый автопилот",
+    "header_edit": "Редактировать автопилот",
+    "subtitle": "Регулярный AI-task",
+    "expand": "Развернуть",
+    "collapse": "Свернуть",
+    "close": "Закрыть",
+    "title_placeholder": "Название автопилота",
+    "runbook_label": "Runbook",
+    "runbook_hint": "Читается агентом при каждом запуске",
+    "description_placeholder": "# Цель\nЧего должен достичь агент?\n\n# Контекст\nДля кого это? Какие ограничения?\n\n# Шаги\n1. …\n2. …",
+    "auto_run_hint": "После сохранения запускается автоматически, пока не будет приостановлен.",
+    "cancel": "Отмена",
+    "create": "Создать автопилот",
+    "save": "Сохранить",
+    "creating": "Создание...",
+    "saving": "Сохранение...",
+    "toast_created": "Автопилот создан",
+    "toast_create_partial": "Автопилот создан, но расписание не сохранено",
+    "toast_create_partial_with_reason": "Автопилот создан, но расписание не сохранено: {{reason}}",
+    "toast_create_failed": "Не удалось создать автопилот",
+    "toast_updated": "Автопилот обновлён",
+    "toast_update_partial": "Автопилот обновлён, но расписание не сохранено",
+    "toast_update_partial_with_reason": "Автопилот обновлён, но расписание не сохранено: {{reason}}",
+    "toast_update_failed": "Не удалось обновить автопилот",
+    "section_agent": "Агент",
+    "section_assignee": "Назначенный",
+    "select_agent": "Выбрать агента",
+    "select_assignee": "Выбрать агента или команду",
+    "section_project": "Проект",
+    "no_project": "Без проекта",
+    "section_output_mode": "Режим вывода",
+    "section_schedule": "Расписание",
+    "section_trigger_kind": "Триггер",
+    "trigger_kind_schedule": "Расписание",
+    "trigger_kind_webhook": "Webhook",
+    "section_webhook": "Webhook",
+    "webhook_help_create": "Multica сгенерирует webhook URL после создания этого автопилота. Отправьте POST с любым JSON на этот URL, чтобы его запустить.",
+    "webhook_help_edit": "Этот автопилот запускается через webhook. Управляйте URL (копировать / перевыпустить) на странице автопилота.",
+    "webhook_created_title": "Webhook-автопилот готов",
+    "webhook_created_description": "Отправьте POST с любым JSON на URL ниже — автопилот запустится. Скопируйте сейчас — URL также можно найти и перевыпустить на странице автопилота.",
+    "webhook_created_warning": "Относитесь к этому URL как к паролю. Любой, у кого он есть, может запустить автопилот.",
+    "webhook_created_done": "Готово",
+    "schedule_disabled_reason": "У этого автопилота несколько расписаний — редактируйте их на странице автопилота.",
+    "next_run_label": "Следующий запуск:",
+    "output_modes": {
+      "create_issue": {
+        "label": "Создать issue",
+        "description": "Каждый запуск создаёт отслеживаемый issue"
+      },
+      "run_only": {
+        "label": "Только запуск",
+        "description": "Тихий запуск, issue не создаётся"
+      }
+    },
+    "frequency_long": {
+      "hourly": "Каждый час",
+      "daily": "Каждый день",
+      "weekdays": "Каждый будний день",
+      "weekly": "Каждую неделю",
+      "custom": "Свой cron"
+    },
+    "days": {
+      "sunday": "Воскресенье",
+      "monday": "Понедельник",
+      "tuesday": "Вторник",
+      "wednesday": "Среда",
+      "thursday": "Четверг",
+      "friday": "Пятница",
+      "saturday": "Суббота"
+    }
+  },
+  "trigger_config": {
+    "frequencies": {
+      "hourly": "Ежечасно",
+      "daily": "Ежедневно",
+      "weekdays": "Будни",
+      "weekly": "По дням",
+      "custom": "Свой"
+    },
+    "days_short": {
+      "sun": "Вс",
+      "mon": "Пн",
+      "tue": "Вт",
+      "wed": "Ср",
+      "thu": "Чт",
+      "fri": "Пт",
+      "sat": "Сб"
+    },
+    "cron_label": "Cron-выражение",
+    "cron_hint": "Стандартный cron из 5 полей (мин час дом месяц день_недели)",
+    "minute_label": "Минута",
+    "time_label": "Время",
+    "timezone_label": "Часовой пояс",
+    "days_label": "Дни",
+    "summary": {
+      "hourly": "Ежечасно · :{{min}}",
+      "daily": "Ежедневно в {{time}}",
+      "weekdays": "По будням в {{time}}",
+      "weekly": "{{days}} в {{time}}",
+      "custom": "Свой cron",
+      "no_days": "—"
+    },
+    "describe": {
+      "hourly": "Запускается каждый час в :{{min}}",
+      "daily": "Запускается ежедневно в {{time}} {{offset}}",
+      "weekdays": "Запускается по будням в {{time}} {{offset}}",
+      "weekly": "Запускается каждый {{days}} в {{time}} {{offset}}",
+      "custom": "Своё расписание: {{cron}}"
+    },
+    "countdown": {
+      "days_hours": "{{days}}д {{hours}}ч",
+      "hours_minutes": "{{hours}}ч {{minutes}}м",
+      "minutes": "{{minutes}}м",
+      "less_than_minute": "<1м"
+    }
+  },
+  "agent_picker": {
+    "filter_placeholder": "Фильтр агентов или команд...",
+    "select_agent": "Выбрать агента",
+    "select_assignee": "Выбрать агента или команду",
+    "agents_group": "Агенты",
+    "squads_group": "Команды"
+  },
+  "timezone_picker": {
+    "search_placeholder": "Поиск часового пояса..."
+  }
+}

@@ -106,6 +106,7 @@ export const metadata: Metadata = {
 const HTML_LANG: Record<SupportedLocale, string> = {
   en: "en",
   "zh-Hans": "zh-CN",
+  ru: "ru",
 };
 
 export default async function RootLayout({

@@ -1,0 +1,297 @@
+{
+  "preferences": {
+    "theme": {
+      "title": "Тема",
+      "light": "Светлая",
+      "dark": "Тёмная",
+      "system": "Системная"
+    },
+    "language": {
+      "title": "Язык",
+      "english": "English",
+      "chinese": "中文",
+      "sync_failed": "Язык сохранён на этом устройстве, но не удалось синхронизировать с вашим аккаунтом. На других устройствах может отображаться предыдущий язык."
+    },
+    "timezone": {
+      "title": "Часовой пояс отображения",
+      "browser_suffix": " (браузер)",
+      "hint": "Используется для дашбордов, графиков и любых отметок «сегодня». Это персональная настройка, применяется ко всем вашим рабочим пространствам.",
+      "sync_failed": "Не удалось сохранить ваш часовой пояс."
+    }
+  },
+  "page": {
+    "title": "Настройки",
+    "my_account": "Мой аккаунт",
+    "workspace_fallback": "Рабочее пространство",
+    "tabs": {
+      "profile": "Профиль",
+      "preferences": "Предпочтения",
+      "notifications": "Уведомления",
+      "tokens": "API-токены",
+      "general": "Общее",
+      "repositories": "Репозитории",
+      "github": "GitHub",
+      "integrations": "Интеграции",
+      "labs": "Эксперименты",
+      "members": "Участники"
+    }
+  },
+  "account": {
+    "section_profile": "Профиль",
+    "click_avatar_hint": "Нажмите, чтобы загрузить аватар",
+    "name_label": "Имя",
+    "profile_description_label": "О вас",
+    "profile_description_hint": "Передаётся агентам, которые работают от вашего имени — роль, стек, предпочтения, всё, что вы рассказали бы новому коллеге в первый день.",
+    "profile_description_placeholder": "напр. Backend-инженер (Go + Postgres). Предпочитаю краткие PR и тесты рядом с изменением.",
+    "profile_description_too_long": "Профиль слишком длинный (максимум {{max}} символов, сейчас {{count}}).",
+    "save": "Обновить профиль",
+    "saving": "Обновление...",
+    "toast_avatar_updated": "Аватар обновлён",
+    "toast_avatar_failed": "Не удалось загрузить аватар",
+    "toast_profile_updated": "Профиль обновлён",
+    "toast_profile_failed": "Не удалось обновить профиль"
+  },
+  "notifications": {
+    "title": "Уведомления входящих",
+    "description": "Управляйте тем, какие события создают уведомления во входящих. Заглушённые типы тихо фильтруются — вы по-прежнему сможете увидеть их, открыв issue напрямую.",
+    "toast_failed": "Не удалось обновить настройки уведомлений",
+    "groups": {
+      "assignments": {
+        "label": "Назначения",
+        "description": "Когда вас назначают или снимают с issue"
+      },
+      "status_changes": {
+        "label": "Изменения статуса",
+        "description": "Когда у issue, который вы отслеживаете, меняется статус (например, к выполнению, в работе, выполнено)"
+      },
+      "comments": {
+        "label": "Комментарии и упоминания",
+        "description": "Новые комментарии в issues, которые вы отслеживаете, или когда вас упоминают через @"
+      },
+      "updates": {
+        "label": "Приоритет и срок",
+        "description": "Когда у issues, которые вы отслеживаете, меняется приоритет или срок"
+      },
+      "agent_activity": {
+        "label": "Активность агентов",
+        "description": "Когда task агента завершается или падает с ошибкой"
+      }
+    },
+    "system": {
+      "title": "Системные уведомления",
+      "description": "Управляйте нативными OS-уведомлениями, которые показываются, когда Multica в фоне.",
+      "label": "Показывать системные уведомления",
+      "hint": "Показывать баннер от операционной системы при новых элементах во входящих, когда приложение не в фокусе."
+    }
+  },
+  "tokens": {
+    "title": "API-токены",
+    "description": "Персональные токены доступа позволяют CLI и внешним интеграциям аутентифицироваться от вашего имени.",
+    "name_placeholder": "Имя токена (напр. Мой CLI)",
+    "expiry": {
+      "30": "30 дней",
+      "90": "90 дней",
+      "365": "1 год",
+      "never": "Без срока"
+    },
+    "create": "Создать",
+    "creating": "Создание...",
+    "toast_load_failed": "Не удалось загрузить токены",
+    "toast_create_failed": "Не удалось создать токен",
+    "toast_revoked": "Токен отозван",
+    "toast_revoke_failed": "Не удалось отозвать токен",
+    "metadata_prefix": "{{prefix}}... · Создан {{created}} · {{lastUsed}}",
+    "last_used_with_date": "Последнее использование {{date}}",
+    "last_used_never": "Никогда не использовался",
+    "expires_with_date": " · Истекает {{date}}",
+    "revoke_aria": "Отозвать {{name}}",
+    "revoke_tooltip": "Отозвать",
+    "revoke_dialog": {
+      "title": "Отозвать токен",
+      "description": "Этот токен будет отозван навсегда и больше не сможет использоваться. Действие нельзя отменить.",
+      "cancel": "Отмена",
+      "confirm": "Отозвать"
+    },
+    "created_dialog": {
+      "title": "Токен создан",
+      "description": "Скопируйте персональный токен сейчас. Снова его увидеть будет нельзя.",
+      "copy_tooltip": "Скопировать токен",
+      "done": "Готово"
+    }
+  },
+  "workspace": {
+    "section_general": "Общее",
+    "name_label": "Название",
+    "description_label": "Описание",
+    "description_placeholder": "На чём фокусируется это рабочее пространство?",
+    "context_label": "Контекст",
+    "context_placeholder": "Справочная информация и контекст для AI-агентов, работающих в этом рабочем пространстве",
+    "slug_label": "Slug",
+    "issue_prefix_label": "Префикс issue",
+    "issue_prefix_hint": "Используется в номерах issues, например {{example}}.",
+    "prefix_confirm_title": "Изменить префикс issue?",
+    "prefix_confirm_description": "Все issues будут перенумерованы из {{oldPrefix}}-N в {{newPrefix}}-N. Внешние ссылки — заголовки pull request, имена веток, ссылки в документации и чате — которые используют {{oldPrefix}}-N, перестанут разрешаться.",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "manage_hint": "Менять настройки рабочего пространства могут только администраторы и владельцы.",
+    "toast_saved": "Настройки рабочего пространства сохранены",
+    "toast_save_failed": "Не удалось сохранить настройки рабочего пространства",
+    "danger_zone": "Опасная зона",
+    "leave_title": "Покинуть рабочее пространство",
+    "leave_sole_owner": "Вы единственный владелец. Сначала сделайте другого участника владельцем или удалите рабочее пространство.",
+    "leave_sole_member": "Вы единственный участник. Чтобы покинуть, удалите рабочее пространство.",
+    "leave_default": "Убрать себя из этого рабочего пространства.",
+    "leave_button": "Покинуть рабочее пространство",
+    "leaving": "Выход...",
+    "leave_confirm_title": "Покинуть рабочее пространство",
+    "leave_confirm_description": "Покинуть {{name}}? Вы потеряете доступ, пока вас не пригласят повторно.",
+    "toast_leave_failed": "Не удалось покинуть рабочее пространство",
+    "delete_title": "Удалить рабочее пространство",
+    "delete_description": "Удалить это рабочее пространство и его данные навсегда.",
+    "delete_button": "Удалить рабочее пространство",
+    "deleting": "Удаление...",
+    "toast_delete_failed": "Не удалось удалить рабочее пространство",
+    "confirm_cancel": "Отмена",
+    "confirm_action": "Подтвердить"
+  },
+  "delete_workspace_dialog": {
+    "title": "Удалить рабочее пространство",
+    "description": "Это нельзя отменить. Все issues, агенты и данные будут удалены навсегда.",
+    "type_to_confirm_prefix": "Для подтверждения введите",
+    "type_to_confirm_suffix": " ниже.",
+    "cancel": "Отмена",
+    "confirm": "Удалить рабочее пространство",
+    "deleting": "Удаление..."
+  },
+  "labs": {
+    "section_placeholder_title": "Пока нет экспериментов",
+    "section_placeholder_description": "Экспериментальные настройки будут появляться здесь по мере выпуска. Сегодня эта вкладка намеренно пуста.",
+    "toast_failed": "Не удалось обновить настройку"
+  },
+  "integrations": {
+    "section_title": "Интеграции",
+    "empty_title": "Пока нет сторонних интеграций",
+    "empty_description": "Когда подключатся Slack, Linear и другие интеграции, они появятся здесь. GitHub переехал на отдельную вкладку.",
+    "manage_hint": "Управлять интеграциями могут только администраторы и владельцы."
+  },
+  "github": {
+    "page_description": "Подключите GitHub App, контролируйте, как Pull Requests отображаются внутри Multica, и решите, какие следы ваши агенты оставляют в истории коммитов.",
+    "section_master": "Включить функции GitHub",
+    "master_description_on": "Когда выключено, все элементы GitHub в UI скрыты, новые сайд-эффекты не записываются. Существующие данные сохраняются на бэкенде. Не команда разработки? Просто выключите здесь.",
+    "master_description_off": "Функции GitHub выключены. Боковая панель PR, co-author trailer и автосвязывание приостановлены. Данные на бэкенде не удаляются.",
+    "section_connection": "Подключение",
+    "connection_title": "GitHub App",
+    "connection_description_prefix": "Автоматически связывайте issues с pull requests. Когда PR с",
+    "connection_description_suffix": "в ветке, заголовке или теле мержится, соответствующий issue переходит в",
+    "connection_description_done": "Выполнено",
+    "connection_identifier_example": "MUL-123",
+    "connected_to": "Подключено к {{login}}",
+    "connect_github": "Подключить GitHub",
+    "connect_opening": "Открытие…",
+    "connect_disabled_tooltip": "GitHub App не настроен на этом сервере",
+    "disconnect": "Отключить",
+    "disconnecting": "Отключение…",
+    "disconnect_confirm_title": "Отключить GitHub App",
+    "disconnect_confirm_description": "Multica перестанет получать вебхуки для этой установки. Существующие зеркала PR и связи сохранятся; переподключитесь в любой момент, чтобы возобновить обновления.",
+    "disconnect_confirm_cancel": "Отмена",
+    "disconnect_confirm_action": "Отключить",
+    "not_configured": "GitHub-интеграция не настроена для этого развёртывания. Операторы должны задать",
+    "not_configured_and": "и",
+    "read_only_hint": "Просмотр только для чтения. Подключать и отключать GitHub могут только администраторы и владельцы рабочего пространства.",
+    "contact_admin_to_connect": "GitHub не подключён для этого рабочего пространства. Попросите администратора или владельца настроить GitHub App.",
+    "connected_by": "Подключил(а) {{name}}",
+    "toast_not_configured": "GitHub-интеграция не настроена для этого развёртывания",
+    "toast_open_failed": "Не удалось открыть установку GitHub",
+    "toast_disconnect_failed": "Не удалось отключить GitHub App",
+    "toast_disconnected": "GitHub App отключён",
+    "section_features": "Функции",
+    "feature_pr_sidebar_label": "Боковая панель Pull Request",
+    "feature_pr_sidebar_description": "Показывать связанные pull requests в боковой панели деталей issue.",
+    "feature_co_author_label": "Co-authored-by trailer",
+    "feature_co_author_description_prefix": "Добавлять",
+    "feature_co_author_description_suffix": "в коммиты, авторами которых являются агенты.",
+    "feature_auto_link_label": "Автосвязывание issues и PR",
+    "feature_auto_link_description": "Сопоставлять заголовки PR, тело и имена веток с идентификаторами issue и создавать связь автоматически.",
+    "section_repositories": "Репозитории",
+    "repositories_shortcut_label": "URL репозиториев живут на вкладке «Репозитории»",
+    "repositories_shortcut_link": "Управлять репозиториями →",
+    "toast_failed": "Не удалось обновить настройки GitHub"
+  },
+  "repositories": {
+    "section_title": "Репозитории",
+    "description": "Git-репозитории, связанные с этим рабочим пространством. Агенты используют их, чтобы клонировать и работать над кодом.",
+    "url_placeholder": "https://git.example.com/org/repo.git или git@git.example.com:org/repo.git",
+    "url_empty": "(пустой URL)",
+    "description_placeholder": "Описание (напр. Go-бэкенд + Next.js-фронтенд)",
+    "add": "Добавить репозиторий",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "saved_hint": "Все изменения сохранены",
+    "empty": "Пока нет репозиториев.",
+    "edit_aria": "Редактировать репозиторий",
+    "cancel_aria": "Отменить редактирование",
+    "delete_aria": "Удалить репозиторий",
+    "manage_hint": "Управлять репозиториями могут только администраторы и владельцы.",
+    "toast_saved": "Репозитории сохранены",
+    "toast_save_failed": "Не удалось сохранить репозитории"
+  },
+  "desktop": {
+    "tabs": {
+      "updates": "Обновления"
+    },
+    "updates": {
+      "title": "Обновления",
+      "description": "Десктопное приложение автоматически проверяет новые версии раз в час и вскоре после запуска, скачивая их в фоне. Когда обновление готово, вам будет предложено перезапустить.",
+      "current_version": "Текущая версия",
+      "check_section_title": "Проверить обновления",
+      "check_section_description": "Запустите проверку сейчас, не дожидаясь следующего автоматического опроса. Доступные обновления скачиваются в фоне и показывают предложение перезапустить, когда готовы.",
+      "up_to_date": "У вас последняя версия.",
+      "downloading": "v{{version}} скачивается в фоне — вы получите уведомление, когда будет готово к установке.",
+      "check_now": "Проверить сейчас",
+      "checking": "Проверка…"
+    }
+  },
+  "members": {
+    "section_title": "Участники ({{count}})",
+    "invite_title": "Пригласить участника",
+    "invite_email_placeholder": "user@company.com",
+    "invite_button": "Пригласить",
+    "inviting": "Отправка...",
+    "toast_invitation_sent": "Приглашение отправлено",
+    "toast_invitation_failed": "Не удалось отправить приглашение",
+    "no_members": "Участники не найдены.",
+    "pending_title": "Ожидающие приглашения ({{count}})",
+    "pending_status": "В ожидании",
+    "revoke_invitation_tooltip": "Отозвать приглашение",
+    "revoke_invitation_title": "Отозвать приглашение",
+    "revoke_invitation_description": "Отозвать приглашение для {{email}}? Этот пользователь больше не сможет присоединиться к рабочему пространству.",
+    "toast_invitation_revoked": "Приглашение отозвано",
+    "toast_invitation_revoke_failed": "Не удалось отозвать приглашение",
+    "toast_role_updated": "Роль обновлена",
+    "toast_role_failed": "Не удалось обновить участника",
+    "toast_member_removed": "Участник удалён",
+    "toast_member_remove_failed": "Не удалось удалить участника",
+    "remove_member_title": "Убрать {{name}}",
+    "remove_member_description": "Убрать {{name}} из {{workspace}}? Этот пользователь потеряет доступ к рабочему пространству.",
+    "confirm_cancel": "Отмена",
+    "confirm_action": "Подтвердить",
+    "change_role": "Сменить роль",
+    "remove_action": "Убрать из рабочего пространства",
+    "cannot_demote_last_owner_title": "Сначала сделайте другого участника владельцем — в рабочем пространстве должен оставаться хотя бы один владелец.",
+    "cannot_demote_last_owner": "Нельзя понизить последнего владельца",
+    "roles": {
+      "owner": {
+        "label": "Владелец",
+        "description": "Полный доступ, управление всеми настройками"
+      },
+      "admin": {
+        "label": "Администратор",
+        "description": "Управление участниками и настройками"
+      },
+      "member": {
+        "label": "Участник",
+        "description": "Создавать issues и работать с ними"
+      }
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "page": {
+    "title": "Команды",
+    "new_button": "Новая команда",
+    "empty_no_squads": "Пока нет команд. Создайте одну, чтобы начать.",
+    "empty_no_match": "Нет команд, соответствующих фильтрам."
+  },
+  "inspector": {
+    "details_section": "Детали",
+    "archive_button": "Архивировать"
+  },
+  "archive_dialog": {
+    "title": "Архивировать эту команду?",
+    "description": "«{{name}}» будет архивирована. Issues, назначенные сейчас этой команде, перейдут её лидеру. Действие нельзя отменить — создайте новую команду, если потребуется вернуть маршрутизацию.",
+    "cancel": "Отмена",
+    "confirm": "Архивировать",
+    "archiving": "Архивирование…"
+  },
+  "name_editor": {
+    "cancel": "Отмена"
+  },
+  "add_member_dialog": {
+    "title": "Добавить участника",
+    "description": "Добавьте участника рабочего пространства или агента в команду.",
+    "label_member": "Участник",
+    "label_role": "Роль",
+    "label_optional": "(опционально)",
+    "placeholder_role_inline": "Добавить роль…",
+    "cancel": "Отмена"
+  },
+  "description_dialog": {
+    "title": "Редактировать описание",
+    "placeholder_empty": "Добавьте описание",
+    "cancel": "Отмена"
+  },
+  "discard_changes_dialog": {
+    "title": "Отменить несохранённые изменения?",
+    "description": "На этой вкладке есть несохранённые изменения. При переключении вкладки они будут потеряны.",
+    "keep_editing": "Продолжить редактирование",
+    "discard_button": "Отменить"
+  },
+  "members_tab": {
+    "section_title": "Участники",
+    "section_count_one": "{{count}} участник в этой команде",
+    "section_count_few": "{{count}} участника в этой команде",
+    "section_count_many": "{{count}} участников в этой команде",
+    "section_count_other": "{{count}} участника в этой команде",
+    "add_member_button": "Добавить участника",
+    "create_agent_button": "Создать агента",
+    "leader_chip": "Лидер",
+    "view_agent_tooltip": "Открыть карточку агента",
+    "make_leader_tooltip": "Назначить лидером команды",
+    "remove_member_tooltip": "Убрать из команды",
+    "status_working": "Работает",
+    "status_idle": "Простаивает",
+    "status_offline": "Офлайн",
+    "status_unstable": "Нестабильно",
+    "issue_status_blocked": "заблокировано",
+    "active_issue_more": "и ещё {{count}}",
+    "last_active_label": "последняя активность {{time}}"
+  },
+  "profile_card": {
+    "unavailable": "Команда недоступна",
+    "detail_link": "Подробнее →",
+    "archived": "Архивирована",
+    "member_count_one": "{{count}} участник",
+    "member_count_few": "{{count}} участника",
+    "member_count_many": "{{count}} участников",
+    "member_count_other": "{{count}} участника",
+    "members_section": "Участники",
+    "more_members_one": "+{{count}} ещё",
+    "more_members_few": "+{{count}} ещё",
+    "more_members_many": "+{{count}} ещё",
+    "more_members_other": "+{{count}} ещё"
+  },
+  "instructions_tab": {
+    "description": "Инструкции команды вставляются в промпт лидера-агента, когда он работает над issue, назначенным этой команде. Используйте их, чтобы дать лидеру команд-уровневые указания, договорённости о работе или контекст, которому лидер должен следовать в каждом task.",
+    "unsaved_changes": "Несохранённые изменения",
+    "save_button": "Сохранить"
+  }
+}

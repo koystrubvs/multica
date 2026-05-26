@@ -1,0 +1,58 @@
+{
+  "title": "Использование",
+  "subtitle": "Расход токенов и активность агентов в этом рабочем пространстве.",
+  "filter": {
+    "project_label": "Проект",
+    "all_projects": "Все проекты",
+    "period_label": "Период"
+  },
+  "kpi": {
+    "cost_label": "Стоимость · {{days}}д",
+    "tokens_label": "Токены · {{days}}д",
+    "tokens_hint": "Вход {{input}} · Выход {{output}}",
+    "run_time_label": "Время выполнения · {{days}}д",
+    "run_time_hint": "По {{tasks}} task",
+    "tasks_label": "Tasks · {{days}}д",
+    "tasks_hint": "{{failed}} с ошибкой"
+  },
+  "dim": {
+    "label": "Размерность",
+    "daily": "По дням",
+    "weekly": "По неделям"
+  },
+  "daily": {
+    "title_cost": "Стоимость по дням",
+    "title_tokens": "Токены по дням",
+    "title_time": "Время выполнения по дням",
+    "title_tasks": "Tasks по дням",
+    "metric_cost": "Стоимость",
+    "metric_tokens": "Токены",
+    "metric_time": "Время",
+    "metric_tasks": "Tasks",
+    "no_data": "Нет использования в этом окне."
+  },
+  "weekly": {
+    "title_cost": "Стоимость по неделям",
+    "title_tokens": "Токены по неделям",
+    "title_time": "Время выполнения по неделям",
+    "title_tasks": "Tasks по неделям",
+    "partial_label": "{{range}} (частично · {{covered}} / 7 дней)"
+  },
+  "leaderboard": {
+    "title": "Лидерборд",
+    "caption": "{{count}} агентов",
+    "header_agent": "Агент",
+    "header_tokens": "Токены",
+    "header_cost": "Стоимость",
+    "header_time": "Время",
+    "header_tasks": "Tasks",
+    "no_data": "Нет активности агентов в этом окне."
+  },
+  "empty": {
+    "title": "Пока нет использования",
+    "body": "Как только агенты начнут выполнять tasks здесь, их расход токенов и время выполнения появятся в этом представлении."
+  },
+  "duration": {
+    "less_than_minute": "<1м"
+  }
+}
