@@ -1,19 +1,19 @@
 {
   "title": "Поиск",
-  "description": "Поиск по страницам, issues, проектам и участникам",
+  "description": "Поиск по страницам, задачам, проектам и участникам",
   "placeholder": "Введите команду или поисковый запрос...",
   "groups": {
     "pages": "Страницы",
     "commands": "Команды",
     "members": "Участники",
     "projects": "Проекты",
-    "issues": "Issues",
+    "issues": "Задачи",
     "recent": "Недавние"
   },
   "pages": {
     "inbox": "Входящие",
-    "my_issues": "Мои issues",
-    "issues": "Issues",
+    "my_issues": "Мои задачи",
+    "issues": "Задачи",
     "projects": "Проекты",
     "agents": "Агенты",
     "runtimes": "Среды выполнения",
@@ -22,9 +22,9 @@
   },
   "commands": {
     "current_theme_aria": "Текущая тема",
-    "new_issue": "Новый issue",
+    "new_issue": "Новая задача",
     "new_project": "Новый проект",
-    "copy_issue_link": "Скопировать ссылку на issue",
+    "copy_issue_link": "Скопировать ссылку на задачу",
     "copy_identifier": "Скопировать идентификатор ({{identifier}})",
     "switch_to_light": "Переключить на светлую тему",
     "switch_to_dark": "Переключить на тёмную тему",
@@ -36,7 +36,7 @@
   },
   "empty": {
     "no_results": "Ничего не найдено.",
-    "type_to_search": "Введите запрос для поиска issues и проектов"
+    "type_to_search": "Введите запрос для поиска задач и проектов"
   },
   "trigger": {
     "label": "Поиск..."

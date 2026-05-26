@@ -1,8 +1,8 @@
 {
   "nav": {
     "inbox": "Входящие",
-    "my_issues": "Мои issues",
-    "issues": "Issues",
+    "my_issues": "Мои задачи",
+    "issues": "Задачи",
     "projects": "Проекты",
     "autopilots": "Автопилот",
     "agents": "Агенты",
@@ -31,7 +31,7 @@
     "invitation_join": "Присоединиться",
     "invitation_decline": "Отклонить",
     "log_out": "Выйти",
-    "new_issue": "Новый issue",
+    "new_issue": "Новая задача",
     "new_issue_shortcut": "C",
     "pinned_label": "Закреплённые",
     "workspace_group": "Рабочее пространство",

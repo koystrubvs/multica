@@ -8,17 +8,17 @@
   },
   "create_workspace": {
     "title": "Создать новое рабочее пространство",
-    "description": "Рабочие пространства — это общие среды, где команды работают над проектами и issues."
+    "description": "Рабочие пространства — это общие среды, где команды работают над проектами и задачами."
   },
   "delete_issue": {
-    "title": "Удалить issue",
-    "description": "Это удалит issue и все его комментарии навсегда. Действие нельзя отменить.",
-    "hint": "Любой участник рабочего пространства может удалять issues.",
+    "title": "Удалить задачу",
+    "description": "Это удалит задачу и все его комментарии навсегда. Действие нельзя отменить.",
+    "hint": "Любой участник рабочего пространства может удалять задачи.",
     "cancel": "Отмена",
     "confirm": "Удалить",
     "deleting": "Удаление...",
-    "toast_deleted": "Issue удалён",
-    "toast_delete_failed": "Не удалось удалить issue"
+    "toast_deleted": "Задача удалена",
+    "toast_delete_failed": "Не удалось удалить задачу"
   },
   "feedback": {
     "title": "Обратная связь",
@@ -33,22 +33,22 @@
     "github_hint_link": "GitHub"
   },
   "issue_picker": {
-    "search_placeholder": "Поиск issues...",
+    "search_placeholder": "Поиск задач...",
     "searching": "Поиск...",
-    "no_results": "Issues не найдены.",
-    "prompt_to_search": "Введите запрос для поиска issues"
+    "no_results": "Задачи не найдены.",
+    "prompt_to_search": "Введите запрос для поиска задач"
   },
   "set_parent": {
-    "title": "Указать родительский issue",
-    "description": "Найдите issue, который станет родительским для текущего",
-    "toast_failed": "Не удалось обновить issue",
-    "toast_success": "{{identifier}} установлен как родительский issue"
+    "title": "Указать родительскую задачу",
+    "description": "Найдите задачу, которая станет родительским для текущего",
+    "toast_failed": "Не удалось обновить задачу",
+    "toast_success": "{{identifier}} установлен(а) как родительская задача"
   },
   "add_child": {
-    "title": "Добавить sub-issue",
-    "description": "Найдите issue, чтобы добавить как sub-issue",
-    "toast_failed": "Не удалось добавить sub-issue",
-    "toast_success": "{{identifier}} добавлен как sub-issue"
+    "title": "Добавить подзадачу",
+    "description": "Найдите задача, чтобы добавить как подзадача",
+    "toast_failed": "Не удалось добавить подзадачу",
+    "toast_success": "{{identifier}} добавлен как подзадача"
   },
   "backlog_hint": {
     "toast_status_failed": "Не удалось обновить статус"
@@ -116,44 +116,44 @@
     "repos_selected": "Выбрано"
   },
   "create_issue": {
-    "sr_manual": "Новый issue",
-    "sr_agent": "Быстрое создание issue",
+    "sr_manual": "Новая задача",
+    "sr_agent": "Быстрое создание задача",
     "manual_breadcrumb": "Создать вручную",
     "agent_breadcrumb": "Создать с агентом",
-    "title_placeholder": "Заголовок issue",
+    "title_placeholder": "Заголовок задачи",
     "description_placeholder": "Добавьте описание...",
     "more_options_aria": "Больше опций",
     "title_required": "Введите заголовок, чтобы создать",
-    "submit": "Создать issue",
+    "submit": "Создать задачу",
     "submitting": "Создание...",
-    "toast_created": "Issue создан",
-    "view_issue": "Открыть issue",
-    "toast_failed": "Не удалось создать issue",
-    "toast_duplicate_title": "Дублирующий issue",
-    "toast_duplicate_view": "Открыть существующий issue",
-    "toast_link_subissues_all_failed": "Не удалось привязать sub-issues",
-    "toast_link_subissues_partial": "Не удалось привязать {{failed}} из {{total}} sub-issues",
+    "toast_created": "Задача создана",
+    "view_issue": "Открыть задачу",
+    "toast_failed": "Не удалось создать задачу",
+    "toast_duplicate_title": "Дублирующая задача",
+    "toast_duplicate_view": "Открыть существующую задачу",
+    "toast_link_subissues_all_failed": "Не удалось привязать подзадачи",
+    "toast_link_subissues_partial": "Не удалось привязать {{failed}} из {{total}} подзадачи",
     "switch_to_agent": "Переключиться на агента",
     "switch_to_agent_tooltip": "Переключиться на создание с агентом — опишите в одну строку, агент сам оформит",
     "switch_to_manual": "Переключиться на ручной режим",
     "switch_to_manual_tooltip": "Переключиться на ручное создание — заполните поля сами",
     "create_another": "Создать ещё один",
     "remove_parent_aria": "Убрать родительский",
-    "remove_subissue_aria": "Убрать sub-issue {{identifier}}",
-    "subissue_of": "Sub-issue для {{identifier}}",
-    "subissue_chip": "Sub-issue: {{identifier}}",
+    "remove_subissue_aria": "Убрать подзадача {{identifier}}",
+    "subissue_of": "Подзадача для {{identifier}}",
+    "subissue_chip": "Подзадача: {{identifier}}",
     "parent_with_id": "Родительский: {{identifier}}",
     "set_start_date": "Установить дату начала...",
-    "set_parent": "Указать родительский issue...",
-    "add_subissue": "Добавить sub-issue...",
+    "set_parent": "Указать родительскую задачу...",
+    "add_subissue": "Добавить подзадачу...",
     "remove_parent": "Убрать родительский",
     "set_parent_picker": {
-      "title": "Указать родительский issue",
-      "description": "Найдите issue, который станет родительским для нового"
+      "title": "Указать родительскую задачу",
+      "description": "Найдите задачу, которая станет родительским для нового"
     },
     "add_subissue_picker": {
-      "title": "Добавить sub-issue",
-      "description": "Найдите issue, чтобы добавить как sub-issue нового issue"
+      "title": "Добавить подзадачу",
+      "description": "Найдите задача, чтобы добавить как подзадача нового задача"
     },
     "agent": {
       "created_by": "Создано",

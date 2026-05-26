@@ -58,13 +58,13 @@
     "section_progress": "Прогресс",
     "section_description": "Описание",
     "description_placeholder": "Добавьте описание...",
-    "empty_issues_title": "Issues не привязаны",
-    "empty_issues_hint": "Создайте новый issue или привяжите существующие к этому проекту.",
-    "empty_issues_new_button": "Новый issue",
-    "no_issues_yet": "Пока нет issues",
+    "empty_issues_title": "Задачи не привязаны",
+    "empty_issues_hint": "Создайте новая задача или привяжите существующие к этому проекту.",
+    "empty_issues_new_button": "Новая задача",
+    "no_issues_yet": "Пока нет задач",
     "toast_link_copied": "Ссылка скопирована",
     "toast_project_deleted": "Проект удалён",
-    "toast_move_issue_failed": "Не удалось переместить issue"
+    "toast_move_issue_failed": "Не удалось переместить задачу"
   },
   "resources": {
     "section_header": "Ресурсы",
@@ -84,7 +84,7 @@
   },
   "delete_dialog": {
     "title": "Удалить проект",
-    "description": "Это удалит проект. Issues не будут удалены, но будут отвязаны от проекта.",
+    "description": "Это удалит проект. Задачи не будут удалены, но будут отвязаны от проекта.",
     "confirm": "Удалить",
     "cancel": "Отмена"
   },

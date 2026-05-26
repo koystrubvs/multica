@@ -1,10 +1,10 @@
 {
   "page": {
-    "breadcrumb_title": "Issues",
+    "breadcrumb_title": "Задачи",
     "breadcrumb_workspace_fallback": "Рабочее пространство",
-    "empty_title": "Пока нет issues",
-    "empty_hint": "Создайте issue, чтобы начать.",
-    "move_failed": "Не удалось переместить issue"
+    "empty_title": "Пока нет задач",
+    "empty_hint": "Создайте задачу, чтобы начать.",
+    "move_failed": "Не удалось переместить задачу"
   },
   "status": {
     "backlog": "Бэклог",
@@ -24,11 +24,11 @@
   },
   "scope": {
     "all_label": "Все",
-    "all_description": "Все issues в этом рабочем пространстве",
+    "all_description": "Все задачи в этом рабочем пространстве",
     "members_label": "Участники",
-    "members_description": "Issues, назначенные участникам команды",
+    "members_description": "Задачи, назначенные участникам команды",
     "agents_label": "Агенты",
-    "agents_description": "Issues, назначенные AI-агентам"
+    "agents_description": "Задачи, назначенные AI-агентам"
   },
   "filters": {
     "tooltip": "Фильтр",
@@ -46,10 +46,10 @@
     "members_group": "Участники",
     "agents_group": "Агенты",
     "squads_group": "Команды",
-    "issue_count_one": "{{count}} issue",
-    "issue_count_few": "{{count}} issue",
-    "issue_count_many": "{{count}} issue",
-    "issue_count_other": "{{count}} issue",
+    "issue_count_one": "{{count}} задача",
+    "issue_count_few": "{{count}} задачи",
+    "issue_count_many": "{{count}} задач",
+    "issue_count_other": "{{count}} задача",
     "reset": "Сбросить все фильтры"
   },
   "display": {
@@ -74,7 +74,7 @@
     "card_due_date": "Срок",
     "card_project": "Проект",
     "card_labels": "Метки",
-    "card_child_progress": "Прогресс sub-issue"
+    "card_child_progress": "Прогресс подзадача"
   },
   "view": {
     "tooltip_board": "Вид: доска",
@@ -86,69 +86,69 @@
     "gantt": "Gantt"
   },
   "gantt": {
-    "header_issue": "Issue",
+    "header_issue": "Задача",
     "zoom_day": "День",
     "zoom_week": "Неделя",
     "zoom_month": "Месяц",
     "show_completed": "Показать выполненные",
-    "empty": "Пока нет запланированных issues — задайте дату начала или срок любому issue, чтобы увидеть его на таймлайне.",
+    "empty": "Пока нет запланированных задачи — задайте дату начала или срок любому задачи, чтобы увидеть его на таймлайне.",
     "inverted_dates_warning": "Дата начала позже срока — полоса показана от min до max."
   },
   "actor_issues": {
     "scope": {
       "assigned": {
         "label": "Назначены",
-        "description": "Issues, назначенные этому участнику или агенту"
+        "description": "Задачи, назначенные этому участнику или агенту"
       },
       "created": {
         "label": "Созданы",
-        "description": "Issues, созданные этим участником или агентом"
+        "description": "Задачи, созданные этим участником или агентом"
       }
     },
     "empty": {
       "assigned": {
-        "title": "Нет назначенных issues",
-        "description": "Здесь появятся назначенные issues."
+        "title": "Нет назначенных задач",
+        "description": "Здесь появятся назначенные задачи."
       },
       "created": {
-        "title": "Нет созданных issues",
-        "description": "Здесь появятся созданные issues."
+        "title": "Нет созданных задач",
+        "description": "Здесь появятся созданные задачи."
       }
     },
-    "search_placeholder": "Поиск issues...",
-    "search_empty": "Нет issues, соответствующих поиску."
+    "search_placeholder": "Поиск задач...",
+    "search_empty": "Нет задачи, соответствующих поиску."
   },
   "list": {
-    "empty_status": "Нет issues",
-    "add_issue_tooltip": "Добавить issue"
+    "empty_status": "Нет задачи",
+    "add_issue_tooltip": "Добавить задача"
   },
   "board": {
     "hidden_columns_label": "Скрытые колонки",
     "hide_column": "Скрыть колонку",
     "show_column": "Показать колонку",
-    "add_issue_tooltip": "Добавить issue",
-    "empty_column": "Нет issues",
-    "empty_grouping": "Нет подходящих issues"
+    "add_issue_tooltip": "Добавить задача",
+    "empty_column": "Нет задачи",
+    "empty_grouping": "Нет подходящих задачи"
   },
   "detail": {
-    "not_found": "Этот issue не существует или был удалён в этом рабочем пространстве.",
+    "not_found": "Эта задача не существует или был удалён в этом рабочем пространстве.",
     "breadcrumb_project_unknown": "Неизвестный проект",
-    "back_to_issues": "Назад к Issues",
-    "title_placeholder": "Заголовок issue",
+    "back_to_issues": "Назад к Задачи",
+    "title_placeholder": "Заголовок задачи",
     "desc_placeholder": "Добавьте описание...",
-    "sub_issues_label": "Sub-issues",
-    "sub_issue_of": "Sub-issue для",
-    "add_sub_issues": "Добавить sub-issues",
-    "add_sub_issue_tooltip": "Добавить sub-issue",
-    "add_sub_issue_aria": "Добавить sub-issue",
+    "sub_issues_label": "Подзадачи",
+    "sub_issue_of": "Подзадача для",
+    "add_sub_issues": "Добавить подзадачи",
+    "add_sub_issue_tooltip": "Добавить подзадачу",
+    "add_sub_issue_aria": "Добавить подзадачу",
     "section_properties": "Свойства",
-    "section_parent_issue": "Родительский issue",
+    "section_parent_issue": "Родительская задача",
     "section_pull_requests": "Pull requests",
     "section_metadata": "Метаданные",
     "section_details": "Детали",
     "section_token_usage": "Использование токенов",
     "pull_requests_loading": "Загрузка…",
-    "pull_requests_empty": "Связанных pull requests пока нет. Упомяните идентификатор этого issue в имени ветки, заголовке или теле PR, чтобы автоматически связать.",
+    "pull_requests_empty": "Связанных pull requests пока нет. Упомяните идентификатор этой задачи в имени ветки, заголовке или теле PR, чтобы автоматически связать.",
     "pull_request_state_open": "Открыт",
     "pull_request_state_draft": "Черновик",
     "pull_request_state_merged": "Смержен",
@@ -203,19 +203,19 @@
     "sidebar_tooltip": "Переключить боковую панель",
     "cmdf_toast_title": "Поиск на странице видит только то, что отображается",
     "cmdf_toast_description": "Таймлайн виртуализирован — ⌘F не видит комментарии за пределами экрана. Полный поиск в приложении скоро появится.",
-    "update_failed": "Не удалось обновить issue",
+    "update_failed": "Не удалось обновить задачу",
     "link_copied": "Ссылка скопирована",
     "link_copy_failed": "Не удалось скопировать ссылку",
     "workdir_path_copied": "Путь к workdir скопирован",
     "workdir_path_copy_failed": "Не удалось скопировать путь к workdir",
-    "workdir_path_unavailable": "Локального workdir пока нет — issue не запускался локальным агентом"
+    "workdir_path_unavailable": "Локального workdir пока нет — задача не запускался локальным агентом"
   },
   "timeline": {
     "loading": "Загрузка..."
   },
   "activity": {
-    "created": "создал(а) этот issue",
-    "self_assigned": "назначил(а) этот issue на себя",
+    "created": "создал(а) эта задача",
+    "self_assigned": "назначил(а) эту задачу на себя",
     "assigned_to": "назначил(а) на {{name}}",
     "removed_assignee": "снял(а) назначение",
     "changed_assignee": "сменил(а) назначенного",
@@ -225,7 +225,7 @@
     "start_date_removed": "убрал(а) дату начала",
     "due_date_set": "установил(а) срок на {{date}}",
     "due_date_removed": "убрал(а) срок",
-    "title_renamed": "переименовал(а) issue из «{{from}}» в «{{to}}»",
+    "title_renamed": "переименовал(а) задачу из «{{from}}» в «{{to}}»",
     "description_updated": "обновил(а) описание",
     "task_completed_one": "завершил(а) task",
     "task_completed_other": "завершил(а) task ({{count}} раз)",
@@ -356,29 +356,29 @@
     "priority": "Приоритет",
     "assignee": "Назначенный",
     "delete": "Удалить",
-    "update_success_one": "Обновлён {{count}} issue",
-    "update_success_few": "Обновлено {{count}} issues",
-    "update_success_many": "Обновлено {{count}} issues",
-    "update_success_other": "Обновлено {{count}} issues",
-    "update_failed": "Не удалось обновить issues",
-    "delete_success_one": "Удалён {{count}} issue",
-    "delete_success_few": "Удалено {{count}} issues",
-    "delete_success_many": "Удалено {{count}} issues",
-    "delete_success_other": "Удалено {{count}} issues",
-    "delete_failed": "Не удалось удалить issues",
-    "delete_dialog_title_one": "Удалить {{count}} issue?",
-    "delete_dialog_title_few": "Удалить {{count}} issues?",
-    "delete_dialog_title_many": "Удалить {{count}} issues?",
-    "delete_dialog_title_other": "Удалить {{count}} issues?",
-    "delete_dialog_desc_one": "Действие нельзя отменить. Это удалит выбранный issue и все связанные данные навсегда.",
-    "delete_dialog_desc_few": "Действие нельзя отменить. Это удалит выбранные issues и все связанные данные навсегда.",
-    "delete_dialog_desc_many": "Действие нельзя отменить. Это удалит выбранные issues и все связанные данные навсегда.",
-    "delete_dialog_desc_other": "Действие нельзя отменить. Это удалит выбранные issues и все связанные данные навсегда.",
-    "delete_dialog_warning": "Любой участник рабочего пространства может удалять issues.",
+    "update_success_one": "Обновлено {{count}} задач",
+    "update_success_few": "Обновлено {{count}} задачи",
+    "update_success_many": "Обновлено {{count}} задач",
+    "update_success_other": "Обновлено {{count}} задачи",
+    "update_failed": "Не удалось обновить задачуs",
+    "delete_success_one": "Удалено {{count}} задач",
+    "delete_success_few": "Удалено {{count}} задачи",
+    "delete_success_many": "Удалено {{count}} задач",
+    "delete_success_other": "Удалено {{count}} задачи",
+    "delete_failed": "Не удалось удалить задачуs",
+    "delete_dialog_title_one": "Удалить {{count}} задач?",
+    "delete_dialog_title_few": "Удалить {{count}} задачи?",
+    "delete_dialog_title_many": "Удалить {{count}} задач?",
+    "delete_dialog_title_other": "Удалить {{count}} задачи?",
+    "delete_dialog_desc_one": "Действие нельзя отменить. Это удалит выбранную задачу и все связанные данные навсегда.",
+    "delete_dialog_desc_few": "Действие нельзя отменить. Это удалит выбранные задачи и все связанные данные навсегда.",
+    "delete_dialog_desc_many": "Действие нельзя отменить. Это удалит выбранные задачи и все связанные данные навсегда.",
+    "delete_dialog_desc_other": "Действие нельзя отменить. Это удалит выбранные задачи и все связанные данные навсегда.",
+    "delete_dialog_warning": "Любой участник рабочего пространства может удалять задачи.",
     "cancel": "Отмена"
   },
   "card": {
-    "update_failed": "Не удалось обновить issue",
+    "update_failed": "Не удалось обновить задачу",
     "updated_ago": "Обновлено {{time}}"
   },
   "actions": {
@@ -401,10 +401,10 @@
     "copy_link": "Скопировать ссылку",
     "copy_workdir_path": "Скопировать путь к локальному workdir",
     "more": "Ещё",
-    "create_sub_issue": "Создать sub-issue",
-    "set_parent_issue": "Указать родительский issue...",
-    "add_sub_issue": "Добавить sub-issue...",
-    "delete_issue": "Удалить issue"
+    "create_sub_issue": "Создать подзадачу",
+    "set_parent_issue": "Указать родительскую задачу...",
+    "add_sub_issue": "Добавить подзадачу...",
+    "delete_issue": "Удалить задачу"
   },
   "pickers": {
     "filter_options_aria": "Опции фильтра",
@@ -434,7 +434,7 @@
     }
   },
   "labels_panel": {
-    "intro": "Создавайте и управляйте метками, чтобы категоризировать issues в рабочем пространстве.",
+    "intro": "Создавайте и управляйте метками, чтобы категоризировать задачи в рабочем пространстве.",
     "new_placeholder": "Имя новой метки…",
     "new_aria": "Имя новой метки",
     "add_action": "Добавить",
@@ -449,7 +449,7 @@
     "cancel_aria": "Отмена",
     "delete_dialog_title": "Удалить метку?",
     "delete_dialog_desc_prefix": "Метка ",
-    "delete_dialog_desc_suffix": " будет удалена из всех issues. Действие нельзя отменить.",
+    "delete_dialog_desc_suffix": " будет удалена из всех задачи. Действие нельзя отменить.",
     "delete_dialog_cancel": "Отмена",
     "delete_dialog_confirm": "Удалить",
     "create_failed": "Не удалось создать метку",
@@ -458,7 +458,7 @@
   },
   "backlog_hint": {
     "title": "Агент приостановлен в бэклоге",
-    "description": "Этот issue припаркован, поэтому назначенный агент будет ждать. Переместите в «К выполнению», когда захотите, чтобы агент начал.",
+    "description": "Эта задача припаркован, поэтому назначенный агент будет ждать. Переместите в «К выполнению», когда захотите, чтобы агент начал.",
     "row_backlog_label": "Бэклог",
     "row_backlog_hint": "держит агента на паузе",
     "row_todo_label": "К выполнению",

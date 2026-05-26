@@ -22,7 +22,7 @@
     "archived": "Архивирован"
   },
   "execution_mode": {
-    "create_issue": "Создать issue",
+    "create_issue": "Создать задачу",
     "run_only": "Только запуск"
   },
   "relative_date": {
@@ -91,7 +91,7 @@
     }
   },
   "run_status": {
-    "issue_created": "Issue создан",
+    "issue_created": "Задача создана",
     "running": "Выполняется",
     "skipped": "Пропущено",
     "completed": "Выполнено",
@@ -104,7 +104,7 @@
     "api": "API"
   },
   "run": {
-    "issue_linked": "Issue привязан",
+    "issue_linked": "Задача привязана",
     "view_log": "Открыть лог выполнения",
     "skipped_group": {
       "label": "Пропущенные",
@@ -261,12 +261,12 @@
     "next_run_label": "Следующий запуск:",
     "output_modes": {
       "create_issue": {
-        "label": "Создать issue",
-        "description": "Каждый запуск создаёт отслеживаемый issue"
+        "label": "Создать задачу",
+        "description": "Каждый запуск создаёт отслеживаемый задача"
       },
       "run_only": {
         "label": "Только запуск",
-        "description": "Тихий запуск, issue не создаётся"
+        "description": "Тихий запуск, задача не создаётся"
       }
     },
     "frequency_long": {
