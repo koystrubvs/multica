@@ -24,7 +24,7 @@ import { useProjectViewStore } from "@multica/core/projects";
 import { ProjectStatusBadge, ProjectPriorityBadge } from "./project-badge";
 import { ProjectLeadPicker } from "./project-lead-picker";
 
-const COMPACT_GRID = "grid w-full min-w-[820px] grid-cols-[24px_minmax(200px,1fr)_max-content_max-content_max-content_max-content_max-content]";
+const COMPACT_GRID = "grid min-w-[820px] grid-cols-[24px_minmax(240px,max-content)_max-content_max-content_max-content_max-content_max-content]";
 
 function ProjectCard({ project }: { project: Project }) {
   const { t } = useT("projects");
