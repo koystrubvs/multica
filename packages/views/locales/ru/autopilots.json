@@ -284,7 +284,12 @@
       "thursday": "Четверг",
       "friday": "Пятница",
       "saturday": "Суббота"
-    }
+    },
+    "event_filter_label": "Фильтры событий",
+    "event_filter_docs_link_label": "Как работают фильтры событий",
+    "event_filter_event_placeholder": "напр. workflow_run",
+    "event_filter_actions_placeholder": "completed, failed",
+    "event_filter_hint": "Обрабатывать только webhook-и с этими событиями. Оставьте пустым, чтобы принимать все."
   },
   "trigger_config": {
     "frequencies": {

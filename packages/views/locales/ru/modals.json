@@ -113,7 +113,21 @@
     "repos_search_empty": "Нет репозиториев, соответствующих поиску.",
     "repos_url_placeholder": "https://github.com/owner/repo или git@github.com:owner/repo.git",
     "repos_add": "Добавить",
-    "repos_selected": "Выбрано"
+    "repos_selected": "Выбрано",
+    "source_pill_local": "Локальная папка",
+    "source_tab_repos": "Репозитории GitHub",
+    "source_tab_local": "Локальная папка",
+    "local_heading": "Использовать локальную папку на этой машине",
+    "local_on_device": "Привязано к {{device}}",
+    "local_this_machine": "этой машине",
+    "local_daemon_offline": "Daemon офлайн — запустите его, чтобы привязать локальную папку.",
+    "local_pick": "Выбрать папку…",
+    "local_picking": "Открываю диалог выбора…",
+    "local_change": "Изменить папку…",
+    "local_clear": "Очистить",
+    "local_pick_failed": "Не удалось открыть диалог выбора папки.",
+    "local_invalid_dir": "Эта папка не подходит. Выберите другую.",
+    "local_hint": "Агенты на других машинах не увидят этот путь и не смогут стартовать. Для общей работы используйте репозитории."
   },
   "create_issue": {
     "sr_manual": "Новая задача",
@@ -175,7 +189,8 @@
       "toast_sent": "Отправлено агенту — придёт уведомление, когда он закончит",
       "error_agent_unavailable_fallback": "Агент недоступен. Выберите другого.",
       "error_daemon_version": "CLI демона этого агента ({{current}}) ниже требуемой {{min}}. Обновите демон, чтобы использовать создание с агентом.",
-      "error_unknown": "Не удалось отправить. Попробуйте снова."
+      "error_unknown": "Не удалось отправить. Попробуйте снова.",
+      "sub_issue_of": "Подзадача {{identifier}}"
     }
   }
 }
