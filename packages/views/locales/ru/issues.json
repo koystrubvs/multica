@@ -50,7 +50,9 @@
     "issue_count_few": "{{count}} задачи",
     "issue_count_many": "{{count}} задач",
     "issue_count_other": "{{count}} задача",
-    "reset": "Сбросить все фильтры"
+    "reset": "Сбросить все фильтры",
+    "active_count_one": "Активных: {{count}}",
+    "active_count_other": "Активных: {{count}}"
   },
   "display": {
     "tooltip": "Настройки отображения",
@@ -74,7 +76,9 @@
     "card_due_date": "Срок",
     "card_project": "Проект",
     "card_labels": "Метки",
-    "card_child_progress": "Прогресс подзадача"
+    "card_child_progress": "Прогресс подзадача",
+    "group_parent": "Родительская задача",
+    "group_project": "Проект"
   },
   "view": {
     "tooltip_board": "Вид: доска",
@@ -83,7 +87,9 @@
     "section": "Вид",
     "board": "Доска",
     "list": "Список",
-    "gantt": "Gantt"
+    "gantt": "Gantt",
+    "tooltip_swimlane": "Свимлейны",
+    "swimlane": "Свимлейны"
   },
   "gantt": {
     "header_issue": "Задача",
@@ -128,7 +134,8 @@
     "show_column": "Показать колонку",
     "add_issue_tooltip": "Добавить задача",
     "empty_column": "Нет задачи",
-    "empty_grouping": "Нет подходящих задачи"
+    "empty_grouping": "Нет подходящих задачи",
+    "ordered_by": "Сортировка доски: {{field}}"
   },
   "detail": {
     "not_found": "Эта задача не существует или был удалён в этом рабочем пространстве.",
@@ -316,7 +323,8 @@
     "transcript_button": "Открыть transcript",
     "stop_button": "Остановить",
     "stop_tooltip": "Остановить агента",
-    "cancel_failed": "Не удалось отменить task"
+    "cancel_failed": "Не удалось отменить task",
+    "is_waiting_local_directory": "{{name}} ждёт локальную папку"
   },
   "execution_log": {
     "section": "Лог выполнения",
@@ -341,7 +349,8 @@
     "status_running": "Работает",
     "status_completed": "Выполнен",
     "status_failed": "Ошибка",
-    "status_cancelled": "Отменён"
+    "status_cancelled": "Отменён",
+    "status_waiting_local_directory": "Ожидание локальной папки"
   },
   "terminate_dialog": {
     "title": "Остановить этот task?",
@@ -466,5 +475,13 @@
     "dont_show_again": "Больше не показывать",
     "keep_in_backlog": "Оставить в бэклоге",
     "move_to_todo": "Переместить в «К выполнению»"
+  },
+  "swimlane": {
+    "no_parent": "Без родителя",
+    "other_parents": "Другие родители",
+    "no_project": "Без проекта",
+    "no_assignee": "Без ответственного",
+    "open_parent": "Открыть родительскую задачу",
+    "toggle_collapse": "Свернуть/развернуть"
   }
 }

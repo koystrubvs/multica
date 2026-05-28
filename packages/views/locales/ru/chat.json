@@ -112,7 +112,8 @@
       "queued": "В очереди",
       "starting_up": "Запускается",
       "thinking": "Думает",
-      "typing": "Печатает"
+      "typing": "Печатает",
+      "waiting_local_directory": "Ожидание локальной папки"
     },
     "tools": {
       "running_command": "Выполняет команду",

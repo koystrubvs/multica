@@ -37,7 +37,9 @@
     "view_label": "Вид",
     "view_board_short": "Доска",
     "view_list_short": "Список",
-    "sort_manual": "Вручную"
+    "sort_manual": "Вручную",
+    "view_swimlane": "Свимлейны",
+    "view_swimlane_short": "Свимлейны"
   },
   "errors": {
     "move_failed": "Не удалось переместить задачу"
