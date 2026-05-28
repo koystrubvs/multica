@@ -95,5 +95,42 @@
   },
   "chip": {
     "fallback_label": "项目"
+  },
+  "siteping": {
+    "section_title": "SitePing 反馈组件",
+    "description": "将此代码粘贴到任意网站的 <head> 或 </body> 之前。通过组件提交的反馈将作为 issue 出现在此 project 中。",
+    "copy_button": "复制代码",
+    "copied_button": "已复制",
+    "copied_toast": "代码已复制到剪贴板",
+    "copy_failed_toast": "复制代码失败",
+    "docs_link": "SitePing GitHub",
+    "share": {
+      "title": "分享链接",
+      "subtitle": "为每位客户生成专属链接。仅持有链接的访客可看到组件。",
+      "new_button": "新建链接",
+      "name_placeholder": "客户名称（必填）",
+      "email_placeholder": "客户邮箱（可选）",
+      "label_placeholder": "内部标签，如 \"QA 团队 — sprint 12\"",
+      "cancel": "取消",
+      "create": "创建链接",
+      "creating": "创建中…",
+      "created_toast": "链接已创建",
+      "create_failed": "创建链接失败",
+      "revoke": "撤销",
+      "revoke_confirm": "撤销此链接？客户将无法再看到组件。",
+      "revoked_toast": "链接已撤销",
+      "revoke_failed": "撤销失败",
+      "copy_link": "复制链接",
+      "link_copied": "链接已复制 — 请将 your-site.com 替换为真实网址",
+      "loading": "加载中…",
+      "empty": "暂无分享链接。",
+      "uses_count_other": "{{count}} 次使用",
+      "last_used": "最近使用",
+      "site_url_label": "网站 URL（已安装代码片段的地址）",
+      "save": "保存",
+      "saving": "保存中…",
+      "site_url_saved": "网站 URL 已保存",
+      "site_url_save_failed": "保存 URL 失败"
+    }
   }
 }

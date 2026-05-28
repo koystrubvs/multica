@@ -95,5 +95,45 @@
   },
   "chip": {
     "fallback_label": "Проект"
+  },
+  "siteping": {
+    "section_title": "Виджет SitePing",
+    "description": "Вставьте этот код в <head> или перед </body> на любом сайте. Фидбек, оставленный через виджет, появится как задача в этом проекте.",
+    "copy_button": "Скопировать код",
+    "copied_button": "Скопировано",
+    "copied_toast": "Код скопирован в буфер обмена",
+    "copy_failed_toast": "Не удалось скопировать код",
+    "docs_link": "SitePing на GitHub",
+    "share": {
+      "title": "Ссылки для клиентов",
+      "subtitle": "Создайте уникальную ссылку для клиента. Виджет появится только у того, кто перешёл по ней.",
+      "new_button": "Новая ссылка",
+      "name_placeholder": "Имя клиента (обязательно)",
+      "email_placeholder": "Email клиента (необязательно)",
+      "label_placeholder": "Внутренняя метка, напр. \"QA-команда — спринт 12\"",
+      "cancel": "Отмена",
+      "create": "Создать ссылку",
+      "creating": "Создание…",
+      "created_toast": "Ссылка создана",
+      "create_failed": "Не удалось создать ссылку",
+      "revoke": "Отозвать",
+      "revoke_confirm": "Отозвать эту ссылку? Клиент больше не сможет увидеть виджет.",
+      "revoked_toast": "Ссылка отозвана",
+      "revoke_failed": "Не удалось отозвать",
+      "copy_link": "Скопировать ссылку",
+      "link_copied": "Ссылка скопирована — замените your-site.com на адрес реального сайта",
+      "loading": "Загрузка…",
+      "empty": "Ссылок пока нет.",
+      "uses_count_one": "{{count}} переход",
+      "uses_count_few": "{{count}} перехода",
+      "uses_count_many": "{{count}} переходов",
+      "uses_count_other": "{{count}} перехода",
+      "last_used": "последний переход",
+      "site_url_label": "URL сайта (где установлен код)",
+      "save": "Сохранить",
+      "saving": "Сохранение…",
+      "site_url_saved": "URL сайта сохранён",
+      "site_url_save_failed": "Не удалось сохранить URL"
+    }
   }
 }

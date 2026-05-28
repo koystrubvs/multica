@@ -95,5 +95,45 @@
   },
   "chip": {
     "fallback_label": "Project"
+  },
+  "siteping": {
+    "section_title": "SitePing widget",
+    "description": "Drop this snippet into the <head> or before </body> of any site. Feedbacks posted via the on-page widget will land as issues in this project.",
+    "copy_button": "Copy snippet",
+    "copied_button": "Copied",
+    "copied_toast": "Snippet copied to clipboard",
+    "copy_failed_toast": "Failed to copy snippet",
+    "docs_link": "SitePing on GitHub",
+    "share": {
+      "title": "Shareable links",
+      "subtitle": "Generate per-client links. Widget only appears for visitors who use them.",
+      "new_button": "New link",
+      "name_placeholder": "Client name (required)",
+      "email_placeholder": "Client email (optional)",
+      "label_placeholder": "Internal label, e.g. \"QA team — sprint 12\"",
+      "cancel": "Cancel",
+      "create": "Create link",
+      "creating": "Creating…",
+      "created_toast": "Link created",
+      "create_failed": "Failed to create link",
+      "revoke": "Revoke",
+      "revoke_confirm": "Revoke this link? The client will no longer see the widget.",
+      "revoked_toast": "Link revoked",
+      "revoke_failed": "Failed to revoke",
+      "copy_link": "Copy link",
+      "link_copied": "Link copied — replace your-site.com with the real site URL",
+      "loading": "Loading…",
+      "empty": "No shareable links yet.",
+      "uses_count_one": "{{count}} use",
+      "uses_count_few": "{{count}} uses",
+      "uses_count_many": "{{count}} uses",
+      "uses_count_other": "{{count}} uses",
+      "last_used": "last used",
+      "site_url_label": "Site URL (where the snippet is installed)",
+      "save": "Save",
+      "saving": "Saving…",
+      "site_url_saved": "Site URL saved",
+      "site_url_save_failed": "Failed to save site URL"
+    }
   }
 }
