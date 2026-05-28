@@ -18,15 +18,16 @@ import { useT } from "../../i18n";
 const BRIDGE_URL = "https://siteping.koystrub.dev";
 const WIDGET_API_KEY = "JNelrIjpUUrrRapo4uB2xYsVKV02jtO";
 
-function buildSnippet(projectId: string): string {
+function buildSnippet(_projectId: string): string {
   // Customers paste this once. Everything mutable — token strip, fetch
   // overrides, widget config, future fixes — lives in /loader.js on the
   // bridge and propagates through its 5-minute cache to every site
   // automatically, no re-paste required.
-  return `<script async src="${BRIDGE_URL}/loader.js"></script>
-
-<!-- This project's Multica UUID (reference, not used at runtime):
-     ${projectId} -->`;
+  //
+  // No projectId embedded in the HTML — the project is resolved from the
+  // access token at runtime, so leaking the UUID into customer-site HTML
+  // would have been a needless info-leak with zero functional value.
+  return `<script async src="${BRIDGE_URL}/loader.js"></script>`;
 }
 
 interface TokenEntry {
