@@ -166,6 +166,7 @@ export function PreferencesTab() {
             const active = theme === opt.value;
             return (
               <button
+                type="button"
                 key={opt.value}
                 role="radio"
                 aria-checked={active}
@@ -220,6 +221,7 @@ export function PreferencesTab() {
             const active = currentLocale === opt.value;
             return (
               <button
+                type="button"
                 key={opt.value}
                 role="radio"
                 aria-checked={active}
