@@ -24,7 +24,7 @@ import { useProjectViewStore } from "@multica/core/projects";
 import { ProjectStatusBadge, ProjectPriorityBadge } from "./project-badge";
 import { ProjectLeadPicker } from "./project-lead-picker";
 
-const COMPACT_GRID = "grid min-w-[820px] grid-cols-[24px_minmax(240px,max-content)_max-content_max-content_max-content_max-content_max-content]";
+const COMPACT_GRID = "grid w-full min-w-[780px] grid-cols-[24px_minmax(200px,1fr)_96px_96px_80px_140px_80px]";
 
 function ProjectCard({ project }: { project: Project }) {
   const { t } = useT("projects");
@@ -263,7 +263,7 @@ export function ProjectsPage() {
           {isLoading ? (
             isCompact ? (
               <div className="pt-4 mx-5 overflow-x-auto rounded-md border pb-4 mb-5">
-                <div className="min-w-[820px]">
+                <div className="min-w-[780px]">
                   <div className={cn(COMPACT_GRID, "h-10 items-center gap-2 px-4 border-b")}>
                     <Skeleton className="h-6 w-6 rounded" />
                     <Skeleton className="h-4 w-48" />
@@ -311,7 +311,7 @@ export function ProjectsPage() {
             </div>
           ) : isCompact ? (
             <div className="mt-4 mx-5 rounded-md border mb-5 overflow-auto flex-1">
-              <div className="min-w-[820px]">
+              <div className="min-w-[780px]">
                 <div className={cn(COMPACT_GRID, "h-8 shrink-0 items-center gap-2 px-4 text-xs font-medium text-muted-foreground border-b bg-muted/30 sticky top-0 z-10")}>
                   <span />
                   <span className="text-left">{t(($) => $.table.name)}</span>
