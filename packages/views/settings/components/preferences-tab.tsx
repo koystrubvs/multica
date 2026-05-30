@@ -122,6 +122,7 @@ export function PreferencesTab() {
     { value: "en", label: t(($) => $.preferences.language.english) },
     { value: "zh-Hans", label: t(($) => $.preferences.language.chinese) },
     { value: "ru", label: t(($) => $.preferences.language.russian) },
+    { value: "ko", label: t(($) => $.preferences.language.korean) },
   ];
 
   // Persist locally → sync to user.language → reload. Reload (vs in-place
