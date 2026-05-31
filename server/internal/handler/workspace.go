@@ -391,7 +391,11 @@ func normalizeMemberRole(role string) (string, bool) {
 
 	role = strings.TrimSpace(role)
 	switch role {
-	case "owner", "admin", "member":
+	// "guest" (P10) is a deliberately narrow role for SitePing clients: it can
+	// view the board and comment, but is excluded from every owner/admin/member
+	// -gated endpoint and is blocked from assigning agents/squads in
+	// validateAssigneePair.
+	case "owner", "admin", "member", "guest":
 		return role, true
 	default:
 		return "", false

@@ -2583,6 +2583,15 @@ func (h *Handler) validateAssigneePair(ctx context.Context, r *http.Request, wor
 	if err != nil {
 		return http.StatusBadRequest, "invalid workspace_id"
 	}
+	// Guests (SitePing clients, P10) may file and comment but never hand work
+	// to an agent or squad — that boundary is what stops an external client
+	// from triggering code-running tasks. Human members only; A2A agent
+	// callers are exempt by design (they legitimately delegate to agents).
+	if assigneeType.String == "agent" || assigneeType.String == "squad" {
+		if h.requesterIsGuest(ctx, r, workspaceID) {
+			return http.StatusForbidden, "guests cannot assign issues to agents or squads"
+		}
+	}
 	switch assigneeType.String {
 	case "member":
 		if _, err := h.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
@@ -2627,6 +2636,18 @@ func (h *Handler) validateAssigneePair(ctx context.Context, r *http.Request, wor
 	default:
 		return http.StatusBadRequest, "assignee_type must be 'member', 'agent', or 'squad'"
 	}
+}
+
+// requesterIsGuest reports whether the human member making this request holds
+// the narrow "guest" role (P10 — SitePing clients). Agent (A2A) callers are
+// never guests, so they keep their ability to delegate work to agents.
+func (h *Handler) requesterIsGuest(ctx context.Context, r *http.Request, workspaceID string) bool {
+	actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
+	if actorType != "member" {
+		return false
+	}
+	m, err := h.getWorkspaceMember(ctx, actorID, workspaceID)
+	return err == nil && m.Role == "guest"
 }
 
 // shouldEnqueueAgentTask returns true when an issue creation or assignment
