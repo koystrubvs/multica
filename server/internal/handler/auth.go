@@ -158,6 +158,29 @@ func (h *Handler) issueJWT(user db.User) (string, error) {
 	return token.SignedString(auth.JWTSecret())
 }
 
+// userIsGuestOnly reports whether every workspace membership this user holds is
+// the narrow "guest" role (P10 — SitePing clients). Such accounts exist purely
+// for comment attribution; the bridge acts on their behalf via a PAT and they
+// must never receive an interactive Multica session (where, absent per-project
+// visibility, they would see the entire workspace). A user with at least one
+// non-guest membership — or none at all — logs in normally.
+//
+// Fails open on a query error: blocking every login on a transient DB blip is
+// worse than the rare edge of a guest slipping through, and the assign-gate
+// still protects agents either way.
+func (h *Handler) userIsGuestOnly(ctx context.Context, user db.User) bool {
+	var hasGuest, hasNonGuest bool
+	if err := h.DB.QueryRow(ctx, `
+		SELECT
+			EXISTS(SELECT 1 FROM member WHERE user_id = $1 AND role = 'guest'),
+			EXISTS(SELECT 1 FROM member WHERE user_id = $1 AND role <> 'guest')
+	`, user.ID).Scan(&hasGuest, &hasNonGuest); err != nil {
+		slog.Warn("guest-login check failed; allowing login", "user_id", uuidToString(user.ID), "error", err)
+		return false
+	}
+	return hasGuest && !hasNonGuest
+}
+
 // findOrCreateUser returns the existing user for an email, or creates one if
 // none exists. isNew reports whether this call created the user — the signup
 // event fires on that edge, covering both the verification-code and Google
@@ -392,6 +415,10 @@ func (h *Handler) VerifyCode(w http.ResponseWriter, r *http.Request) {
 		h.Analytics.Capture(analytics.Signup(uuidToString(user.ID), user.Email, signupSourceFromRequest(r)))
 	}
 
+	if h.userIsGuestOnly(r.Context(), user) {
+		writeError(w, http.StatusForbidden, "guest accounts cannot sign in to Multica")
+		return
+	}
 	tokenString, err := h.issueJWT(user)
 	if err != nil {
 		slog.Warn("login failed", append(logger.RequestAttrs(r), "error", err, "email", req.Email)...)
@@ -588,6 +615,10 @@ func (h *Handler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.userIsGuestOnly(r.Context(), user) {
+		writeError(w, http.StatusForbidden, "guest accounts cannot sign in to Multica")
+		return
+	}
 	tokenString, err := h.issueJWT(user)
 	if err != nil {
 		slog.Warn("google login failed", append(logger.RequestAttrs(r), "error", err, "email", email)...)
@@ -627,6 +658,10 @@ func (h *Handler) IssueCliToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.userIsGuestOnly(r.Context(), user) {
+		writeError(w, http.StatusForbidden, "guest accounts cannot sign in to Multica")
+		return
+	}
 	tokenString, err := h.issueJWT(user)
 	if err != nil {
 		slog.Warn("cli-token: failed to issue JWT", append(logger.RequestAttrs(r), "error", err, "user_id", userID)...)
