@@ -16,7 +16,6 @@ import { useT } from "../../i18n";
 //    widget pre-fills server-side (can't be spoofed from the browser).
 
 const BRIDGE_URL = "https://siteping.koystrub.dev";
-const WIDGET_API_KEY = "JNelrIjpUUrrRapo4uB2xYsVKV02jtO";
 
 function buildSnippet(_projectId: string): string {
   // Customers paste this once. Everything mutable — token strip, fetch
