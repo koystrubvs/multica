@@ -369,6 +369,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 						r.Delete("/", h.DeleteMember)
 					})
 					r.Delete("/invitations/{invitationId}", h.RevokeInvitation)
+					// P10: one-shot SitePing guest provisioning (user + guest
+					// member + PAT). Admin-vouched, bypasses interactive invite.
+					r.Post("/siteping-guests", h.CreateSitepingGuest)
 				})
 				// Owner-only access
 				r.With(middleware.RequireWorkspaceRoleFromURL(queries, "id", "owner")).Delete("/", h.DeleteWorkspace)
