@@ -58,7 +58,8 @@
       "event_conference": "Конференция / митап",
       "dont_remember": "Не помню",
       "other": "Другое",
-      "other_placeholder": "напр. подкаст, который я слушаю"
+      "other_placeholder": "напр. подкаст, который я слушаю",
+      "social_github": "GitHub"
     },
     "role": {
       "question": "Что лучше всего вас описывает?",

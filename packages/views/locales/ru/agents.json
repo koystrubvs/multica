@@ -46,7 +46,9 @@
     "no_archived": "Архивных агентов пока нет.",
     "search_active": "Нет агентов, соответствующих «{{query}}».",
     "search_active_filtered": "Нет агентов, соответствующих «{{query}}» в этом фильтре.",
-    "no_filter_match": "Нет агентов, соответствующих этому фильтру."
+    "no_filter_match": "Нет агентов, соответствующих этому фильтру.",
+    "search_runtime_filtered": "Нет агентов на «{{machine}}», подходящих под «{{query}}».",
+    "runtime_filtered": "Нет агентов на «{{machine}}»."
   },
   "columns": {
     "agent": "Агент",
@@ -447,5 +449,14 @@
     "runtime_offline": "Демон офлайн",
     "runtime_recovery": "Демон перезапущен",
     "manual": "Отменено пользователем"
+  },
+  "runtime_filter": {
+    "all": "Все среды",
+    "section_local": "Локальные",
+    "section_remote": "Удалённые",
+    "section_cloud": "Облачные",
+    "agent_count_one": "{{count}} агент",
+    "agent_count_other": "{{count}} агентов",
+    "empty": "Пока нет машин"
   }
 }
