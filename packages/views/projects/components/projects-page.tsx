@@ -24,7 +24,7 @@ import { useProjectViewStore } from "@multica/core/projects";
 import { ProjectStatusBadge, ProjectPriorityBadge } from "./project-badge";
 import { ProjectLeadPicker } from "./project-lead-picker";
 
-const COMPACT_GRID = "grid w-full min-w-[780px] grid-cols-[24px_minmax(200px,1fr)_96px_96px_80px_140px_80px]";
+const COMPACT_GRID = "grid w-full min-w-[860px] grid-cols-[24px_minmax(200px,1fr)_128px_116px_80px_140px_80px]";
 
 function ProjectCard({ project }: { project: Project }) {
   const { t } = useT("projects");
@@ -158,7 +158,7 @@ function ProjectCardCompact({ project }: { project: Project }) {
         handleUpdate={handleUpdate}
         align="start"
         renderTrigger={(leadName) => (
-          <button type="button" className="flex items-center justify-start gap-1.5 rounded px-1 py-0.5 hover:bg-accent/60 transition-colors cursor-pointer">
+          <button type="button" className="flex w-full min-w-0 items-center justify-start gap-1.5 rounded px-1 py-0.5 hover:bg-accent/60 transition-colors cursor-pointer">
             <span className="shrink-0">
               {project.lead_type && project.lead_id ? (
                 <ActorAvatar actorType={project.lead_type} actorId={project.lead_id} size={20} enableHoverCard />
@@ -166,7 +166,7 @@ function ProjectCardCompact({ project }: { project: Project }) {
                 <span className="inline-flex h-5 w-5 rounded-full border border-dashed border-muted-foreground/30" />
               )}
             </span>
-            <span className="text-xs text-muted-foreground truncate max-w-[50px]">
+            <span className="text-xs text-muted-foreground truncate min-w-0 flex-1 text-left">
               {leadName ?? "--"}
             </span>
           </button>
@@ -263,7 +263,7 @@ export function ProjectsPage() {
           {isLoading ? (
             isCompact ? (
               <div className="pt-4 mx-5 overflow-x-auto rounded-md border pb-4 mb-5">
-                <div className="min-w-[780px]">
+                <div className="min-w-[860px]">
                   <div className={cn(COMPACT_GRID, "h-10 items-center gap-2 px-4 border-b")}>
                     <Skeleton className="h-6 w-6 rounded" />
                     <Skeleton className="h-4 w-48" />
@@ -311,7 +311,7 @@ export function ProjectsPage() {
             </div>
           ) : isCompact ? (
             <div className="mt-4 mx-5 rounded-md border mb-5 overflow-auto flex-1">
-              <div className="min-w-[780px]">
+              <div className="min-w-[860px]">
                 <div className={cn(COMPACT_GRID, "h-8 shrink-0 items-center gap-2 px-4 text-xs font-medium text-muted-foreground border-b bg-muted/30 sticky top-0 z-10")}>
                   <span />
                   <span className="text-left">{t(($) => $.table.name)}</span>
