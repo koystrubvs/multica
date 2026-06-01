@@ -293,6 +293,10 @@
       "member": {
         "label": "Member",
         "description": "Create and work on issues"
+      },
+      "guest": {
+        "label": "Guest",
+        "description": "Can view and comment only"
       }
     }
   }

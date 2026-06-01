@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail } from "lucide-react";
+import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail, Eye } from "lucide-react";
 import { ActorAvatar } from "../../common/actor-avatar";
 import type { MemberWithUser, MemberRole, Invitation } from "@multica/core/types";
 import { Input } from "@multica/ui/components/ui/input";
@@ -67,6 +67,14 @@ function useRoleLabels() {
       label: t(($) => $.members.roles.member.label),
       description: t(($) => $.members.roles.member.description),
       icon: ROLE_ICONS.member,
+    },
+    // SitePing clients join the workspace as members with role "guest"
+    // (MemberRole type omits it, but the API returns it at runtime). Without
+    // this entry roleConfig["guest"] is undefined and the tab crashes.
+    guest: {
+      label: t(($) => $.members.roles.guest.label),
+      description: t(($) => $.members.roles.guest.description),
+      icon: Eye,
     },
   } as const;
 }
