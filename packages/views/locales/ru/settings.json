@@ -154,7 +154,11 @@
     "deleting": "Удаление...",
     "toast_delete_failed": "Не удалось удалить рабочее пространство",
     "confirm_cancel": "Отмена",
-    "confirm_action": "Подтвердить"
+    "confirm_action": "Подтвердить",
+    "change_logo_aria": "Изменить логотип воркспейса",
+    "click_logo_hint": "Нажмите на логотип, чтобы загрузить новое изображение",
+    "toast_logo_updated": "Логотип воркспейса обновлён",
+    "toast_logo_failed": "Не удалось загрузить логотип воркспейса"
   },
   "delete_workspace_dialog": {
     "title": "Удалить рабочее пространство",
