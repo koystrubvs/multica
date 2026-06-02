@@ -87,7 +87,8 @@
     "archived_group_one": "{{count}} архивный чат",
     "archived_group_few": "{{count}} архивных чата",
     "archived_group_many": "{{count}} архивных чатов",
-    "archived_group_other": "{{count}} архивных чата"
+    "archived_group_other": "{{count}} архивных чата",
+    "history_group": "История чатов"
   },
   "empty_state": {
     "first_time_title": "Чат с вашими агентами",

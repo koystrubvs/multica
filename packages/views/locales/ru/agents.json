@@ -25,7 +25,8 @@
     "all": "Все",
     "online": "Онлайн",
     "unstable": "Нестабильно",
-    "offline": "Офлайн"
+    "offline": "Офлайн",
+    "archived": "Архивный"
   },
   "workload": {
     "working": "Работает",
