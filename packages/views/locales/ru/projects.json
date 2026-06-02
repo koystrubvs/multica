@@ -101,7 +101,14 @@
     "local_validate_not_a_directory": "Это не папка.",
     "local_validate_not_readable": "Папка недоступна для чтения.",
     "local_validate_not_writable": "Папка недоступна для записи.",
-    "local_validate_unsupported": "Локальные папки можно выбирать только в desktop-приложении."
+    "local_validate_unsupported": "Локальные папки можно выбирать только в desktop-приложении.",
+    "local_web_section": "Локальная папка (на демоне)",
+    "local_web_daemon_label": "Демон",
+    "local_web_no_daemons": "Нет подключённых локальных демонов.",
+    "local_web_path_placeholder": "/абсолютный/путь на машине демона",
+    "local_web_submit": "Подключить папку",
+    "local_web_hint": "Путь резолвится на машине демона, а не в браузере.",
+    "local_web_offline_badge": "офлайн"
   },
   "delete_dialog": {
     "title": "Удалить проект",

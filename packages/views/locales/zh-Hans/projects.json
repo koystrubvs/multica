@@ -101,7 +101,14 @@
     "local_validate_not_a_directory": "该路径不是目录。",
     "local_validate_not_readable": "目录不可读。",
     "local_validate_not_writable": "目录不可写。",
-    "local_validate_unsupported": "本地目录仅能在桌面端选择。"
+    "local_validate_unsupported": "本地目录仅能在桌面端选择。",
+    "local_web_section": "本地目录（在守护进程上）",
+    "local_web_daemon_label": "守护进程",
+    "local_web_no_daemons": "没有已连接的本地守护进程。",
+    "local_web_path_placeholder": "守护进程机器上的 /绝对/路径",
+    "local_web_submit": "附加文件夹",
+    "local_web_hint": "路径在守护进程机器上解析，而不是在浏览器中。",
+    "local_web_offline_badge": "离线"
   },
   "delete_dialog": {
     "title": "删除项目",

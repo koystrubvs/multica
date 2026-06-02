@@ -101,7 +101,14 @@
     "local_validate_not_a_directory": "Path is not a directory.",
     "local_validate_not_readable": "Directory is not readable.",
     "local_validate_not_writable": "Directory is not writable.",
-    "local_validate_unsupported": "Local directories can only be picked on the desktop app."
+    "local_validate_unsupported": "Local directories can only be picked on the desktop app.",
+    "local_web_section": "Local directory (on a daemon)",
+    "local_web_daemon_label": "Daemon",
+    "local_web_no_daemons": "No local daemons connected.",
+    "local_web_path_placeholder": "/absolute/path on the daemon machine",
+    "local_web_submit": "Attach folder",
+    "local_web_hint": "Path is resolved on the daemon machine, not in your browser.",
+    "local_web_offline_badge": "offline"
   },
   "delete_dialog": {
     "title": "Delete project",

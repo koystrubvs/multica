@@ -20,6 +20,7 @@ import {
 } from "@multica/core/projects";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useCurrentWorkspace } from "@multica/core/paths";
+import { runtimeListOptions } from "@multica/core/runtimes/queries";
 import type {
   GithubRepoResourceRef,
   LocalDirectoryResourceRef,
@@ -106,6 +107,33 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
   const hasLocalDirectoryForCurrentDaemon =
     localDaemonId !== null && attachedLocalPaths.size > 0;
 
+  // Web flow: the daemon runs on a remote machine, so there's no native
+  // folder picker and no local daemon-id to compare against. Instead we list
+  // the workspace's daemon-backed runtimes and let the user pick one + type
+  // an absolute path that exists on that daemon's machine. The backend already
+  // accepts local_directory resources; the daemon resolves the path by
+  // daemon_id (waiting_local_directory until it's reachable).
+  const { data: runtimes = [] } = useQuery(runtimeListOptions(wsId));
+  const localDaemons = Array.from(
+    new Map(
+      runtimes
+        .filter((rt) => rt.runtime_mode === "local" && !!rt.daemon_id)
+        .map((rt) => [
+          rt.daemon_id as string,
+          {
+            daemonId: rt.daemon_id as string,
+            name: rt.name,
+            online: rt.status === "online",
+          },
+        ]),
+    ).values(),
+  );
+  // Daemons that already carry a local_directory for this project — the server
+  // enforces one per (project, daemon), so we disable re-adding for those.
+  const attachedDaemonIds = new Set(
+    resources.filter(isLocalDirectoryRef).map((r) => r.resource_ref.daemon_id),
+  );
+
   const repoQuery = repoSearch.trim().toLowerCase();
   const filteredRepos =
     workspace?.repos?.filter((repo) => repo.url.toLowerCase().includes(repoQuery)) ?? [];
@@ -186,6 +214,31 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
       toast.error(msg);
     } finally {
       setPicking(false);
+    }
+  };
+
+  // Web counterpart of handleAttachLocalDirectory: no native picker, the path
+  // is typed and resolved on the (remote) daemon. Label defaults to the last
+  // path segment.
+  const handleAttachLocalDirectoryWeb = async (
+    daemonId: string,
+    rawPath: string,
+  ) => {
+    const path = rawPath.trim();
+    const label = path.replace(/[/\\]+$/, "").split(/[/\\]/).pop() || path;
+    try {
+      await createResource.mutateAsync({
+        resource_type: "local_directory",
+        resource_ref: { local_path: path, daemon_id: daemonId, label },
+      });
+      toast.success(t(($) => $.resources.toast_local_attached));
+      setAddOpen(false);
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : t(($) => $.resources.toast_local_pick_failed);
+      toast.error(msg);
     }
   };
 
@@ -348,6 +401,14 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
                   setAddOpen(false);
                 }}
               />
+              {!desktopMode && (
+                <WebLocalDirectoryForm
+                  daemons={localDaemons}
+                  attachedByDaemon={attachedDaemonIds}
+                  pending={createResource.isPending}
+                  onSubmit={handleAttachLocalDirectoryWeb}
+                />
+              )}
             </PopoverContent>
           </Popover>
           {desktopMode && (
@@ -619,6 +680,104 @@ function CustomRepoForm({
         disabled={!url.trim() || submitting}
       >
         {t(($) => $.resources.url_submit)}
+      </Button>
+    </form>
+  );
+}
+
+interface WebDaemonOption {
+  daemonId: string;
+  name: string;
+  online: boolean;
+}
+
+// Web-only: attach a local_directory by picking a daemon-backed runtime and
+// typing an absolute path that lives on that daemon's machine. The desktop
+// app uses a native folder picker instead (handleAttachLocalDirectory).
+function WebLocalDirectoryForm({
+  daemons,
+  attachedByDaemon,
+  pending,
+  onSubmit,
+}: {
+  daemons: WebDaemonOption[];
+  attachedByDaemon: Set<string>;
+  pending: boolean;
+  onSubmit: (daemonId: string, path: string) => Promise<void>;
+}) {
+  const { t } = useT("projects");
+  const [daemonId, setDaemonId] = useState(daemons[0]?.daemonId ?? "");
+  const [path, setPath] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  if (daemons.length === 0) {
+    return (
+      <p className="border-t pt-2 text-[11px] text-muted-foreground">
+        {t(($) => $.resources.local_web_no_daemons)}
+      </p>
+    );
+  }
+
+  const offlineBadge = t(($) => $.resources.local_web_offline_badge);
+  const trimmed = path.trim();
+  const looksAbsolute = /^(\/|[a-zA-Z]:[\\/])/.test(trimmed);
+  const alreadyAttached = attachedByDaemon.has(daemonId);
+  const canSubmit =
+    !!daemonId && looksAbsolute && !alreadyAttached && !submitting && !pending;
+
+  const handle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(daemonId, trimmed);
+      setPath("");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handle} className="space-y-1.5 border-t pt-2">
+      <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+        <FolderOpen className="size-3" />
+        {t(($) => $.resources.local_web_section)}
+      </div>
+      <select
+        value={daemonId}
+        onChange={(e) => setDaemonId(e.target.value)}
+        aria-label={t(($) => $.resources.local_web_daemon_label)}
+        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        {daemons.map((d) => (
+          <option key={d.daemonId} value={d.daemonId}>
+            {d.online ? d.name : `${d.name} (${offlineBadge})`}
+          </option>
+        ))}
+      </select>
+      <input
+        type="text"
+        value={path}
+        onChange={(e) => setPath(e.target.value)}
+        placeholder={t(($) => $.resources.local_web_path_placeholder)}
+        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+      />
+      {alreadyAttached && (
+        <p className="text-[10px] text-muted-foreground">
+          {t(($) => $.resources.local_daemon_already_attached_hint)}
+        </p>
+      )}
+      <p className="text-[10px] text-muted-foreground">
+        {t(($) => $.resources.local_web_hint)}
+      </p>
+      <Button
+        type="submit"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 text-xs"
+        disabled={!canSubmit}
+      >
+        {t(($) => $.resources.local_web_submit)}
       </Button>
     </form>
   );
