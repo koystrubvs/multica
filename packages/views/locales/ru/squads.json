@@ -57,7 +57,8 @@
     "status_unstable": "Нестабильно",
     "issue_status_blocked": "заблокировано",
     "active_issue_more": "и ещё {{count}}",
-    "last_active_label": "последняя активность {{time}}"
+    "last_active_label": "последняя активность {{time}}",
+    "status_archived": "В архиве"
   },
   "profile_card": {
     "unavailable": "Команда недоступна",
