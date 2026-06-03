@@ -32,7 +32,8 @@
     "process_steps_other": "{{count}} шага",
     "copy_action": "Скопировать",
     "copied_toast": "Скопировано",
-    "copy_failed_toast": "Не удалось скопировать"
+    "copy_failed_toast": "Не удалось скопировать",
+    "loading_older": "Загрузка предыдущих сообщений…"
   },
   "session_history": {
     "untitled": "Без названия",
