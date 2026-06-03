@@ -155,7 +155,8 @@
     "edit_description_title": "Редактировать описание",
     "description_placeholder": "Что делает этот агент?",
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "section_integrations": "Интеграции"
   },
   "skill_attach": {
     "trigger_aria": "Прикрепить skill из рабочего пространства",
