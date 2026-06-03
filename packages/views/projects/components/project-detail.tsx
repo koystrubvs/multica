@@ -96,9 +96,12 @@ function PropRow({
   label: string;
   children: React.ReactNode;
 }) {
+  // Subgrid row: the parent declares `grid-cols-[auto_1fr]`, so the label
+  // column auto-sizes to the widest label across all rows (e.g. the longer
+  // Russian "Ответственный") instead of a fixed w-16 the label overflowed.
   return (
-    <div className="flex min-h-8 items-center gap-2 rounded-md px-2 -mx-2 hover:bg-accent/50 transition-colors">
-      <span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span>
+    <div className="-mx-2 col-span-2 grid min-h-8 grid-cols-subgrid items-center rounded-md px-2 transition-colors hover:bg-accent/50">
+      <span className="whitespace-nowrap text-xs text-muted-foreground">{label}</span>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs truncate">
         {children}
       </div>
@@ -531,7 +534,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           {t(($) => $.detail.section_properties)}
           <ChevronRight className={`!size-3 shrink-0 stroke-[2.5] text-muted-foreground transition-transform ${propertiesOpen ? "rotate-90" : ""}`} />
         </button>
-        {propertiesOpen && <div className="space-y-0.5 pl-2">
+        {propertiesOpen && <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 pl-2">
           <PropRow label={t(($) => $.table.status)}>
             <DropdownMenu>
               <DropdownMenuTrigger
