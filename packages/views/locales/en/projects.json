@@ -108,7 +108,8 @@
     "local_web_path_placeholder": "/absolute/path on the daemon machine",
     "local_web_submit": "Attach folder",
     "local_web_hint": "Path is resolved on the daemon machine, not in your browser.",
-    "local_web_offline_badge": "offline"
+    "local_web_offline_badge": "offline",
+    "local_daemon_offline_tooltip": "Daemon “{{name}}” is offline — the agent will open this directory once it reconnects."
   },
   "delete_dialog": {
     "title": "Delete project",

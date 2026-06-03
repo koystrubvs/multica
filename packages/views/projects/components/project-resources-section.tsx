@@ -133,6 +133,13 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
   const attachedDaemonIds = new Set(
     resources.filter(isLocalDirectoryRef).map((r) => r.resource_ref.daemon_id),
   );
+  // Lookup to resolve an attached row's daemon_id to its runtime's live
+  // status. A local_directory is "reachable" when the runtime that owns its
+  // daemon_id is online — regardless of whether *this* browser has its own
+  // local daemon. On web there is none, but a remote server runtime can still
+  // own and open the folder, so the old "browser has no local daemon → warn"
+  // check produced a false negative for server-backed daemons.
+  const daemonById = new Map(localDaemons.map((d) => [d.daemonId, d]));
 
   const repoQuery = repoSearch.trim().toLowerCase();
   const filteredRepos =
@@ -307,7 +314,7 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
                 <ResourceRow
                   key={resource.id}
                   resource={resource}
-                  localDaemonId={localDaemonId}
+                  daemonById={daemonById}
                   canEdit={desktopMode}
                   onRemove={() => handleRemove(resource)}
                   onRenameLocalDirectory={handleRenameLocalDirectory}
@@ -448,9 +455,15 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
   );
 }
 
+interface DaemonInfo {
+  daemonId: string;
+  name: string;
+  online: boolean;
+}
+
 interface ResourceRowProps {
   resource: ProjectResource;
-  localDaemonId: string | null;
+  daemonById: Map<string, DaemonInfo>;
   canEdit: boolean;
   onRemove: () => void;
   onRenameLocalDirectory: (
@@ -461,7 +474,7 @@ interface ResourceRowProps {
 
 function ResourceRow({
   resource,
-  localDaemonId,
+  daemonById,
   canEdit,
   onRemove,
   onRenameLocalDirectory,
@@ -503,7 +516,7 @@ function ResourceRow({
     return (
       <LocalDirectoryRow
         resource={resource}
-        localDaemonId={localDaemonId}
+        daemonById={daemonById}
         canEdit={canEdit}
         onRemove={onRemove}
         onRename={onRenameLocalDirectory}
@@ -530,7 +543,7 @@ function ResourceRow({
 
 interface LocalDirectoryRowProps {
   resource: ProjectResource & { resource_ref: LocalDirectoryResourceRef };
-  localDaemonId: string | null;
+  daemonById: Map<string, DaemonInfo>;
   canEdit: boolean;
   onRemove: () => void;
   onRename: (
@@ -541,7 +554,7 @@ interface LocalDirectoryRowProps {
 
 function LocalDirectoryRow({
   resource,
-  localDaemonId,
+  daemonById,
   canEdit,
   onRemove,
   onRename,
@@ -550,14 +563,17 @@ function LocalDirectoryRow({
   const ref = resource.resource_ref;
   const display = (ref.label || resource.label || ref.local_path).trim() ||
     ref.local_path;
-  const isForeignDaemon =
-    localDaemonId !== null && ref.daemon_id !== localDaemonId;
-  const isLocalUnknown = localDaemonId === null;
-  // "disabled" in the spec sense — visual de-emphasis + no chat hint, and
-  // rename is hidden on foreign / unknown-daemon rows because the label
-  // belongs to the owning device. Delete stays available so the user can
-  // drop a stale registration from any device.
-  const mismatch = isForeignDaemon || isLocalUnknown;
+  // Health is about whether the *agent* can open the folder, which means: is
+  // the daemon-backed runtime that owns this daemon_id currently online? This
+  // works on web (no browser-local daemon) and desktop alike. A server runtime
+  // on the same host as the directory is online → reachable, no warning.
+  const owningDaemon = daemonById.get(ref.daemon_id);
+  const daemonKnown = owningDaemon !== undefined;
+  const daemonOnline = owningDaemon?.online === true;
+  // "disabled" in the spec sense — visual de-emphasis + hidden rename — only
+  // when the folder is not reachable right now. Delete stays available so the
+  // user can drop a stale registration regardless.
+  const mismatch = !daemonOnline;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(display);
@@ -612,9 +628,11 @@ function LocalDirectoryRow({
               <div className="font-mono">{ref.local_path}</div>
               {mismatch && (
                 <div className="text-muted-foreground">
-                  {isLocalUnknown
-                    ? t(($) => $.resources.local_no_daemon_tooltip)
-                    : t(($) => $.resources.local_other_machine_tooltip)}
+                  {daemonKnown
+                    ? t(($) => $.resources.local_daemon_offline_tooltip, {
+                        name: owningDaemon?.name ?? ref.daemon_id,
+                      })
+                    : t(($) => $.resources.local_no_daemon_tooltip)}
                 </div>
               )}
             </div>

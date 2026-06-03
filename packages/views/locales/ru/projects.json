@@ -108,7 +108,8 @@
     "local_web_path_placeholder": "/абсолютный/путь на машине демона",
     "local_web_submit": "Подключить папку",
     "local_web_hint": "Путь резолвится на машине демона, а не в браузере.",
-    "local_web_offline_badge": "офлайн"
+    "local_web_offline_badge": "офлайн",
+    "local_daemon_offline_tooltip": "Daemon «{{name}}» сейчас оффлайн — агент откроет папку, когда он снова появится."
   },
   "delete_dialog": {
     "title": "Удалить проект",
