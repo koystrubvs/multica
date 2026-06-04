@@ -108,15 +108,19 @@
     "plan_next": "Спланируй, чем заняться дальше"
   },
   "context_anchor": {
-    "tooltip_disabled": "На этой странице нечего передать Multica",
-    "tooltip_off": "Сообщить Multica, что вы сейчас просматриваете",
-    "tooltip_on_issue": "Multica знает, что вы смотрите {{label}} · Нажмите, чтобы выключить",
-    "tooltip_on_project": "Multica знает, что вы смотрите проект «{{label}}» · Нажмите, чтобы выключить",
-    "card_tooltip_issue_with_subtitle": "Multica знает, что вы смотрите {{label}} — {{subtitle}}",
-    "card_tooltip_issue": "Multica знает, что вы смотрите {{label}}",
-    "card_tooltip_project": "Multica знает, что вы смотрите проект «{{label}}»",
-    "aria_stop": "Перестать делиться текущей страницей",
-    "aria_start": "Поделиться текущей страницей с Multica"
+    "card_tooltip_issue_with_subtitle": "Выбранный контекст: {{label}} — {{subtitle}}",
+    "card_tooltip_issue": "Выбранный контекст: {{label}}",
+    "card_tooltip_project": "Выбранный контекст: проект «{{label}}»",
+    "tooltip_picker": "Выбрать контекст для этого чата",
+    "tooltip_selected_issue": "Контекст: {{label}} · Нажмите, чтобы изменить",
+    "tooltip_selected_project": "Контекст: проект «{{label}}» · Нажмите, чтобы изменить",
+    "aria_pick": "Выбрать контекст чата",
+    "aria_clear": "Очистить контекст чата",
+    "search_placeholder": "Поиск задач или проектов…",
+    "section_current": "Текущая страница",
+    "section_recent": "Недавние",
+    "section_search": "Поиск",
+    "search_empty": "Нет подходящих задач или проектов"
   },
   "no_agent_banner": "Чтобы начать чат, нужен агент.",
   "offline_banner": {
