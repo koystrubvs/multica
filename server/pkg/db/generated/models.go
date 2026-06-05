@@ -470,6 +470,7 @@ type LarkInstallation struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	BotUnionID         pgtype.Text        `json:"bot_union_id"`
+	Region             string             `json:"region"`
 }
 
 type LarkOutboundCardMessage struct {
