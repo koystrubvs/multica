@@ -30,10 +30,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 	}
 
 	timeout := opts.Timeout
-	if timeout == 0 {
-		timeout = 20 * time.Minute
-	}
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	runCtx, cancel := runContext(ctx, timeout)
 
 	args := buildClaudeArgs(opts, b.cfg.Logger)
 
@@ -110,10 +107,18 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 	// fires. The field symptom is "write |1: The pipe has been ended."
 	// surfacing exactly at the per-task timeout when the kill invalidates
 	// the still-blocked pipe.
+	//
+	// Keep stdin open after the initial user message. Claude's stream-json
+	// protocol can emit control_request events mid-run and expects matching
+	// control_response frames on the same input stream; closing stdin here
+	// leaves the child stuck waiting for a response until its own fallback
+	// timeout.
 	writeDone := make(chan error, 1)
 	go func() {
 		err := writeClaudeInput(stdin, prompt)
-		closeStdin()
+		if err != nil {
+			closeStdin()
+		}
 		writeDone <- err
 	}()
 
@@ -135,6 +140,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		// Close stdout when the context is cancelled so scanner.Scan() unblocks.
 		go func() {
 			<-runCtx.Done()
+			closeStdin()
 			_ = stdout.Close()
 		}()
 
@@ -175,6 +181,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 					finalStatus = "failed"
 					finalError = msg.ResultText
 				}
+				closeStdin()
 			case "log":
 				if msg.Log != nil {
 					trySend(msgCh, Message{
@@ -183,8 +190,12 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 						Content: msg.Log.Message,
 					})
 				}
+			case "control_request":
+				b.handleControlRequest(msg, stdin)
 			}
 		}
+
+		closeStdin()
 
 		// Wait for process exit
 		exitErr := cmd.Wait()
