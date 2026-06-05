@@ -26,7 +26,7 @@ function buildSnippet(_projectId: string): string {
   // No projectId embedded in the HTML — the project is resolved from the
   // access token at runtime, so leaking the UUID into customer-site HTML
   // would have been a needless info-leak with zero functional value.
-  return `<script async src="${BRIDGE_URL}/loader.js"></script>`;
+  return `<script async data-no-minify="1" data-no-optimize="1" src="${BRIDGE_URL}/loader.js"></script>`;
 }
 
 interface TokenEntry {
