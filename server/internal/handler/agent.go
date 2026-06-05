@@ -56,6 +56,7 @@ type AgentResponse struct {
 	Visibility         string `json:"visibility"`
 	Status             string `json:"status"`
 	MaxConcurrentTasks int32  `json:"max_concurrent_tasks"`
+	Isolated           bool   `json:"isolated"`
 	Model              string `json:"model"`
 	// ThinkingLevel is the runtime-native reasoning/effort token persisted
 	// for this agent (empty = use runtime default). The picker is per-runtime
@@ -124,6 +125,7 @@ func agentToResponse(a db.Agent) AgentResponse {
 		Visibility:         a.Visibility,
 		Status:             a.Status,
 		MaxConcurrentTasks: a.MaxConcurrentTasks,
+		Isolated:           a.Isolated,
 		Model:              a.Model.String,
 		ThinkingLevel:      a.ThinkingLevel.String,
 		OwnerID:            uuidToPtr(a.OwnerID),
@@ -576,6 +578,7 @@ type CreateAgentRequest struct {
 	McpConfig          json.RawMessage   `json:"mcp_config"`
 	Visibility         string            `json:"visibility"`
 	MaxConcurrentTasks int32             `json:"max_concurrent_tasks"`
+	Isolated           bool              `json:"isolated"`
 	Model              string            `json:"model"`
 	ThinkingLevel      string            `json:"thinking_level"`
 	// Template records which template slug was used to seed this agent
@@ -692,6 +695,16 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		rc = []byte("{}")
 	}
 
+	// First-class isolation toggle is mirrored into custom_env so the daemon
+	// (which forwards custom_env to the agent process) containerizes this
+	// agent via the gate wrapper. AGENT_ISOLATE is a managed key tracked by
+	// the isolated column.
+	if req.Isolated {
+		if req.CustomEnv == nil {
+			req.CustomEnv = map[string]string{}
+		}
+		req.CustomEnv["AGENT_ISOLATE"] = "1"
+	}
 	ce, _ := json.Marshal(req.CustomEnv)
 	if req.CustomEnv == nil {
 		ce = []byte("{}")
@@ -724,6 +737,7 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		McpConfig:          mc,
 		Model:              pgtype.Text{String: req.Model, Valid: req.Model != ""},
 		ThinkingLevel:      pgtype.Text{String: req.ThinkingLevel, Valid: req.ThinkingLevel != ""},
+		Isolated:           req.Isolated,
 	})
 	if err != nil {
 		// Unique constraint on (workspace_id, name) — return a clear conflict error
@@ -791,6 +805,7 @@ type UpdateAgentRequest struct {
 	// Distinguishing those modes is why this is a pointer; the raw-fields
 	// map captured at decode time tells us whether the key was sent.
 	ThinkingLevel *string `json:"thinking_level"`
+	Isolated      *bool   `json:"isolated"`
 }
 
 // workspaceAlwaysRedactSecrets reports whether the workspace has opted
@@ -916,6 +931,24 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 
 	params := db.UpdateAgentParams{
 		ID: existing.ID,
+	}
+	if req.Isolated != nil {
+		params.Isolated = pgtype.Bool{Bool: *req.Isolated, Valid: true}
+		// Keep the managed AGENT_ISOLATE key in lockstep with the column so
+		// the daemon's custom_env forwarding gates the wrapper. We write the
+		// merged map directly (not via the audited env endpoint) because this
+		// is a non-secret, system-managed flag, not user credential material.
+		env := map[string]string{}
+		if existing.CustomEnv != nil {
+			_ = json.Unmarshal(existing.CustomEnv, &env)
+		}
+		if *req.Isolated {
+			env["AGENT_ISOLATE"] = "1"
+		} else {
+			delete(env, "AGENT_ISOLATE")
+		}
+		ce, _ := json.Marshal(env)
+		params.CustomEnv = ce
 	}
 	if req.Name != nil {
 		params.Name = pgtype.Text{String: *req.Name, Valid: true}

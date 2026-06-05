@@ -159,7 +159,8 @@
     "edit_description_title": "설명 수정",
     "description_placeholder": "이 에이전트는 무엇을 하나요?",
     "save": "저장",
-    "cancel": "취소"
+    "cancel": "취소",
+    "prop_isolation": "격리"
   },
   "skill_attach": {
     "trigger_aria": "워크스페이스 스킬 연결",
@@ -265,7 +266,9 @@
       "remove_aria": "아바타 제거",
       "select_image_toast": "이미지 파일을 선택하세요.",
       "upload_failed_toast": "아바타 업로드 실패"
-    }
+    },
+    "isolation_label": "격리",
+    "isolation_description": "이 에이전트를 Docker 컨테이너에서 실행"
   },
   "tab_body": {
     "common": {
@@ -395,10 +398,12 @@
   "visibility": {
     "private": {
       "label": "개인",
+      "description": "본인과 워크스페이스 관리자만 사용할 수 있습니다",
       "tooltip": "개인 · 본인과 워크스페이스 관리자만 이 에이전트를 사용할 수 있습니다"
     },
     "workspace": {
       "label": "워크스페이스",
+      "description": "모든 멤버가 사용할 수 있습니다",
       "tooltip": "워크스페이스 · 이 워크스페이스의 모든 사람이 이 에이전트를 사용할 수 있습니다"
     }
   },

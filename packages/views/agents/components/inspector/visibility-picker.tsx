@@ -2,17 +2,13 @@
 
 import { useState } from "react";
 import { Globe, Lock } from "lucide-react";
-import {
-  VISIBILITY_DESCRIPTION,
-  VISIBILITY_LABEL,
-  VISIBILITY_TOOLTIP,
-} from "@multica/core/agents";
 import type { AgentVisibility } from "@multica/core/types";
 import {
   PickerItem,
   PropertyPicker,
 } from "../../../issues/components/pickers";
 import { VisibilityBadge } from "../visibility-badge";
+import { useT } from "../../../i18n";
 import { CHIP_CLASS } from "./chip";
 
 export function VisibilityPicker({
@@ -26,14 +22,15 @@ export function VisibilityPicker({
   onChange: (next: AgentVisibility) => Promise<void> | void;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useT("agents");
 
   if (!canEdit) {
     return <VisibilityBadge value={value} />;
   }
 
   const Icon = value === "private" ? Lock : Globe;
-  const label = VISIBILITY_LABEL[value];
-  const tooltip = `Visibility · ${VISIBILITY_TOOLTIP[value]}`;
+  const label = t(($) => $.visibility[value].label);
+  const tooltip = t(($) => $.visibility[value].tooltip);
 
   const select = async (next: AgentVisibility) => {
     setOpen(false);
@@ -63,9 +60,9 @@ export function VisibilityPicker({
       >
         <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <div className="text-left">
-          <div className="font-medium">{VISIBILITY_LABEL.workspace}</div>
+          <div className="font-medium">{t(($) => $.visibility.workspace.label)}</div>
           <div className="text-xs text-muted-foreground">
-            {VISIBILITY_DESCRIPTION.workspace}
+            {t(($) => $.visibility.workspace.description)}
           </div>
         </div>
       </PickerItem>
@@ -75,9 +72,9 @@ export function VisibilityPicker({
       >
         <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <div className="text-left">
-          <div className="font-medium">{VISIBILITY_LABEL.private}</div>
+          <div className="font-medium">{t(($) => $.visibility.private.label)}</div>
           <div className="text-xs text-muted-foreground">
-            {VISIBILITY_DESCRIPTION.private}
+            {t(($) => $.visibility.private.description)}
           </div>
         </div>
       </PickerItem>

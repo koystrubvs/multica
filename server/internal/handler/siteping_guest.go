@@ -33,6 +33,8 @@ const guestPATLifetime = 365 * 24 * time.Hour
 type CreateSitepingGuestRequest struct {
 	Email string `json:"email"`
 	Name  string `json:"name"`
+	// ProjectID optionally scopes the guest to a single project (P10 Variant A).
+	ProjectID string `json:"project_id"`
 }
 
 type CreateSitepingGuestResponse struct {
@@ -41,6 +43,8 @@ type CreateSitepingGuestResponse struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
 	Role     string `json:"role"`
+	// ProjectID echoes the project the guest was scoped to, if any.
+	ProjectID string `json:"project_id,omitempty"`
 	// Token is the raw PAT — returned once, never persisted in plaintext here.
 	Token string `json:"token"`
 }
@@ -106,6 +110,31 @@ func (h *Handler) CreateSitepingGuest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Optionally bind the guest to a project (P10 Variant A scoping). The bridge
+	// passes the project that owns the SitePing site; the guest can then only
+	// file/read/comment within it.
+	boundProjectID := ""
+	if pid := strings.TrimSpace(req.ProjectID); pid != "" {
+		projUUID, okp := parseUUIDOrBadRequest(w, pid, "project_id")
+		if !okp {
+			return
+		}
+		project, perr := h.Queries.GetProject(r.Context(), projUUID)
+		if perr != nil || uuidToString(project.WorkspaceID) != uuidToString(requester.WorkspaceID) {
+			writeError(w, http.StatusBadRequest, "project not found in this workspace")
+			return
+		}
+		if _, perr := h.Queries.CreateGuestProject(r.Context(), db.CreateGuestProjectParams{
+			WorkspaceID: requester.WorkspaceID,
+			UserID:      user.ID,
+			ProjectID:   projUUID,
+		}); perr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to bind project")
+			return
+		}
+		boundProjectID = pid
+	}
+
 	// Mint a PAT for the guest so the bridge can act on their behalf.
 	rawToken, err := auth.GeneratePATToken()
 	if err != nil {
@@ -132,7 +161,8 @@ func (h *Handler) CreateSitepingGuest(w http.ResponseWriter, r *http.Request) {
 		MemberID: uuidToString(member.ID),
 		Email:    email,
 		Name:     name,
-		Role:     member.Role,
-		Token:    rawToken,
+		Role:      member.Role,
+		ProjectID: boundProjectID,
+		Token:     rawToken,
 	})
 }

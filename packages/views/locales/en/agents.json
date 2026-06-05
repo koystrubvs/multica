@@ -159,7 +159,8 @@
     "edit_description_title": "Edit description",
     "description_placeholder": "What does this agent do?",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "prop_isolation": "Isolation"
   },
   "skill_attach": {
     "trigger_aria": "Attach a workspace skill",
@@ -265,7 +266,9 @@
       "remove_aria": "Remove avatar",
       "select_image_toast": "Please select an image file.",
       "upload_failed_toast": "Avatar upload failed"
-    }
+    },
+    "isolation_label": "Isolation",
+    "isolation_description": "Run this agent in a Docker container"
   },
   "tab_body": {
     "common": {
@@ -395,10 +398,12 @@
   "visibility": {
     "private": {
       "label": "Personal",
+      "description": "Only you and workspace admins can assign",
       "tooltip": "Personal · only you and workspace admins can use this agent"
     },
     "workspace": {
       "label": "Workspace",
+      "description": "All members can assign",
       "tooltip": "Workspace · everyone in this workspace can use this agent"
     }
   },

@@ -154,7 +154,8 @@
     "edit_description_title": "编辑描述",
     "description_placeholder": "这个智能体做什么？",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "prop_isolation": "隔离"
   },
   "skill_attach": {
     "trigger_aria": "附加工作区 skill",
@@ -259,7 +260,9 @@
       "remove_aria": "移除头像",
       "select_image_toast": "请选择图片文件。",
       "upload_failed_toast": "头像上传失败"
-    }
+    },
+    "isolation_label": "隔离",
+    "isolation_description": "在 Docker 容器中运行此智能体"
   },
   "tab_body": {
     "common": {
@@ -385,10 +388,12 @@
   "visibility": {
     "private": {
       "label": "个人",
+      "description": "仅你和工作区管理员可以使用",
       "tooltip": "个人 · 仅你和工作区管理员可以使用该智能体"
     },
     "workspace": {
       "label": "工作区",
+      "description": "所有成员都可以使用",
       "tooltip": "工作区 · 工作区内所有人都可以使用该智能体"
     }
   },

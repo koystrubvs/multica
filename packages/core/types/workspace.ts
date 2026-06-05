@@ -72,6 +72,8 @@ export interface MemberWithUser {
   name: string;
   email: string;
   avatar_url: string | null;
+  /** Projects a guest (P10) member is scoped to. Present only for role=guest. */
+  guest_project_ids?: string[];
 }
 
 export interface Invitation {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail, Eye } from "lucide-react";
+import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail, Eye, FolderGit2 } from "lucide-react";
 import { ActorAvatar } from "../../common/actor-avatar";
 import type { MemberWithUser, MemberRole, Invitation } from "@multica/core/types";
 import { Input } from "@multica/ui/components/ui/input";
@@ -41,6 +41,7 @@ import { useAuthStore } from "@multica/core/auth";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useCurrentWorkspace } from "@multica/core/paths";
 import { memberListOptions, invitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
+import { projectListOptions } from "@multica/core/projects/queries";
 import { api } from "@multica/core/api";
 import { useT } from "../../i18n";
 
@@ -88,6 +89,9 @@ function MemberRow({
   busy,
   onRoleChange,
   onRemove,
+  projects,
+  onBindProject,
+  onUnbindProject,
 }: {
   member: MemberWithUser;
   canManage: boolean;
@@ -99,11 +103,20 @@ function MemberRow({
   busy: boolean;
   onRoleChange: (role: MemberRole) => void;
   onRemove: () => void;
+  projects: { id: string; title: string }[];
+  onBindProject: (projectId: string) => void;
+  onUnbindProject: (projectId: string) => void;
 }) {
   const { t } = useT("settings");
   const roleConfig = useRoleLabels();
   const rc = roleConfig[member.role];
   const RoleIcon = rc.icon;
+  // MemberRole type omits "guest" (it is a runtime-only role, see roleConfig);
+  // cast to compare, mirroring how roleConfig is indexed by member.role above.
+  const isGuest = (member.role as string) === "guest";
+  const boundIds = new Set(member.guest_project_ids ?? []);
+  const boundProjects = projects.filter((p) => boundIds.has(p.id));
+  const availableProjects = projects.filter((p) => !boundIds.has(p.id));
   const canEditRole = canManage && !isSelf && (member.role !== "owner" || canManageOwners);
   const canRemove = canManage && !isSelf && (member.role !== "owner" || canManageOwners);
   const isLastOwner = member.role === "owner" && ownerCount <= 1;
@@ -115,6 +128,52 @@ function MemberRow({
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium truncate">{member.name}</div>
         <div className="text-xs text-muted-foreground truncate">{member.email}</div>
+        {isGuest && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {boundProjects.map((p) => (
+              <Badge key={p.id} variant="outline" className="gap-1 text-xs font-normal">
+                <FolderGit2 className="h-3 w-3" />
+                {p.title}
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => onUnbindProject(p.id)}
+                    disabled={busy}
+                    className="ml-0.5 text-muted-foreground hover:text-foreground"
+                    title={t(($) => $.members.guest_unbind_project)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </Badge>
+            ))}
+            {canManage && availableProjects.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="sm" className="h-5 gap-1 px-1.5 text-xs" disabled={busy}>
+                      <Plus className="h-3 w-3" />
+                      {t(($) => $.members.guest_bind_project)}
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="start" className="max-h-64 w-auto overflow-y-auto">
+                  {availableProjects.map((p) => (
+                    <DropdownMenuItem key={p.id} onClick={() => onBindProject(p.id)}>
+                      <FolderGit2 className="h-3.5 w-3.5" />
+                      {p.title}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {boundProjects.length === 0 && !canManage && (
+              <span className="text-xs italic text-muted-foreground">
+                {t(($) => $.members.guest_no_project)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       {showMenu && (
         <DropdownMenu>
@@ -243,6 +302,7 @@ export function MembersTab() {
   const wsId = useWorkspaceId();
   const { data: members = [] } = useQuery(memberListOptions(wsId));
   const { data: invitations = [] } = useQuery(invitationListOptions(wsId));
+  const { data: projects = [] } = useQuery(projectListOptions(wsId));
 
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<MemberRole>("member");
@@ -265,14 +325,26 @@ export function MembersTab() {
     if (!workspace) return;
     setInviteLoading(true);
     try {
-      await api.createMember(workspace.id, {
-        email: inviteEmail,
-        role: inviteRole,
-      });
-      setInviteEmail("");
-      setInviteRole("member");
-      qc.invalidateQueries({ queryKey: workspaceKeys.invitations(wsId) });
-      toast.success(t(($) => $.members.toast_invitation_sent));
+      if ((inviteRole as string) === "guest") {
+        // Guests are blocked from interactive login (P10, widget-only), so an
+        // email invitation would be unacceptable. Provision the guest directly:
+        // creates the user + guest member at once. Bind a project afterward via
+        // the per-guest project picker on the member row.
+        await api.createSitepingGuest(workspace.id, { email: inviteEmail });
+        setInviteEmail("");
+        setInviteRole("member");
+        qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+        toast.success(t(($) => $.members.toast_guest_added));
+      } else {
+        await api.createMember(workspace.id, {
+          email: inviteEmail,
+          role: inviteRole,
+        });
+        setInviteEmail("");
+        setInviteRole("member");
+        qc.invalidateQueries({ queryKey: workspaceKeys.invitations(wsId) });
+        toast.success(t(($) => $.members.toast_invitation_sent));
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_invitation_failed));
     } finally {
@@ -310,6 +382,34 @@ export function MembersTab() {
       toast.success(t(($) => $.members.toast_role_updated));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_role_failed));
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  const handleBindProject = async (memberId: string, projectId: string) => {
+    if (!workspace) return;
+    setMemberActionId(memberId);
+    try {
+      await api.setGuestProject(workspace.id, memberId, projectId);
+      qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+      toast.success(t(($) => $.members.toast_guest_project_bound));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_guest_project_failed));
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  const handleUnbindProject = async (memberId: string, projectId: string) => {
+    if (!workspace) return;
+    setMemberActionId(memberId);
+    try {
+      await api.unsetGuestProject(workspace.id, memberId, projectId);
+      qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+      toast.success(t(($) => $.members.toast_guest_project_unbound));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_guest_project_failed));
     } finally {
       setMemberActionId(null);
     }
@@ -370,6 +470,7 @@ export function MembersTab() {
                   <SelectContent>
                     <SelectItem value="member">{roleConfig.member.label}</SelectItem>
                     <SelectItem value="admin">{roleConfig.admin.label}</SelectItem>
+                    <SelectItem value="guest">{roleConfig.guest.label}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Button
@@ -396,6 +497,9 @@ export function MembersTab() {
                   busy={memberActionId === m.id}
                   onRoleChange={(role) => handleRoleChange(m.id, role)}
                   onRemove={() => handleRemoveMember(m)}
+                  projects={projects}
+                  onBindProject={(projectId) => handleBindProject(m.id, projectId)}
+                  onUnbindProject={(projectId) => handleUnbindProject(m.id, projectId)}
                 />
               </div>
             ))}

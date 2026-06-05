@@ -146,7 +146,8 @@
     "edit_description_title": "説明を編集",
     "description_placeholder": "このエージェントは何をしますか？",
     "save": "保存",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "prop_isolation": "分離"
   },
   "skill_attach": {
     "trigger_aria": "ワークスペースのスキルを追加",
@@ -251,7 +252,9 @@
       "remove_aria": "アバターを削除",
       "select_image_toast": "画像ファイルを選択してください。",
       "upload_failed_toast": "アバターのアップロードに失敗しました"
-    }
+    },
+    "isolation_label": "分離",
+    "isolation_description": "このエージェントを Docker コンテナで実行"
   },
   "tab_body": {
     "common": {
@@ -377,10 +380,12 @@
   "visibility": {
     "private": {
       "label": "個人",
+      "description": "本人とワークスペースの admin のみ使用できます",
       "tooltip": "個人 · 本人とワークスペースの admin のみがこのエージェントを使用できます"
     },
     "workspace": {
       "label": "ワークスペース",
+      "description": "すべてのメンバーが使用できます",
       "tooltip": "ワークスペース · このワークスペースの全員がこのエージェントを使用できます"
     }
   },

@@ -29,12 +29,9 @@ import {
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { Label } from "@multica/ui/components/ui/label";
+import { Switch } from "@multica/ui/components/ui/switch";
 import { toast } from "sonner";
-import {
-  AGENT_DESCRIPTION_MAX_LENGTH,
-  VISIBILITY_DESCRIPTION,
-  VISIBILITY_LABEL,
-} from "@multica/core/agents";
+import { AGENT_DESCRIPTION_MAX_LENGTH } from "@multica/core/agents";
 import { CharCounter } from "./char-counter";
 import { useT } from "../../i18n";
 
@@ -86,6 +83,7 @@ export function CreateAgentDialog({
   const [visibility, setVisibility] = useState<AgentVisibility>(
     template?.visibility ?? "workspace",
   );
+  const [isolated, setIsolated] = useState(template?.isolated ?? false);
   const [model, setModel] = useState(template?.model ?? "");
   const [instructions, setInstructions] = useState(template?.instructions ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(template?.avatar_url ?? null);
@@ -159,6 +157,7 @@ export function CreateAgentDialog({
         description: description.trim(),
         runtime_id: selectedRuntime.id,
         visibility,
+        isolated,
         model: model.trim() || undefined,
         instructions: trimmedInstructions || undefined,
         avatar_url: avatarUrl ?? undefined,
@@ -299,9 +298,9 @@ export function CreateAgentDialog({
                 >
                   <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="text-left">
-                    <div className="font-medium">{VISIBILITY_LABEL.workspace}</div>
+                    <div className="font-medium">{t(($) => $.visibility.workspace.label)}</div>
                     <div className="text-xs text-muted-foreground">
-                      {VISIBILITY_DESCRIPTION.workspace}
+                      {t(($) => $.visibility.workspace.description)}
                     </div>
                   </div>
                 </button>
@@ -316,12 +315,24 @@ export function CreateAgentDialog({
                 >
                   <Lock className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <div className="text-left">
-                    <div className="font-medium">{VISIBILITY_LABEL.private}</div>
+                    <div className="font-medium">{t(($) => $.visibility.private.label)}</div>
                     <div className="text-xs text-muted-foreground">
-                      {VISIBILITY_DESCRIPTION.private}
+                      {t(($) => $.visibility.private.description)}
                     </div>
                   </div>
                 </button>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs text-muted-foreground">
+                {t(($) => $.create_dialog.isolation_label)}
+              </Label>
+              <div className="mt-1.5 flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {t(($) => $.create_dialog.isolation_description)}
+                </span>
+                <Switch size="sm" checked={isolated} onCheckedChange={setIsolated} />
               </div>
             </div>
 

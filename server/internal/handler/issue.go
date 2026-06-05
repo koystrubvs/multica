@@ -2035,6 +2035,11 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		parentIssueID = id
 	}
+	// P10 (Variant A): a guest may only file into one of their bound projects.
+	if allowed, isGuest := h.guestProjectAllowed(r, workspaceID, projectID); isGuest && !allowed {
+		writeError(w, http.StatusForbidden, "guests can only create issues in their assigned project")
+		return
+	}
 	// Cross-workspace parent / project existence is enforced inside
 	// IssueService.Create (atomically with the create), so every entry
 	// point — HTTP, Lark, future MCP — gets the same boundary check
@@ -2563,6 +2568,32 @@ func (h *Handler) requesterIsGuest(ctx context.Context, r *http.Request, workspa
 	}
 	m, err := h.getWorkspaceMember(ctx, actorID, workspaceID)
 	return err == nil && m.Role == "guest"
+}
+
+// guestProjectAllowed is the core P10 (Variant A) project-scoping predicate. For
+// a guest (SitePing client) member it reports whether projectID is one the guest
+// is bound to via guest_project; for every other actor — owner/admin/member and
+// A2A agent (X-Agent-ID) callers — it returns allowed=true with isGuest=false so
+// nothing changes for them. A guest with no project, or an unbound project, is
+// not allowed. Callers decide the failure surface: reads report 404 (a guest
+// must not learn issues exist outside their project), writes report 403.
+func (h *Handler) guestProjectAllowed(r *http.Request, workspaceID string, projectID pgtype.UUID) (allowed bool, isGuest bool) {
+	actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
+	if actorType != "member" {
+		return true, false
+	}
+	m, err := h.getWorkspaceMember(r.Context(), actorID, workspaceID)
+	if err != nil || m.Role != "guest" {
+		return true, false
+	}
+	if !projectID.Valid {
+		return false, true
+	}
+	ok, err := h.Queries.GuestHasProjectAccess(r.Context(), db.GuestHasProjectAccessParams{
+		UserID:    parseUUID(actorID),
+		ProjectID: projectID,
+	})
+	return err == nil && ok, true
 }
 
 // shouldEnqueueAgentTask returns true when an issue creation or assignment

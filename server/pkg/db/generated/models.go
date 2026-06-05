@@ -44,6 +44,7 @@ type Agent struct {
 	McpConfig          []byte             `json:"mcp_config"`
 	Model              pgtype.Text        `json:"model"`
 	ThinkingLevel      pgtype.Text        `json:"thinking_level"`
+	Isolated           bool               `json:"isolated"`
 }
 
 type AgentRuntime struct {
@@ -314,6 +315,14 @@ type GithubPullRequestCheckSuite struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type GuestProject struct {
+	ID          pgtype.UUID        `json:"id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	UserID      pgtype.UUID        `json:"user_id"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type InboxItem struct {
 	ID            pgtype.UUID        `json:"id"`
 	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
@@ -453,7 +462,6 @@ type LarkInstallation struct {
 	AppSecretEncrypted []byte             `json:"app_secret_encrypted"`
 	TenantKey          pgtype.Text        `json:"tenant_key"`
 	BotOpenID          string             `json:"bot_open_id"`
-	BotUnionID         pgtype.Text        `json:"bot_union_id"`
 	InstallerUserID    pgtype.UUID        `json:"installer_user_id"`
 	Status             string             `json:"status"`
 	WsLeaseToken       pgtype.Text        `json:"ws_lease_token"`
@@ -461,6 +469,7 @@ type LarkInstallation struct {
 	InstalledAt        pgtype.Timestamptz `json:"installed_at"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	BotUnionID         pgtype.Text        `json:"bot_union_id"`
 }
 
 type LarkOutboundCardMessage struct {

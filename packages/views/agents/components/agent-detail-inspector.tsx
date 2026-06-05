@@ -46,6 +46,7 @@ import { RuntimePicker } from "./inspector/runtime-picker";
 import { SkillAttach } from "./inspector/skill-attach";
 import { ThinkingPropRow } from "./inspector/thinking-prop-row";
 import { VisibilityPicker } from "./inspector/visibility-picker";
+import { Switch } from "@multica/ui/components/ui/switch";
 import { LarkAgentBindButton } from "../../settings/components/lark-tab";
 
 interface InspectorProps {
@@ -147,6 +148,15 @@ export function AgentDetailInspector({
             value={agent.visibility}
             canEdit={canEdit}
             onChange={(v) => update({ visibility: v })}
+          />
+        </PropRow>
+        <PropRow label={t(($) => $.inspector.prop_isolation)} interactive={false}>
+          <Switch
+            size="sm"
+            checked={agent.isolated ?? false}
+            disabled={!canEdit}
+            onCheckedChange={(v) => update({ isolated: v })}
+            aria-label={t(($) => $.inspector.prop_isolation)}
           />
         </PropRow>
         <PropRow label={t(($) => $.inspector.prop_concurrency)} interactive={false}>

@@ -194,6 +194,11 @@ export interface Agent {
   visibility: AgentVisibility;
   status: AgentStatus;
   max_concurrent_tasks: number;
+  /**
+   * When true, the daemon runs this agent in an isolated Docker container.
+   * Older backends (pre-isolation) omit the field; treat undefined as false.
+   */
+  isolated?: boolean;
   model: string;
   /**
    * Runtime-native reasoning/effort token (e.g. Claude's
@@ -238,6 +243,7 @@ export interface CreateAgentRequest {
   custom_args?: string[];
   visibility?: AgentVisibility;
   max_concurrent_tasks?: number;
+  isolated?: boolean;
   model?: string;
   /** Optional runtime-native reasoning/effort token. See `Agent.thinking_level`. */
   thinking_level?: string;
@@ -345,6 +351,7 @@ export interface UpdateAgentRequest {
   visibility?: AgentVisibility;
   status?: AgentStatus;
   max_concurrent_tasks?: number;
+  isolated?: boolean;
   model?: string;
   /**
    * Runtime-native reasoning/effort token. Tri-state semantics (MUL-2339):

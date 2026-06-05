@@ -341,6 +341,9 @@ type MemberWithUserResponse struct {
 	Name        string  `json:"name"`
 	Email       string  `json:"email"`
 	AvatarURL   *string `json:"avatar_url"`
+	// GuestProjectIDs lists the projects a guest (P10) member is scoped to.
+	// Populated only for role=guest; empty/omitted for every other role.
+	GuestProjectIDs []string `json:"guest_project_ids,omitempty"`
 }
 
 func (h *Handler) ListMembersWithUser(w http.ResponseWriter, r *http.Request) {
@@ -368,9 +371,100 @@ func (h *Handler) ListMembersWithUser(w http.ResponseWriter, r *http.Request) {
 			Email:       m.UserEmail,
 			AvatarURL:   textToPtr(m.UserAvatarUrl),
 		}
+		if m.Role == "guest" {
+			if pids, perr := h.Queries.ListGuestProjectsByUser(r.Context(), db.ListGuestProjectsByUserParams{UserID: m.UserID, WorkspaceID: wsUUID}); perr == nil && len(pids) > 0 {
+				ids := make([]string, len(pids))
+				for j, p := range pids {
+					ids[j] = uuidToString(p)
+				}
+				resp[i].GuestProjectIDs = ids
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// GuestProjectRequest is the body for binding/unbinding a guest to a project.
+type GuestProjectRequest struct {
+	ProjectID string `json:"project_id"`
+}
+
+// SetGuestProject binds a guest member to a project (P10 Variant A). Owner/admin
+// only (route group). Idempotent. The project must belong to this workspace.
+// Binding is allowed for any member row but only takes effect for role=guest
+// (the issue gate ignores it otherwise) so you can bind before/after setting
+// the role without an ordering trap.
+func (h *Handler) SetGuestProject(w http.ResponseWriter, r *http.Request) {
+	workspaceID := workspaceIDFromURL(r, "id")
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
+	memberUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "memberId"), "memberId")
+	if !ok {
+		return
+	}
+	var req GuestProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	projUUID, ok := parseUUIDOrBadRequest(w, req.ProjectID, "project_id")
+	if !ok {
+		return
+	}
+	member, err := h.Queries.GetMember(r.Context(), memberUUID)
+	if err != nil || uuidToString(member.WorkspaceID) != workspaceID {
+		writeError(w, http.StatusNotFound, "member not found")
+		return
+	}
+	project, err := h.Queries.GetProject(r.Context(), projUUID)
+	if err != nil || uuidToString(project.WorkspaceID) != workspaceID {
+		writeError(w, http.StatusBadRequest, "project not found in this workspace")
+		return
+	}
+	if _, err := h.Queries.CreateGuestProject(r.Context(), db.CreateGuestProjectParams{
+		WorkspaceID: wsUUID,
+		UserID:      member.UserID,
+		ProjectID:   projUUID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to bind project")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "bound"})
+}
+
+// UnsetGuestProject removes a guest member's binding to a project. Owner/admin
+// only. Idempotent (no-op if the binding does not exist).
+func (h *Handler) UnsetGuestProject(w http.ResponseWriter, r *http.Request) {
+	workspaceID := workspaceIDFromURL(r, "id")
+	memberUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "memberId"), "memberId")
+	if !ok {
+		return
+	}
+	var req GuestProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	projUUID, ok := parseUUIDOrBadRequest(w, req.ProjectID, "project_id")
+	if !ok {
+		return
+	}
+	member, err := h.Queries.GetMember(r.Context(), memberUUID)
+	if err != nil || uuidToString(member.WorkspaceID) != workspaceID {
+		writeError(w, http.StatusNotFound, "member not found")
+		return
+	}
+	if err := h.Queries.DeleteGuestProject(r.Context(), db.DeleteGuestProjectParams{
+		UserID:    member.UserID,
+		ProjectID: projUUID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to unbind project")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "unbound"})
 }
 
 type CreateMemberRequest struct {

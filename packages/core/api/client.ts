@@ -1409,6 +1409,27 @@ export class ApiClient {
     });
   }
 
+  /** Directly provision a SitePing guest (user + guest member, no invitation).
+   *  Guests cannot log in (widget-only), so the email-invitation flow does not
+   *  apply to them. Returns a one-time PAT the SitePing bridge can store. */
+  async createSitepingGuest(
+    workspaceId: string,
+    data: { email: string; name?: string; project_id?: string },
+  ): Promise<{
+    user_id: string;
+    member_id: string;
+    email: string;
+    name: string;
+    role: string;
+    project_id?: string;
+    token: string;
+  }> {
+    return this.fetch(`/api/workspaces/${workspaceId}/siteping-guests`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   async updateMember(workspaceId: string, memberId: string, data: UpdateMemberRequest): Promise<MemberWithUser> {
     return this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
       method: "PATCH",
@@ -1419,6 +1440,20 @@ export class ApiClient {
   async deleteMember(workspaceId: string, memberId: string): Promise<void> {
     await this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
       method: "DELETE",
+    });
+  }
+
+  async setGuestProject(workspaceId: string, memberId: string, projectId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}/guest-project`, {
+      method: "PUT",
+      body: JSON.stringify({ project_id: projectId }),
+    });
+  }
+
+  async unsetGuestProject(workspaceId: string, memberId: string, projectId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}/guest-project`, {
+      method: "DELETE",
+      body: JSON.stringify({ project_id: projectId }),
     });
   }
 

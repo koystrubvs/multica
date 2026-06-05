@@ -156,7 +156,8 @@
     "description_placeholder": "Что делает этот агент?",
     "save": "Сохранить",
     "cancel": "Отмена",
-    "section_integrations": "Интеграции"
+    "section_integrations": "Интеграции",
+    "prop_isolation": "Изоляция"
   },
   "skill_attach": {
     "trigger_aria": "Прикрепить skill из рабочего пространства",
@@ -264,7 +265,9 @@
       "remove_aria": "Удалить аватар",
       "select_image_toast": "Выберите файл изображения.",
       "upload_failed_toast": "Не удалось загрузить аватар"
-    }
+    },
+    "isolation_label": "Изоляция",
+    "isolation_description": "Запускать агента в Docker-контейнере"
   },
   "tab_body": {
     "common": {
@@ -403,10 +406,12 @@
   "visibility": {
     "private": {
       "label": "Личный",
+      "description": "Только вы и администраторы рабочего пространства",
       "tooltip": "Личный · использовать этого агента могут только вы и администраторы рабочего пространства"
     },
     "workspace": {
       "label": "Рабочее пространство",
+      "description": "Использовать может любой участник",
       "tooltip": "Рабочее пространство · использовать этого агента может любой участник"
     }
   },

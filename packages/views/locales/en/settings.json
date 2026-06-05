@@ -347,6 +347,13 @@
         "label": "Guest",
         "description": "Can view and comment only"
       }
-    }
+    },
+    "guest_bind_project": "Project",
+    "guest_unbind_project": "Unbind project",
+    "guest_no_project": "No project assigned",
+    "toast_guest_project_bound": "Project linked",
+    "toast_guest_project_unbound": "Project unlinked",
+    "toast_guest_project_failed": "Could not update project",
+    "toast_guest_added": "Guest added"
   }
 }
