@@ -151,6 +151,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		TrustedProxies:           parseTrustedProxies(os.Getenv("MULTICA_TRUSTED_PROXIES")),
 		CloudRuntimeFleetURL:     cloudRuntimeFleetURLFromEnv(),
 		CloudRuntimeFleetTimeout: envDuration("MULTICA_CLOUD_FLEET_TIMEOUT", 35*time.Second),
+		AttachmentDownloadMode:   os.Getenv("ATTACHMENT_DOWNLOAD_MODE"),
+		AttachmentDownloadURLTTL: envDuration("ATTACHMENT_DOWNLOAD_URL_TTL", 30*time.Minute),
 	}
 	h := handler.New(queries, pool, hub, bus, emailSvc, store, cfSigner, analyticsClient, signupConfig, daemonHub)
 	h.Metrics = opts.BusinessMetrics
@@ -235,7 +237,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					Audit:        auditLogger,
 					IssueService: h.IssueService,
 					TaskService:  h.TaskService,
+					Logger:       slog.Default(),
 				}
+				// Debounce the per-session run trigger so a burst of
+				// messages (e.g. "forward a transcript, then type a note")
+				// collapses into one agent run instead of one per message.
+				// MUL-2968.
+				dispatcher.EnableRunBatching(lark.DefaultChatRunBatchWindow)
 
 				// WS Hub: lease + supervisor goroutines per installation.
 				// The WSLongConnConnector talks Lark's long-conn protocol
@@ -271,6 +279,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					Logger:      slog.Default(),
 				})
 				h.LarkHub.SetOutcomeReplier(replier)
+				// The agent-offline / agent-archived notice is now decided
+				// at debounce-flush time rather than synchronously from
+				// Handle, so the dispatcher drives that reply itself through
+				// the same replier. MUL-2968.
+				dispatcher.FlushReply = replier.Reply
 				slog.Info("lark inbound pipeline wired", "connector", connectorLabel)
 
 				// One-shot union_id backfill for installations created
@@ -306,6 +319,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				if rerr != nil {
 					slog.Error("lark: RegistrationService init failed; install disabled", "error", rerr)
 				} else {
+					// Publish lark_installation:created at row-commit time so the
+					// connection badge refreshes on every workspace client, not just
+					// the tab that polls the install status to success.
+					regSvc.SetEventBus(bus)
 					h.LarkRegistration = regSvc
 					slog.Info("lark device-flow install enabled")
 				}
@@ -755,6 +772,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Attachments
 			r.Get("/api/attachments/{id}", h.GetAttachmentByID)
+			r.Get("/api/attachments/{id}/download", h.DownloadAttachment)
 			r.Get("/api/attachments/{id}/content", h.GetAttachmentContent)
 			r.Delete("/api/attachments/{id}", h.DeleteAttachment)
 
