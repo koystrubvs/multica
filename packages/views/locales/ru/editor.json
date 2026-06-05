@@ -17,7 +17,8 @@
     },
     "list_dropdown": {
       "bullet_list": "Маркированный список",
-      "ordered_list": "Нумерованный список"
+      "ordered_list": "Нумерованный список",
+      "task_list": "Список задач"
     },
     "sub_issue": {
       "tooltip": "Создать подзадачу из выделения",
@@ -56,7 +57,10 @@
     "group_issues": "Задачи",
     "all_members": "Все участники",
     "searching": "Поиск...",
-    "no_results": "Ничего не найдено"
+    "no_results": "Ничего не найдено",
+    "group_current": "Текущая страница",
+    "group_recent": "Недавно просмотренные",
+    "group_search": "Результаты поиска"
   },
   "code_block": {
     "copy_code": "Скопировать код",
