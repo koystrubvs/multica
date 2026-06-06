@@ -13,9 +13,12 @@ import {
   runtimeUsageByAgentOptions,
 } from "@multica/core/runtimes/queries";
 import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
+import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
+import { CostCurrencyControl } from "./cost-currency-control";
 import { useViewingTimezone } from "../../common/use-viewing-timezone";
 import {
   formatTokens,
+  formatRub,
   estimateCost,
   estimateCacheSavings,
   aggregateByDate,
@@ -111,11 +114,6 @@ function Segmented<T extends string | number>({
   );
 }
 
-function fmtMoney(n: number): string {
-  if (n >= 100) return `$${n.toFixed(0)}`;
-  return `$${n.toFixed(2)}`;
-}
-
 // ---------------------------------------------------------------------------
 // Top-level orchestrator. Owns the time window, fetches a 180-day usage
 // cache once, slices it into "current" / "prior" windows for delta math,
@@ -144,6 +142,7 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
   // aggregate sub-components (WhenChart, CostByBlock, ActivityHeatmap) each
   // subscribe on their own and pass pricings as a memo dep there.
   useCustomPricingStore((s) => s.pricings);
+  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
 
   if (loading) return <UsageSkeleton />;
   if (usage.length === 0) return <UsageEmpty />;
@@ -221,10 +220,13 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
           contribute $0 to totals. */}
       <UnmappedPricingNotice usage={filtered} />
 
+      <div className="flex items-center justify-end">
+        <CostCurrencyControl />
+      </div>
       <div className="grid grid-cols-3 divide-x rounded-lg border bg-card">
         <KpiCard
           label={t(($) => $.usage.kpi_cost_label, { days })}
-          value={fmtMoney(totals.cost)}
+          value={formatRub(totals.cost, rubPerUsd)}
           hint={
             costDelta == null ? undefined : (
               <span
@@ -246,7 +248,7 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
         />
         <KpiCard
           label={t(($) => $.usage.kpi_cache_label, { days })}
-          value={fmtMoney(totals.cacheSavings)}
+          value={formatRub(totals.cacheSavings, rubPerUsd)}
           accent={totals.cacheSavings > 0 ? "success" : "default"}
           hint={
             <span>
@@ -704,6 +706,7 @@ function CostByList({
   emptyHint?: string;
 }) {
   const { t } = useT("runtimes");
+  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
   if (rows.length === 0) {
     return (
       <p className="py-4 text-center text-xs text-muted-foreground">
@@ -732,7 +735,7 @@ function CostByList({
               {formatTokens(row.tokens)}
             </div>
             <div className="text-right text-sm font-medium tabular-nums">
-              ${row.cost.toFixed(2)}
+              {formatRub(row.cost, rubPerUsd)}
             </div>
           </div>
         );

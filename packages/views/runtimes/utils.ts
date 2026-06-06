@@ -827,3 +827,18 @@ export function pctChange(current: number, previous: number): number | null {
   if (previous <= 0) return null;
   return Math.round(((current - previous) / previous) * 100);
 }
+
+// ---------------------------------------------------------------------------
+// Currency display (RUB)
+// ---------------------------------------------------------------------------
+// Internal cost math stays in USD (the MODEL_PRICING tables above are USD
+// provider list prices); the ruble figure is a presentation-layer multiply
+// by the user-set USD->RUB rate (see cost-currency-store). Threshold mirrors
+// the old USD fmtMoney: at/above the 100 mark we drop the kopecks for a
+// cleaner scan, below it we keep two decimals so sub-ruble costs aren't ₽0.
+export function formatRub(usd: number, rubPerUsd: number): string {
+  const rub = usd * rubPerUsd;
+  if (rub === 0) return "₽0";
+  if (rub >= 100) return `₽${Math.round(rub).toLocaleString("ru-RU")}`;
+  return `₽${rub.toFixed(2)}`;
+}
