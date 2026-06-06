@@ -163,7 +163,11 @@
       "guest_select_label": "项目访客",
       "guest_select_placeholder": "选择访客…",
       "guest_hint_empty": "请先在上方「成员」部分创建访客。",
-      "created_from_people_hint": "链接在每个成员处创建 — 点击上方「成员」部分中成员旁的链接图标。"
+      "created_from_people_hint": "链接在每个成员处创建 — 点击上方「成员」部分中成员旁的链接图标。",
+      "open_as_admin": "以管理员身份打开网站",
+      "admin_opening": "正在打开…",
+      "admin_no_site_url": "请先填写网站 URL",
+      "admin_open_failed": "打开网站失败"
     }
   },
   "people": {

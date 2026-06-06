@@ -5,6 +5,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Check, Copy, ExternalLink, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { memberListOptions } from "@multica/core/workspace/queries";
+import { useAuthStore } from "@multica/core/auth";
 import { useT } from "../../i18n";
 import {
   fetchSitepingTokens,
@@ -12,6 +15,7 @@ import {
   fetchSitepingMeta,
   saveSitepingMeta,
   buildSitepingShareUrl,
+  ensureSitepingTokenForEmail,
   sitepingKeys,
 } from "../siteping-api";
 
@@ -118,7 +122,12 @@ export function SitepingIntegrationSection({ projectId }: { projectId: string })
 function ShareLinksManager({ projectId }: { projectId: string }) {
   const { t } = useT("projects");
   const qc = useQueryClient();
+  const wsId = useWorkspaceId();
+  const userId = useAuthStore((s) => s.user?.id);
+  const { data: members = [] } = useQuery(memberListOptions(wsId));
+  const currentMember = members.find((m) => m.user_id === userId) ?? null;
   const [siteUrlDraft, setSiteUrlDraft] = useState<string | null>(null);
+  const [openingAdmin, setOpeningAdmin] = useState(false);
 
   const { data: meta } = useQuery({
     queryKey: sitepingKeys.meta(projectId),
@@ -159,6 +168,29 @@ function ShareLinksManager({ projectId }: { projectId: string }) {
     }
   };
 
+  // Quick "open my site as admin" — mints/reuses a token for the current user
+  // and opens the live site with the widget in a new tab under that identity.
+  const handleOpenAsAdmin = async () => {
+    if (!siteUrl) {
+      toast.error(t(($) => $.siteping.share.admin_no_site_url));
+      return;
+    }
+    if (!currentMember) return;
+    setOpeningAdmin(true);
+    try {
+      const token = await ensureSitepingTokenForEmail(projectId, tokens, {
+        name: currentMember.name,
+        email: currentMember.email,
+      });
+      await qc.invalidateQueries({ queryKey: sitepingKeys.tokens(projectId) });
+      window.open(buildSitepingShareUrl(siteUrl, token), "_blank", "noopener,noreferrer");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.siteping.share.admin_open_failed));
+    } finally {
+      setOpeningAdmin(false);
+    }
+  };
+
   return (
     <div className="space-y-2 rounded-md border bg-background/50 p-2.5">
       <div className="space-y-1">
@@ -188,6 +220,21 @@ function ShareLinksManager({ projectId }: { projectId: string }) {
           )}
         </div>
       </div>
+      {currentMember && (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={openingAdmin}
+          onClick={handleOpenAsAdmin}
+          className="h-7 w-full gap-1.5 text-[11px]"
+        >
+          <ExternalLink className="size-3" />
+          {openingAdmin
+            ? t(($) => $.siteping.share.admin_opening)
+            : t(($) => $.siteping.share.open_as_admin)}
+        </Button>
+      )}
       <div className="pt-1 border-t">
         <div className="text-xs font-medium truncate">
           {t(($) => $.siteping.share.title)}

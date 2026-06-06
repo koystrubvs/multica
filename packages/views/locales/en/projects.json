@@ -167,7 +167,11 @@
       "guest_select_label": "Project guest",
       "guest_select_placeholder": "Select a guest…",
       "guest_hint_empty": "Create a guest in the People section above first.",
-      "created_from_people_hint": "Links are created per member — use the link icon next to a member in the People section above."
+      "created_from_people_hint": "Links are created per member — use the link icon next to a member in the People section above.",
+      "open_as_admin": "Open site as admin",
+      "admin_opening": "Opening…",
+      "admin_no_site_url": "Set the site URL first",
+      "admin_open_failed": "Failed to open site"
     }
   },
   "people": {
