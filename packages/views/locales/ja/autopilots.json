@@ -95,7 +95,8 @@
     "running": "実行中",
     "completed": "完了",
     "failed": "失敗",
-    "skipped": "スキップ済み"
+    "skipped": "スキップ済み",
+    "pending_runtime": "ランタイム待機中"
   },
   "run_source": {
     "schedule": "スケジュール",
@@ -109,7 +110,13 @@
     "skipped_group": {
       "label": "スキップ済み",
       "summary": "スキップされた実行 {{count}} 件"
-    }
+    },
+    "pending_runtime_group": {
+      "label": "ランタイム待機中",
+      "summary": "{{count}} 件の実行がランタイムを待機中"
+    },
+    "pending_runtime_reason": "エージェントのランタイムがオンラインになるのを待機しています",
+    "pending_runtime_tooltip": "cron は実行されましたが、エージェントのランタイムがオフラインでした。ランタイムが再びオンラインになると、実行は自動的にディスパッチされます。"
   },
   "webhook_payload": {
     "label": "Webhook イベント:",

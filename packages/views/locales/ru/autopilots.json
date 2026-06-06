@@ -95,7 +95,8 @@
     "running": "Выполняется",
     "skipped": "Пропущено",
     "completed": "Выполнено",
-    "failed": "Ошибка"
+    "failed": "Ошибка",
+    "pending_runtime": "Ожидание рантайма"
   },
   "run_source": {
     "schedule": "Расписание",
@@ -109,7 +110,13 @@
     "skipped_group": {
       "label": "Пропущенные",
       "summary": "{{count}} пропущенных запусков"
-    }
+    },
+    "pending_runtime_group": {
+      "label": "Ожидание рантайма",
+      "summary": "{{count}} запусков ждут рантайм"
+    },
+    "pending_runtime_reason": "Ожидание подключения рантайма агента",
+    "pending_runtime_tooltip": "Cron сработал, но рантайм агента был офлайн. Запуск будет автоматически отправлен, когда рантайм снова появится в сети."
   },
   "webhook_payload": {
     "label": "Webhook-событие:",
