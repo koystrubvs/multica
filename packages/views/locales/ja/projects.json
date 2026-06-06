@@ -64,7 +64,8 @@
     "no_issues_yet": "イシューはまだありません",
     "toast_link_copied": "リンクをコピーしました",
     "toast_project_deleted": "プロジェクトを削除しました",
-    "toast_move_issue_failed": "イシューを移動できませんでした"
+    "toast_move_issue_failed": "イシューを移動できませんでした",
+    "section_people": "メンバー"
   },
   "resources": {
     "section_header": "リソース",
@@ -116,5 +117,23 @@
   },
   "chip": {
     "fallback_label": "プロジェクト"
+  },
+  "people": {
+    "team_group": "チーム",
+    "guests_group": "ゲスト",
+    "guest_badge": "ゲスト",
+    "empty": "メンバーまたはゲストがいません",
+    "guest_create_button": "ゲストを追加",
+    "guest_name_placeholder": "名前（任意）",
+    "guest_email_placeholder": "メール",
+    "guest_create": "作成",
+    "guest_creating": "作成中…",
+    "guest_cancel": "キャンセル",
+    "guest_created_toast": "ゲストを作成しました",
+    "guest_create_failed": "ゲストの作成に失敗しました",
+    "guest_unbind_title": "プロジェクトから解除",
+    "guest_unbound_toast": "ゲストをプロジェクトから解除しました",
+    "guest_unbind_failed": "ゲストの解除に失敗しました",
+    "no_guests": "ゲストはまだいません"
   }
 }
