@@ -64,7 +64,8 @@
     "no_issues_yet": "Пока нет задач",
     "toast_link_copied": "Ссылка скопирована",
     "toast_project_deleted": "Проект удалён",
-    "toast_move_issue_failed": "Не удалось переместить задачу"
+    "toast_move_issue_failed": "Не удалось переместить задачу",
+    "section_people": "Участники"
   },
   "resources": {
     "section_header": "Ресурсы",
@@ -162,7 +163,28 @@
       "save": "Сохранить",
       "saving": "Сохранение…",
       "site_url_saved": "URL сайта сохранён",
-      "site_url_save_failed": "Не удалось сохранить URL"
+      "site_url_save_failed": "Не удалось сохранить URL",
+      "guest_select_label": "Гость проекта",
+      "guest_select_placeholder": "Выбрать гостя…",
+      "guest_hint_empty": "Сначала создайте гостя в разделе «Участники» выше."
     }
+  },
+  "people": {
+    "team_group": "Команда",
+    "guests_group": "Гости",
+    "guest_badge": "Гость",
+    "empty": "Нет участников и гостей",
+    "guest_create_button": "Добавить гостя",
+    "guest_name_placeholder": "Имя (необязательно)",
+    "guest_email_placeholder": "Email",
+    "guest_create": "Создать",
+    "guest_creating": "Создание…",
+    "guest_cancel": "Отмена",
+    "guest_created_toast": "Гость создан",
+    "guest_create_failed": "Не удалось создать гостя",
+    "guest_unbind_title": "Отвязать от проекта",
+    "guest_unbound_toast": "Гость отвязан от проекта",
+    "guest_unbind_failed": "Не удалось отвязать гостя",
+    "no_guests": "Гостей пока нет"
   }
 }

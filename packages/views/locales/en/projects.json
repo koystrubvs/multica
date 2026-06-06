@@ -64,7 +64,8 @@
     "no_issues_yet": "No issues yet",
     "toast_link_copied": "Link copied",
     "toast_project_deleted": "Project deleted",
-    "toast_move_issue_failed": "Failed to move issue"
+    "toast_move_issue_failed": "Failed to move issue",
+    "section_people": "People"
   },
   "resources": {
     "section_header": "Resources",
@@ -162,7 +163,28 @@
       "save": "Save",
       "saving": "Saving…",
       "site_url_saved": "Site URL saved",
-      "site_url_save_failed": "Failed to save site URL"
+      "site_url_save_failed": "Failed to save site URL",
+      "guest_select_label": "Project guest",
+      "guest_select_placeholder": "Select a guest…",
+      "guest_hint_empty": "Create a guest in the People section above first."
     }
+  },
+  "people": {
+    "team_group": "Team",
+    "guests_group": "Guests",
+    "guest_badge": "Guest",
+    "empty": "No members or guests",
+    "guest_create_button": "Add guest",
+    "guest_name_placeholder": "Name (optional)",
+    "guest_email_placeholder": "Email",
+    "guest_create": "Create",
+    "guest_creating": "Creating…",
+    "guest_cancel": "Cancel",
+    "guest_created_toast": "Guest created",
+    "guest_create_failed": "Failed to create guest",
+    "guest_unbind_title": "Unbind from project",
+    "guest_unbound_toast": "Guest unbound from project",
+    "guest_unbind_failed": "Failed to unbind guest",
+    "no_guests": "No guests yet"
   }
 }

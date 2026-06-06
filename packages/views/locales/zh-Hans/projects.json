@@ -64,7 +64,8 @@
     "no_issues_yet": "目前还没有 issue",
     "toast_link_copied": "已复制链接",
     "toast_project_deleted": "已删除项目",
-    "toast_move_issue_failed": "移动 issue 失败"
+    "toast_move_issue_failed": "移动 issue 失败",
+    "section_people": "成员"
   },
   "resources": {
     "section_header": "资源",
@@ -158,7 +159,28 @@
       "save": "保存",
       "saving": "保存中…",
       "site_url_saved": "网站 URL 已保存",
-      "site_url_save_failed": "保存 URL 失败"
+      "site_url_save_failed": "保存 URL 失败",
+      "guest_select_label": "项目访客",
+      "guest_select_placeholder": "选择访客…",
+      "guest_hint_empty": "请先在上方「成员」部分创建访客。"
     }
+  },
+  "people": {
+    "team_group": "团队",
+    "guests_group": "访客",
+    "guest_badge": "访客",
+    "empty": "暂无成员或访客",
+    "guest_create_button": "添加访客",
+    "guest_name_placeholder": "姓名（可选）",
+    "guest_email_placeholder": "邮箱",
+    "guest_create": "创建",
+    "guest_creating": "创建中…",
+    "guest_cancel": "取消",
+    "guest_created_toast": "访客已创建",
+    "guest_create_failed": "创建访客失败",
+    "guest_unbind_title": "从项目解绑",
+    "guest_unbound_toast": "已将访客从项目解绑",
+    "guest_unbind_failed": "解绑访客失败",
+    "no_guests": "暂无访客"
   }
 }

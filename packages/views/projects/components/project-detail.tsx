@@ -2,8 +2,8 @@
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
-import { Check, ChevronRight, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Plus, Trash2, UserMinus } from "lucide-react";
-import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { Check, ChevronRight, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Plus, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { cn } from "@multica/ui/lib/utils";
 import { copyText } from "@multica/ui/lib/clipboard";
 import { toast } from "sonner";
@@ -24,7 +24,8 @@ import {
 } from "@multica/core/issues/queries";
 import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { useModalStore } from "@multica/core/modals";
-import { memberListOptions, agentListOptions } from "@multica/core/workspace/queries";
+import { memberListOptions, agentListOptions, workspaceKeys } from "@multica/core/workspace/queries";
+import { api } from "@multica/core/api";
 import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useRecentContextStore } from "@multica/core/chat";
@@ -439,6 +440,15 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const [propertiesOpen, setPropertiesOpen] = useState(true);
   const [progressOpen, setProgressOpen] = useState(true);
   const [descriptionOpen, setDescriptionOpen] = useState(true);
+  const [peopleOpen, setPeopleOpen] = useState(true);
+  // Guest create/unbind (right-panel People section). Guests exist to be picked
+  // when sharing a SitePing link, so they are managed here at the project.
+  const qc = useQueryClient();
+  const [guestFormOpen, setGuestFormOpen] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestCreating, setGuestCreating] = useState(false);
+  const [guestActionId, setGuestActionId] = useState<string | null>(null);
 
   // Sidebar panel
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -501,6 +511,49 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
 
   const issueMetrics = getProjectIssueMetrics(project);
   const statusCfg = PROJECT_STATUS_CONFIG[project.status];
+
+  // People with access to this project. Regular workspace roles (owner/admin/
+  // member) see every project — they form the "team". Guests (P10, widget-only)
+  // are scoped per-project: only those whose guest_project_ids includes this
+  // project are shown. Read-only here; bind/unbind lives in Settings → Members.
+  const teamMembers = members.filter((m) => (m.role as string) !== "guest");
+  const boundGuests = members.filter(
+    (m) => (m.role as string) === "guest" && (m.guest_project_ids ?? []).includes(projectId),
+  );
+  const currentMember = members.find((m) => m.user_id === userId) ?? null;
+  const canManageGuests = currentMember?.role === "owner" || currentMember?.role === "admin";
+
+  const handleCreateGuest = async () => {
+    const email = guestEmail.trim();
+    if (!email) return;
+    setGuestCreating(true);
+    try {
+      // Provisions user + guest member and binds it to this project in one call.
+      await api.createSitepingGuest(wsId, { email, name: guestName.trim() || undefined, project_id: projectId });
+      await qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+      setGuestName("");
+      setGuestEmail("");
+      setGuestFormOpen(false);
+      toast.success(t(($) => $.people.guest_created_toast));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.people.guest_create_failed));
+    } finally {
+      setGuestCreating(false);
+    }
+  };
+
+  const handleUnbindGuest = async (memberId: string) => {
+    setGuestActionId(memberId);
+    try {
+      await api.unsetGuestProject(wsId, memberId, projectId);
+      await qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+      toast.success(t(($) => $.people.guest_unbound_toast));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.people.guest_unbind_failed));
+    } finally {
+      setGuestActionId(null);
+    }
+  };
 
   const sidebarContent = (
     <div className="space-y-5">
@@ -716,6 +769,102 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
             onUpdate={(md) => handleUpdateField({ description: md || null })}
             debounceMs={1500}
           />
+        </div>}
+      </div>
+
+      {/* People */}
+      <div>
+        <button
+          type="button"
+          className={`flex w-full items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors mb-2 hover:bg-accent/70 ${peopleOpen ? "" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setPeopleOpen(!peopleOpen)}
+        >
+          {t(($) => $.detail.section_people)}
+          <ChevronRight className={`!size-3 shrink-0 stroke-[2.5] text-muted-foreground transition-transform ${peopleOpen ? "rotate-90" : ""}`} />
+        </button>
+        {peopleOpen && <div className="pl-2 space-y-3">
+          {teamMembers.length > 0 && (
+            <div className="space-y-0.5">
+              <div className="px-1 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">{t(($) => $.people.team_group)}</div>
+              {teamMembers.map((m) => {
+                const isLead = project.lead_type === "member" && project.lead_id === m.user_id;
+                return (
+                  <div key={m.user_id} className="flex items-center gap-2 rounded-md px-1 py-1 text-xs">
+                    <ActorAvatar actorType="member" actorId={m.user_id} size={16} enableHoverCard showStatusDot />
+                    <span className="truncate">{m.name}</span>
+                    {isLead && (
+                      <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{t(($) => $.table.lead)}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-between gap-2 px-1 pb-1">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t(($) => $.people.guests_group)}</span>
+              {canManageGuests && (
+                <button
+                  type="button"
+                  onClick={() => setGuestFormOpen((v) => !v)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <UserPlus className="size-3" />
+                  {t(($) => $.people.guest_create_button)}
+                </button>
+              )}
+            </div>
+
+            {guestFormOpen && canManageGuests && (
+              <div className="mb-1 space-y-1.5 rounded-md border bg-muted/30 p-2">
+                <input
+                  type="text"
+                  value={guestName}
+                  onChange={(e) => setGuestName(e.target.value)}
+                  placeholder={t(($) => $.people.guest_name_placeholder)}
+                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+                <input
+                  type="email"
+                  value={guestEmail}
+                  onChange={(e) => setGuestEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && guestEmail.trim() && !guestCreating) handleCreateGuest(); }}
+                  placeholder={t(($) => $.people.guest_email_placeholder)}
+                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+                <div className="flex justify-end gap-1.5">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setGuestFormOpen(false); setGuestName(""); setGuestEmail(""); }} className="h-6 px-2 text-[11px]">
+                    {t(($) => $.people.guest_cancel)}
+                  </Button>
+                  <Button type="button" size="sm" disabled={!guestEmail.trim() || guestCreating} onClick={handleCreateGuest} className="h-6 px-2 text-[11px]">
+                    {guestCreating ? t(($) => $.people.guest_creating) : t(($) => $.people.guest_create)}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {boundGuests.map((m) => (
+              <div key={m.user_id} className="group/guest flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-accent/50">
+                <ActorAvatar actorType="member" actorId={m.user_id} size={16} enableHoverCard />
+                <span className="truncate">{m.name}</span>
+                <span className="ml-auto shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">{t(($) => $.people.guest_badge)}</span>
+                {canManageGuests && (
+                  <button
+                    type="button"
+                    disabled={guestActionId === m.id}
+                    onClick={() => handleUnbindGuest(m.id)}
+                    title={t(($) => $.people.guest_unbind_title)}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-destructive group-hover/guest:opacity-100 disabled:opacity-50"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {boundGuests.length === 0 && !guestFormOpen && (
+              <div className="px-1 py-1 text-[11px] italic text-muted-foreground">{t(($) => $.people.no_guests)}</div>
+            )}
+          </div>
         </div>}
       </div>
 

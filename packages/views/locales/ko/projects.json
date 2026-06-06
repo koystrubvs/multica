@@ -64,7 +64,8 @@
     "no_issues_yet": "아직 이슈가 없습니다",
     "toast_link_copied": "링크를 복사했습니다",
     "toast_project_deleted": "프로젝트를 삭제했습니다",
-    "toast_move_issue_failed": "이슈를 이동하지 못했습니다"
+    "toast_move_issue_failed": "이슈를 이동하지 못했습니다",
+    "section_people": "멤버"
   },
   "resources": {
     "section_header": "리소스",
@@ -123,5 +124,23 @@
   },
   "chip": {
     "fallback_label": "프로젝트"
+  },
+  "people": {
+    "team_group": "팀",
+    "guests_group": "게스트",
+    "guest_badge": "게스트",
+    "empty": "멤버 또는 게스트가 없습니다",
+    "guest_create_button": "게스트 추가",
+    "guest_name_placeholder": "이름 (선택 사항)",
+    "guest_email_placeholder": "이메일",
+    "guest_create": "생성",
+    "guest_creating": "생성 중…",
+    "guest_cancel": "취소",
+    "guest_created_toast": "게스트를 생성했습니다",
+    "guest_create_failed": "게스트를 생성하지 못했습니다",
+    "guest_unbind_title": "프로젝트에서 연결 해제",
+    "guest_unbound_toast": "프로젝트에서 게스트 연결을 해제했습니다",
+    "guest_unbind_failed": "게스트 연결을 해제하지 못했습니다",
+    "no_guests": "아직 게스트가 없습니다"
   }
 }

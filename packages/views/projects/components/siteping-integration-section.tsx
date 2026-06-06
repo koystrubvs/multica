@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Check, Copy, ExternalLink, Plus, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { memberListOptions } from "@multica/core/workspace/queries";
 import { useT } from "../../i18n";
 
 // SitePing integration section.
@@ -158,11 +160,19 @@ export function SitepingIntegrationSection({ projectId }: { projectId: string })
 function ShareLinksManager({ projectId }: { projectId: string }) {
   const { t } = useT("projects");
   const qc = useQueryClient();
+  const wsId = useWorkspaceId();
   const [showForm, setShowForm] = useState(false);
   const [authorName, setAuthorName] = useState("");
   const [authorEmail, setAuthorEmail] = useState("");
   const [label, setLabel] = useState("");
   const [siteUrlDraft, setSiteUrlDraft] = useState<string | null>(null);
+
+  // Guests bound to this project — the link's author is picked from them
+  // (the whole reason a guest user exists). Managed in the People section above.
+  const { data: members = [] } = useQuery(memberListOptions(wsId));
+  const projectGuests = members.filter(
+    (m) => (m.role as string) === "guest" && (m.guest_project_ids ?? []).includes(projectId),
+  );
 
   const { data: meta } = useQuery({
     queryKey: ["siteping-meta", projectId],
@@ -268,6 +278,37 @@ function ShareLinksManager({ projectId }: { projectId: string }) {
 
       {showForm && (
         <div className="space-y-2 rounded-md border bg-muted/30 p-2">
+          {projectGuests.length > 0 ? (
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                {t(($) => $.siteping.share.guest_select_label)}
+              </label>
+              <select
+                value={authorEmail}
+                onChange={(e) => {
+                  const g = projectGuests.find((x) => x.email === e.target.value);
+                  if (g) {
+                    setAuthorName(g.name);
+                    setAuthorEmail(g.email);
+                  } else {
+                    setAuthorEmail(e.target.value);
+                  }
+                }}
+                className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">{t(($) => $.siteping.share.guest_select_placeholder)}</option>
+                {projectGuests.map((g) => (
+                  <option key={g.id} value={g.email}>
+                    {g.name} — {g.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <p className="text-[11px] italic text-muted-foreground">
+              {t(($) => $.siteping.share.guest_hint_empty)}
+            </p>
+          )}
           <input
             type="text"
             value={authorName}
