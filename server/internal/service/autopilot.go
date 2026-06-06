@@ -804,6 +804,14 @@ func (s *AutopilotService) resolveAssigneeRuntimeID(ctx context.Context, ap db.A
 // of the loop after this batch commits).
 const maxPendingRuntimeRunsPerSweep = 50
 
+// maxPendingRuntimeAge bounds how long a cron-triggered run may sit in
+// 'pending_runtime' before it is skipped instead of fired. Prevents a run
+// parked at its scheduled time from dispatching at an arbitrary reconnect
+// hour (undesirable for time-sensitive cron autopilots like the nightly
+// Updater). Sized well under the shortest cron cadence we run; a missed
+// window is covered by the next tick. Local follow-up to MUL-2863.
+const maxPendingRuntimeAge = 6 * time.Hour
+
 // DispatchPendingRuntimeRunsForRuntime is the runtime-comes-online hook
 // for MUL-2863. It walks every 'pending_runtime' autopilot_run queued
 // behind the given runtime_id and tries to dispatch each one, oldest first.
@@ -854,6 +862,15 @@ func (s *AutopilotService) DispatchPendingRuntimeRunsForRuntime(ctx context.Cont
 	)
 
 	for _, row := range rows {
+		// Bound how long a cron run may sit parked. A run parked past
+		// its window would fire at an arbitrary reconnect hour; skip it
+		// instead -- the next cron tick re-evaluates from scratch. Skip
+		// (not fail) keeps it out of the failure-rate auto-pause monitor.
+		if row.CreatedAt.Valid && time.Since(row.CreatedAt.Time) > maxPendingRuntimeAge {
+			s.transitionPendingToSkipped(ctx, row.ID, "parked past max age; cron window elapsed")
+			continue
+		}
+
 		// Re-load the autopilot fresh. The SQL JOIN returned a snapshot
 		// at SELECT time, but the autopilot may have been reassigned,
 		// paused, or archived in the gap between SELECT and this loop
