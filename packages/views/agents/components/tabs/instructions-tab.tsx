@@ -21,6 +21,16 @@ export function InstructionsTab({
   const [saving, setSaving] = useState(false);
   const isDirty = value !== (agent.instructions ?? "");
 
+  // Sync when switching between agents.
+  useEffect(() => {
+    setValue(agent.instructions ?? "");
+  }, [agent.id, agent.instructions]);
+
+  // Report dirty state up so the parent can guard tab switches.
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
   // When instructions are redacted (server-side, due to viewer role), render
   // a lock placeholder instead of the editor. Without this gate the editor
   // would render an empty editable surface and let members save edits over
@@ -31,22 +41,11 @@ export function InstructionsTab({
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <Lock className="h-8 w-8 text-muted-foreground" />
         <p className="max-w-md text-sm text-muted-foreground">
-          Agent instructions are only visible to workspace owners, admins,
-          and the agent owner.
+          {t(($) => $.tab_body.instructions.redacted_notice)}
         </p>
       </div>
     );
   }
-
-  // Sync when switching between agents.
-  useEffect(() => {
-    setValue(agent.instructions ?? "");
-  }, [agent.id, agent.instructions]);
-
-  // Report dirty state up so the parent can guard tab switches.
-  useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
 
   const handleSave = async () => {
     setSaving(true);
