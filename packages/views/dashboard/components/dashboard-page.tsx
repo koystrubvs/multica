@@ -21,6 +21,8 @@ import {
   dashboardRunTimeDailyOptions,
 } from "@multica/core/dashboard";
 import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
+import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
+import { CostCurrencyControl } from "../../runtimes/components/cost-currency-control";
 import { useViewingTimezone } from "../../common/use-viewing-timezone";
 import { PageHeader } from "../../layout/page-header";
 import { KpiCard } from "../../runtimes/components/shared";
@@ -40,6 +42,7 @@ import {
   addDaysIso,
   aggregateByWeek,
   formatTokens,
+  formatRub,
   todayIso,
 } from "../../runtimes/utils";
 import { useT } from "../../i18n";
@@ -98,11 +101,6 @@ const EMPTY_DAILY: import("@multica/core/types").DashboardUsageDaily[] = [];
 const EMPTY_BY_AGENT: import("@multica/core/types").DashboardUsageByAgent[] = [];
 const EMPTY_RUNTIME: import("@multica/core/types").DashboardAgentRunTime[] = [];
 const EMPTY_RUNTIME_DAILY: import("@multica/core/types").DashboardRunTimeDaily[] = [];
-
-function fmtMoney(n: number): string {
-  if (n >= 100) return `$${n.toFixed(0)}`;
-  return `$${n.toFixed(2)}`;
-}
 
 // Local segmented control — same visual language the runtime usage section
 // uses for its period / tab toggles. shadcn's Tabs is wired for full tab
@@ -167,6 +165,7 @@ export function DashboardPage() {
   // The user can save model prices from the runtimes page; re-render when
   // they do so the dashboard reflects the new rates.
   useCustomPricingStore((s) => s.pricings);
+  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
 
   const { data: projects = [] } = useQuery(projectListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
@@ -355,10 +354,13 @@ export function DashboardPage() {
             <>
               {/* KPI row — same 3-divide-x card grid the runtime usage
                   section uses, expanded to four tiles. */}
+              <div className="mb-3 flex items-center justify-end">
+                <CostCurrencyControl />
+              </div>
               <div className="grid grid-cols-1 divide-y rounded-lg border bg-card sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
                 <KpiCard
                   label={t(($) => $.kpi.cost_label, { days })}
-                  value={fmtMoney(totals.cost)}
+                  value={formatRub(totals.cost, rubPerUsd)}
                 />
                 <KpiCard
                   label={t(($) => $.kpi.tokens_label, { days })}
@@ -630,6 +632,7 @@ function Leaderboard({
 }) {
   const { t } = useT("usage");
   const [sortBy, setSortBy] = useState<LeaderboardSort>("tokens");
+  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
 
   const sortOptions = useMemo(
     () => [
@@ -719,7 +722,7 @@ function Leaderboard({
                   <div
                     className={`text-right tabular-nums ${sortBy === "cost" ? "text-sm font-medium" : "text-xs text-muted-foreground"}`}
                   >
-                    ${row.cost.toFixed(2)}
+                    {formatRub(row.cost, rubPerUsd)}
                   </div>
                   <div
                     className={`text-right text-xs tabular-nums ${sortBy === "time" ? "font-medium text-foreground" : "text-muted-foreground"}`}

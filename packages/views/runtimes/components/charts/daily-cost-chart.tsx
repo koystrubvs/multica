@@ -13,6 +13,8 @@ import {
 } from "@multica/ui/components/ui/chart";
 import type { DailyCostStackData } from "../../utils";
 import { useT } from "../../../i18n";
+import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
+import { formatRub } from "../../utils";
 
 // Three-segment stack (input / output / cache write) — keeps the user's
 // attention on what's actually driving spend. Cache reads are excluded
@@ -31,6 +33,7 @@ export const costStackConfig = {
 
 export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
   const { t } = useT("runtimes");
+  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
   // No internal empty-state — the parent decides what to show in place of
   // the chart (often a diagnostic explaining *why* there's no cost). Letting
   // recharts render an empty axis would be both ugly and uninformative.
@@ -49,15 +52,15 @@ export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
           tickLine={false}
           axisLine={false}
           tickMargin={8}
-          tickFormatter={(v: number) => `$${v}`}
-          width={50}
+          tickFormatter={(v: number) => formatRub(v, rubPerUsd)}
+          width={64}
         />
         <ChartTooltip
           content={
             <ChartTooltipContent
               formatter={(value, name) =>
                 typeof value === "number"
-                  ? `$${value.toFixed(2)} ${name}`
+                  ? `${formatRub(value, rubPerUsd)} ${name}`
                   : `${value} ${name}`
               }
               footer={(payload) => {
@@ -71,7 +74,7 @@ export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
                   <div className="flex items-center justify-between gap-2 font-medium">
                     <span>{t(($) => $.charts.tooltip_total)}</span>
                     <span className="font-mono tabular-nums">
-                      ${total.toFixed(2)}
+                      {formatRub(total, rubPerUsd)}
                     </span>
                   </div>
                 );
