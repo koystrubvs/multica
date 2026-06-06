@@ -2,20 +2,27 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Check, Copy, ExternalLink, Plus, Trash2, Link2 } from "lucide-react";
+import { ChevronRight, Check, Copy, ExternalLink, Trash2, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
-import { useWorkspaceId } from "@multica/core/hooks";
-import { memberListOptions } from "@multica/core/workspace/queries";
 import { useT } from "../../i18n";
+import {
+  fetchSitepingTokens,
+  deleteSitepingToken,
+  fetchSitepingMeta,
+  saveSitepingMeta,
+  buildSitepingShareUrl,
+  sitepingKeys,
+} from "../siteping-api";
 
 // SitePing integration section.
 //
 // 1. Token-gated <script> snippet — invisible by default, opens to clients
 //    who arrive via a shareable link.
-// 2. Share-link manager — create / list / revoke tokens that map to this
-//    Multica project. Each token carries a client name+email that the
-//    widget pre-fills server-side (can't be spoofed from the browser).
+// 2. Site URL (used to assemble shareable links) + the list of issued links
+//    for audit / revoke. Links themselves are created per member from the
+//    "People" section above (each member/guest row has a copy-link action),
+//    so there is no manual name/email entry here anymore.
 
 const BRIDGE_URL = "https://siteping.koystrub.dev";
 
@@ -29,58 +36,6 @@ function buildSnippet(_projectId: string): string {
   // access token at runtime, so leaking the UUID into customer-site HTML
   // would have been a needless info-leak with zero functional value.
   return `<script async data-no-minify="1" data-no-optimize="1" src="${BRIDGE_URL}/loader.js"></script>`;
-}
-
-interface TokenEntry {
-  token: string;
-  multicaProjectId: string;
-  authorName: string | null;
-  authorEmail: string | null;
-  label: string | null;
-  createdAt: string;
-  lastUsedAt: string | null;
-  uses: number;
-}
-
-async function fetchTokens(projectId: string): Promise<TokenEntry[]> {
-  const r = await fetch(`/api/siteping-admin/tokens?projectId=${projectId}`);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = await r.json();
-  return j.tokens || [];
-}
-
-async function createToken(projectId: string, body: {
-  authorName: string;
-  authorEmail: string;
-  label: string;
-}): Promise<TokenEntry> {
-  const r = await fetch("/api/siteping-admin/tokens", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectId, ...body }),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-
-async function deleteToken(token: string): Promise<void> {
-  const r = await fetch(`/api/siteping-admin/tokens/${token}`, { method: "DELETE" });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-}
-
-async function fetchMeta(projectId: string): Promise<{ siteUrl?: string }> {
-  const r = await fetch(`/api/siteping-admin/site-url?projectId=${projectId}`);
-  if (!r.ok) return {};
-  return r.json();
-}
-
-async function saveMeta(projectId: string, siteUrl: string): Promise<void> {
-  const r = await fetch(`/api/siteping-admin/site-url?projectId=${projectId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ siteUrl }),
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
 export function SitepingIntegrationSection({ projectId }: { projectId: string }) {
@@ -157,33 +112,24 @@ export function SitepingIntegrationSection({ projectId }: { projectId: string })
   );
 }
 
+// Site URL + the list of issued share links (audit / revoke). Links are now
+// created per member from the People section (each row has a copy-link action),
+// so this component no longer offers manual link creation.
 function ShareLinksManager({ projectId }: { projectId: string }) {
   const { t } = useT("projects");
   const qc = useQueryClient();
-  const wsId = useWorkspaceId();
-  const [showForm, setShowForm] = useState(false);
-  const [authorName, setAuthorName] = useState("");
-  const [authorEmail, setAuthorEmail] = useState("");
-  const [label, setLabel] = useState("");
   const [siteUrlDraft, setSiteUrlDraft] = useState<string | null>(null);
 
-  // Guests bound to this project — the link's author is picked from them
-  // (the whole reason a guest user exists). Managed in the People section above.
-  const { data: members = [] } = useQuery(memberListOptions(wsId));
-  const projectGuests = members.filter(
-    (m) => (m.role as string) === "guest" && (m.guest_project_ids ?? []).includes(projectId),
-  );
-
   const { data: meta } = useQuery({
-    queryKey: ["siteping-meta", projectId],
-    queryFn: () => fetchMeta(projectId),
+    queryKey: sitepingKeys.meta(projectId),
+    queryFn: () => fetchSitepingMeta(projectId),
   });
   const siteUrl = siteUrlDraft ?? meta?.siteUrl ?? "";
 
   const saveMetaMut = useMutation({
-    mutationFn: (url: string) => saveMeta(projectId, url),
+    mutationFn: (url: string) => saveSitepingMeta(projectId, url),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["siteping-meta", projectId] });
+      qc.invalidateQueries({ queryKey: sitepingKeys.meta(projectId) });
       setSiteUrlDraft(null);
       toast.success(t(($) => $.siteping.share.site_url_saved));
     },
@@ -191,40 +137,22 @@ function ShareLinksManager({ projectId }: { projectId: string }) {
   });
 
   const { data: tokens = [], isLoading } = useQuery({
-    queryKey: ["siteping-tokens", projectId],
-    queryFn: () => fetchTokens(projectId),
-  });
-
-  const createMut = useMutation({
-    mutationFn: () => createToken(projectId, { authorName, authorEmail, label }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["siteping-tokens", projectId] });
-      setShowForm(false);
-      setAuthorName("");
-      setAuthorEmail("");
-      setLabel("");
-      toast.success(t(($) => $.siteping.share.created_toast));
-    },
-    onError: (e: Error) => toast.error(`${t(($) => $.siteping.share.create_failed)}: ${e.message}`),
+    queryKey: sitepingKeys.tokens(projectId),
+    queryFn: () => fetchSitepingTokens(projectId),
   });
 
   const deleteMut = useMutation({
-    mutationFn: (token: string) => deleteToken(token),
+    mutationFn: (token: string) => deleteSitepingToken(token),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["siteping-tokens", projectId] });
+      qc.invalidateQueries({ queryKey: sitepingKeys.tokens(projectId) });
       toast.success(t(($) => $.siteping.share.revoked_toast));
     },
     onError: (e: Error) => toast.error(`${t(($) => $.siteping.share.revoke_failed)}: ${e.message}`),
   });
 
-  const buildShareUrl = (token: string) => {
-    const base = (siteUrl || "https://your-site.com").replace(/\/+$/, "");
-    return `${base}/?siteping_access_token=${token}`;
-  };
-
   const copyLink = async (token: string) => {
     try {
-      await navigator.clipboard.writeText(buildShareUrl(token));
+      await navigator.clipboard.writeText(buildSitepingShareUrl(siteUrl, token));
       toast.success(t(($) => $.siteping.share.link_copied));
     } catch {
       toast.error(t(($) => $.siteping.copy_failed_toast));
@@ -260,107 +188,21 @@ function ShareLinksManager({ projectId }: { projectId: string }) {
           )}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 pt-1 border-t">
+      <div className="pt-1 border-t">
         <div className="text-xs font-medium truncate">
           {t(($) => $.siteping.share.title)}
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => setShowForm((v) => !v)}
-          className="h-6 gap-1 px-2 text-[11px] shrink-0"
-        >
-          <Plus className="size-3" />
-          {t(($) => $.siteping.share.new_button)}
-        </Button>
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          {t(($) => $.siteping.share.created_from_people_hint)}
+        </p>
       </div>
-
-      {showForm && (
-        <div className="space-y-2 rounded-md border bg-muted/30 p-2">
-          {projectGuests.length > 0 ? (
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-muted-foreground">
-                {t(($) => $.siteping.share.guest_select_label)}
-              </label>
-              <select
-                value={authorEmail}
-                onChange={(e) => {
-                  const g = projectGuests.find((x) => x.email === e.target.value);
-                  if (g) {
-                    setAuthorName(g.name);
-                    setAuthorEmail(g.email);
-                  } else {
-                    setAuthorEmail(e.target.value);
-                  }
-                }}
-                className="h-8 w-full rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              >
-                <option value="">{t(($) => $.siteping.share.guest_select_placeholder)}</option>
-                {projectGuests.map((g) => (
-                  <option key={g.id} value={g.email}>
-                    {g.name} — {g.email}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <p className="text-[11px] italic text-muted-foreground">
-              {t(($) => $.siteping.share.guest_hint_empty)}
-            </p>
-          )}
-          <input
-            type="text"
-            value={authorName}
-            onChange={(e) => setAuthorName(e.target.value)}
-            placeholder={t(($) => $.siteping.share.name_placeholder)}
-            className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-          <input
-            type="email"
-            value={authorEmail}
-            onChange={(e) => setAuthorEmail(e.target.value)}
-            placeholder={t(($) => $.siteping.share.email_placeholder)}
-            className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder={t(($) => $.siteping.share.label_placeholder)}
-            className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowForm(false)}
-              className="h-7 px-2 text-xs"
-            >
-              {t(($) => $.siteping.share.cancel)}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!authorName.trim() || createMut.isPending}
-              onClick={() => createMut.mutate()}
-              className="h-7 px-2 text-xs"
-            >
-              {createMut.isPending
-                ? t(($) => $.siteping.share.creating)
-                : t(($) => $.siteping.share.create)}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {isLoading && (
         <div className="text-[11px] text-muted-foreground">
           {t(($) => $.siteping.share.loading)}
         </div>
       )}
-      {!isLoading && tokens.length === 0 && !showForm && (
+      {!isLoading && tokens.length === 0 && (
         <div className="text-[11px] text-muted-foreground italic">
           {t(($) => $.siteping.share.empty)}
         </div>

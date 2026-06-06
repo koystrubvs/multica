@@ -166,7 +166,8 @@
       "site_url_save_failed": "Failed to save site URL",
       "guest_select_label": "Project guest",
       "guest_select_placeholder": "Select a guest…",
-      "guest_hint_empty": "Create a guest in the People section above first."
+      "guest_hint_empty": "Create a guest in the People section above first.",
+      "created_from_people_hint": "Links are created per member — use the link icon next to a member in the People section above."
     }
   },
   "people": {
@@ -185,6 +186,10 @@
     "guest_unbind_title": "Unbind from project",
     "guest_unbound_toast": "Guest unbound from project",
     "guest_unbind_failed": "Failed to unbind guest",
-    "no_guests": "No guests yet"
+    "no_guests": "No guests yet",
+    "copy_link_title": "Copy site link",
+    "copy_link_copied": "Site link copied",
+    "copy_link_failed": "Failed to copy link",
+    "copy_link_no_site_url": "Set the site URL in the SitePing section first"
   }
 }

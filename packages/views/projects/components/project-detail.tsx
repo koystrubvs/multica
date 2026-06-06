@@ -26,6 +26,13 @@ import { useUpdateIssue } from "@multica/core/issues/mutations";
 import { useModalStore } from "@multica/core/modals";
 import { memberListOptions, agentListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { api } from "@multica/core/api";
+import {
+  fetchSitepingTokens,
+  fetchSitepingMeta,
+  ensureSitepingTokenForEmail,
+  buildSitepingShareUrl,
+  sitepingKeys,
+} from "../siteping-api";
 import { agentTaskSnapshotOptions } from "@multica/core/agents";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useRecentContextStore } from "@multica/core/chat";
@@ -469,6 +476,14 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const [guestCreating, setGuestCreating] = useState(false);
   const [guestActionId, setGuestActionId] = useState<string | null>(null);
 
+  // SitePing share links — copied per member from the People section. Site URL
+  // (meta) + existing tokens are loaded here so a member/guest row can mint or
+  // reuse a token and copy its link in one click. Same query keys as the
+  // SitePing integration section → shared cache, mutual invalidation.
+  const { data: spMeta } = useQuery({ queryKey: sitepingKeys.meta(projectId), queryFn: () => fetchSitepingMeta(projectId) });
+  const { data: spTokens = [] } = useQuery({ queryKey: sitepingKeys.tokens(projectId), queryFn: () => fetchSitepingTokens(projectId) });
+  const [copyingMemberId, setCopyingMemberId] = useState<string | null>(null);
+
   // Sidebar panel
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
     id: "multica_project_detail_layout",
@@ -571,6 +586,28 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       toast.error(e instanceof Error ? e.message : t(($) => $.people.guest_unbind_failed));
     } finally {
       setGuestActionId(null);
+    }
+  };
+
+  // Mint-or-reuse a SitePing token for this member and copy the shareable link.
+  // Works for team members and guests alike; guests must already be bound to the
+  // project (the gate is on the comment side, not here).
+  const handleCopyShareLink = async (member: { id: string; name: string; email: string }) => {
+    const siteUrl = spMeta?.siteUrl;
+    if (!siteUrl) {
+      toast.error(t(($) => $.people.copy_link_no_site_url));
+      return;
+    }
+    setCopyingMemberId(member.id);
+    try {
+      const token = await ensureSitepingTokenForEmail(projectId, spTokens, member);
+      await qc.invalidateQueries({ queryKey: sitepingKeys.tokens(projectId) });
+      await navigator.clipboard.writeText(buildSitepingShareUrl(siteUrl, token));
+      toast.success(t(($) => $.people.copy_link_copied));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.people.copy_link_failed));
+    } finally {
+      setCopyingMemberId(null);
     }
   };
 
@@ -808,12 +845,21 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               {teamMembers.map((m) => {
                 const isLead = project.lead_type === "member" && project.lead_id === m.user_id;
                 return (
-                  <div key={m.user_id} className="flex items-center gap-2 rounded-md px-1 py-1 text-xs">
+                  <div key={m.user_id} className="group/member flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-accent/50">
                     <ActorAvatar actorType="member" actorId={m.user_id} size={16} enableHoverCard showStatusDot />
                     <span className="truncate">{m.name}</span>
                     {isLead && (
-                      <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{t(($) => $.table.lead)}</span>
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{t(($) => $.table.lead)}</span>
                     )}
+                    <button
+                      type="button"
+                      disabled={copyingMemberId === m.user_id}
+                      onClick={() => handleCopyShareLink({ id: m.user_id, name: m.name, email: m.email })}
+                      title={t(($) => $.people.copy_link_title)}
+                      className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/member:opacity-100 disabled:opacity-50"
+                    >
+                      <Link2 className="size-3" />
+                    </button>
                   </div>
                 );
               })}
@@ -867,6 +913,15 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 <ActorAvatar actorType="member" actorId={m.user_id} size={16} enableHoverCard />
                 <span className="truncate">{m.name}</span>
                 <span className="ml-auto shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">{t(($) => $.people.guest_badge)}</span>
+                <button
+                  type="button"
+                  disabled={copyingMemberId === m.user_id}
+                  onClick={() => handleCopyShareLink({ id: m.user_id, name: m.name, email: m.email })}
+                  title={t(($) => $.people.copy_link_title)}
+                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/guest:opacity-100 disabled:opacity-50"
+                >
+                  <Link2 className="size-3" />
+                </button>
                 {canManageGuests && (
                   <button
                     type="button"

@@ -166,7 +166,8 @@
       "site_url_save_failed": "Не удалось сохранить URL",
       "guest_select_label": "Гость проекта",
       "guest_select_placeholder": "Выбрать гостя…",
-      "guest_hint_empty": "Сначала создайте гостя в разделе «Участники» выше."
+      "guest_hint_empty": "Сначала создайте гостя в разделе «Участники» выше.",
+      "created_from_people_hint": "Ссылки создаются у участника — нажмите иконку ссылки рядом с участником в разделе «Участники» выше."
     }
   },
   "people": {
@@ -185,6 +186,10 @@
     "guest_unbind_title": "Отвязать от проекта",
     "guest_unbound_toast": "Гость отвязан от проекта",
     "guest_unbind_failed": "Не удалось отвязать гостя",
-    "no_guests": "Гостей пока нет"
+    "no_guests": "Гостей пока нет",
+    "copy_link_title": "Скопировать ссылку на сайт",
+    "copy_link_copied": "Ссылка скопирована",
+    "copy_link_failed": "Не удалось скопировать ссылку",
+    "copy_link_no_site_url": "Сначала укажите URL сайта в разделе «Виджет SitePing»"
   }
 }

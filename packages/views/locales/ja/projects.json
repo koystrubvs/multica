@@ -134,6 +134,10 @@
     "guest_unbind_title": "プロジェクトから解除",
     "guest_unbound_toast": "ゲストをプロジェクトから解除しました",
     "guest_unbind_failed": "ゲストの解除に失敗しました",
-    "no_guests": "ゲストはまだいません"
+    "no_guests": "ゲストはまだいません",
+    "copy_link_title": "サイトリンクをコピー",
+    "copy_link_copied": "サイトリンクをコピーしました",
+    "copy_link_failed": "リンクのコピーに失敗しました",
+    "copy_link_no_site_url": "先に SitePing セクションでサイト URL を設定してください"
   }
 }
