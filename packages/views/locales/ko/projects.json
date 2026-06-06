@@ -141,6 +141,10 @@
     "guest_unbind_title": "프로젝트에서 연결 해제",
     "guest_unbound_toast": "프로젝트에서 게스트 연결을 해제했습니다",
     "guest_unbind_failed": "게스트 연결을 해제하지 못했습니다",
-    "no_guests": "아직 게스트가 없습니다"
+    "no_guests": "아직 게스트가 없습니다",
+    "copy_link_title": "사이트 링크 복사",
+    "copy_link_copied": "사이트 링크를 복사했습니다",
+    "copy_link_failed": "링크 복사에 실패했습니다",
+    "copy_link_no_site_url": "먼저 SitePing 섹션에서 사이트 URL을 설정하세요"
   }
 }
