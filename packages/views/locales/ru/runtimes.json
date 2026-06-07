@@ -285,8 +285,6 @@
     "col_cli": "CLI",
     "cost_delta_flat": "без изменений",
     "cli_managed_badge": "Desktop",
-    "cli_update_available_aria": "Доступно обновление",
-    "cli_update_available_tooltip": "Доступно обновление: {{version}}",
     "row_actions_aria": "Действия строки",
     "delete_action": "Удалить",
     "delete_permission_hint": "Удалить эту среду выполнения может только её владелец или администратор рабочего пространства",
