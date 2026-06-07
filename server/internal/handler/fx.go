@@ -222,6 +222,11 @@ func fetchCBRRates(ctx context.Context, from, to string) ([]fxRate, error) {
 	if err != nil {
 		return nil, err
 	}
+	// CBR's edge returns 403 to the default Go-http-client User-Agent, so send a
+	// browser-like one (a plain wget UA already gets through — it's the Go UA
+	// specifically that's blocked).
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Multica-FX/1.0")
+	req.Header.Set("Accept", "application/xml,text/xml,*/*")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
