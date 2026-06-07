@@ -198,18 +198,24 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
             }
           />
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            {t(($) => $.usage.period_label)}
-          </span>
-          <Segmented
-            value={days}
-            onChange={setDays}
-            options={allowedRanges.map((r) => ({
-              label: r.label,
-              value: r.days,
-            }))}
-          />
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Currency rate sits to the LEFT of the period selector so the
+              whole right cluster reads as one toolbar line instead of a
+              second standalone row below. */}
+          <CostCurrencyControl />
+          <div className="flex items-center gap-3">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              {t(($) => $.usage.period_label)}
+            </span>
+            <Segmented
+              value={days}
+              onChange={setDays}
+              options={allowedRanges.map((r) => ({
+                label: r.label,
+                value: r.days,
+              }))}
+            />
+          </div>
         </div>
       </div>
 
@@ -220,9 +226,6 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
           contribute $0 to totals. */}
       <UnmappedPricingNotice usage={filtered} />
 
-      <div className="flex items-center justify-end">
-        <CostCurrencyControl />
-      </div>
       <div className="grid grid-cols-3 divide-x rounded-lg border bg-card">
         <KpiCard
           label={t(($) => $.usage.kpi_cost_label, { days })}
