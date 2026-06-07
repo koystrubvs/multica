@@ -2317,12 +2317,49 @@ func (h *Handler) GetIssueUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per-(UTC date, model) breakdown so the client can price the issue's
+	// spend and convert it to rubles at the CBR rate of each task's day.
+	// Day granularity (UTC) is all the daily FX needs.
+	type issueUsageBreakdownRow struct {
+		Date             string `json:"date"`
+		Model            string `json:"model"`
+		InputTokens      int64  `json:"input_tokens"`
+		OutputTokens     int64  `json:"output_tokens"`
+		CacheReadTokens  int64  `json:"cache_read_tokens"`
+		CacheWriteTokens int64  `json:"cache_write_tokens"`
+	}
+	breakdown := []issueUsageBreakdownRow{}
+	if brows, berr := h.DB.Query(r.Context(),
+		`SELECT to_char(DATE(tu.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
+		        tu.model,
+		        SUM(tu.input_tokens)::bigint,
+		        SUM(tu.output_tokens)::bigint,
+		        SUM(tu.cache_read_tokens)::bigint,
+		        SUM(tu.cache_write_tokens)::bigint
+		   FROM task_usage tu
+		   JOIN agent_task_queue atq ON atq.id = tu.task_id
+		  WHERE atq.issue_id = $1
+		  GROUP BY DATE(tu.created_at AT TIME ZONE 'UTC'), tu.model
+		  ORDER BY date`, issue.ID); berr == nil {
+		defer brows.Close()
+		for brows.Next() {
+			var b issueUsageBreakdownRow
+			if scanErr := brows.Scan(
+				&b.Date, &b.Model, &b.InputTokens, &b.OutputTokens,
+				&b.CacheReadTokens, &b.CacheWriteTokens,
+			); scanErr == nil {
+				breakdown = append(breakdown, b)
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total_input_tokens":       row.TotalInputTokens,
 		"total_output_tokens":      row.TotalOutputTokens,
 		"total_cache_read_tokens":  row.TotalCacheReadTokens,
 		"total_cache_write_tokens": row.TotalCacheWriteTokens,
 		"task_count":               row.TaskCount,
+		"breakdown":                breakdown,
 	})
 }
 

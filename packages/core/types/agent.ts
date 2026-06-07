@@ -455,12 +455,25 @@ export interface SetAgentSkillsRequest {
   skill_ids: string[];
 }
 
+export interface IssueUsageBreakdownRow {
+  date: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+}
+
 export interface IssueUsageSummary {
   total_input_tokens: number;
   total_output_tokens: number;
   total_cache_read_tokens: number;
   total_cache_write_tokens: number;
   task_count: number;
+  // Per-(date, model) rows for pricing the issue's spend client-side and
+  // converting to rubles at each task day's historical CBR rate. Optional
+  // for backward compatibility with cached/older responses.
+  breakdown?: IssueUsageBreakdownRow[];
 }
 
 export interface RuntimeUsage {

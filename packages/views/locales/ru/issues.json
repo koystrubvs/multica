@@ -194,6 +194,7 @@
     "prop_input": "Вход",
     "prop_output": "Выход",
     "prop_cache": "Кэш",
+    "prop_cost": "Стоимость",
     "prop_cache_value": "{{read}} чтение / {{write}} запись",
     "prop_runs": "Запуски",
     "activity_section": "Активность",

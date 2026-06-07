@@ -195,6 +195,7 @@
     "prop_input": "入力",
     "prop_output": "出力",
     "prop_cache": "キャッシュ",
+    "prop_cost": "コスト",
     "prop_cache_value": "読み取り {{read}} / 書き込み {{write}}",
     "prop_runs": "実行",
     "activity_section": "アクティビティ",

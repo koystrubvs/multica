@@ -63,6 +63,9 @@ import { useAuthStore } from "@multica/core/auth";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { useWorkspaceId } from "@multica/core/hooks";
+import { useViewingTimezone } from "../../common/use-viewing-timezone";
+import { useFxResolver } from "../../common/use-fx-rates";
+import { estimateCost, formatRub, todayIso } from "../../runtimes/utils";
 import { useRecentContextStore } from "@multica/core/chat";
 import { issueListOptions, issueDetailOptions, childIssuesOptions, issueUsageOptions, issueAttachmentsOptions } from "@multica/core/issues/queries";
 import { projectDetailOptions } from "@multica/core/projects/queries";
@@ -980,6 +983,23 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
 
   // Token usage
   const { data: usage } = useQuery(issueUsageOptions(id));
+  // Issue cost in rubles, valued at the CBR USD->RUB rate of each task's
+  // day (token cost is USD via the per-model table; the ruble figure is a
+  // per-date historical conversion — see useFxResolver).
+  const viewTz = useViewingTimezone();
+  const usageBreakdown = usage?.breakdown ?? [];
+  const fxFromIso =
+    usageBreakdown.length > 0
+      ? usageBreakdown.reduce(
+          (min, r) => (r.date < min ? r.date : min),
+          usageBreakdown[0]!.date,
+        )
+      : todayIso(viewTz);
+  const issueFx = useFxResolver(fxFromIso, todayIso(viewTz), wsId);
+  const issueCostRub = usageBreakdown.reduce(
+    (sum, r) => sum + estimateCost(r) * issueFx.resolve(r.date),
+    0,
+  );
 
   // Attachments uploaded against this issue. Drives the description
   // editor's click-time fresh-sign download: NodeViews match
@@ -1486,6 +1506,11 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             <PropRow label={t(($) => $.detail.prop_runs)}>
               <span className="text-muted-foreground">{usage.task_count}</span>
             </PropRow>
+            {usageBreakdown.length > 0 && (
+              <PropRow label={t(($) => $.detail.prop_cost)}>
+                <span className="font-medium text-foreground">{formatRub(issueCostRub)}</span>
+              </PropRow>
+            )}
           </div>}
         </div>
       )}

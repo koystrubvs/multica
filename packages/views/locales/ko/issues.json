@@ -198,6 +198,7 @@
     "prop_input": "입력",
     "prop_output": "출력",
     "prop_cache": "캐시",
+    "prop_cost": "비용",
     "prop_cache_value": "읽기 {{read}} / 쓰기 {{write}}",
     "prop_runs": "실행",
     "activity_section": "활동",
