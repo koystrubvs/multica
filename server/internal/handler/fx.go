@@ -29,9 +29,12 @@ import (
 //     change, so after the first full-window load only the new tail (1-3 days)
 //     is ever re-fetched.
 
-// cbrDynamicBase is the CBR daily-dynamics endpoint. A package var so tests can
+// cbrDynamicBase is the CBR daily-dynamics endpoint. Plain HTTP on purpose:
+// from this host cbr.ru's HTTPS handshake hangs (12s timeouts), while HTTP
+// returns the feed instantly. The payload is public FX data — no secrecy lost
+// — and we only read ASCII numeric fields out of it. A package var so tests can
 // point it at an httptest server instead of the live CBR.
-var cbrDynamicBase = "https://www.cbr.ru/scripts/XML_dynamic.asp"
+var cbrDynamicBase = "http://www.cbr.ru/scripts/XML_dynamic.asp"
 
 // cbrUSDCode is CBR's internal currency code for the US dollar.
 const cbrUSDCode = "R01235"
