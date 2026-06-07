@@ -21,8 +21,7 @@ import {
   dashboardRunTimeDailyOptions,
 } from "@multica/core/dashboard";
 import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
-import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
-import { CostCurrencyControl } from "../../runtimes/components/cost-currency-control";
+import { useFxResolver } from "../../common/use-fx-rates";
 import { useViewingTimezone } from "../../common/use-viewing-timezone";
 import { PageHeader } from "../../layout/page-header";
 import { KpiCard } from "../../runtimes/components/shared";
@@ -44,6 +43,7 @@ import {
   formatTokens,
   formatRub,
   todayIso,
+  weightedAvgRate,
 } from "../../runtimes/utils";
 import { useT } from "../../i18n";
 import {
@@ -165,7 +165,6 @@ export function DashboardPage() {
   // The user can save model prices from the runtimes page; re-render when
   // they do so the dashboard reflects the new rates.
   useCustomPricingStore((s) => s.pricings);
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
 
   const { data: projects = [] } = useQuery(projectListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
@@ -189,6 +188,14 @@ export function DashboardPage() {
   // KPI/leaderboard labels (e.g. "Tasks · 30D") keep their advertised window.
   const weekCount = Math.max(1, Math.ceil(days / 7));
   const chartFetchDays = dim === "weekly" ? weekCount * 7 : days;
+
+  // Daily USD->RUB rates over the (over-fetched) chart window, so every
+  // cost figure is valued at the rate in effect on its own day.
+  const fx = useFxResolver(
+    addDaysIso(todayIso(viewTZ), -(chartFetchDays + 2)),
+    todayIso(viewTZ),
+    wsId,
+  );
 
   const dailyQuery = useQuery(
     dashboardUsageDailyOptions(wsId, chartFetchDays, projectId, viewTZ),
@@ -232,7 +239,8 @@ export function DashboardPage() {
     dailyQuery.isLoading ||
     byAgentQuery.isLoading ||
     runTimeQuery.isLoading ||
-    runTimeDailyQuery.isLoading;
+    runTimeDailyQuery.isLoading ||
+    !fx.loaded;
 
   // Four independent rollups, but the empty-state is one decision — only
   // show "no data yet" when ALL came back empty so a project with tokens
@@ -246,12 +254,12 @@ export function DashboardPage() {
 
   // Cost / token math — re-derived when usage, days, or pricings change.
   const totals = useMemo(
-    () => computeDailyTotals(dailyUsageInWindow),
-    [dailyUsageInWindow],
+    () => computeDailyTotals(dailyUsageInWindow, fx.resolve),
+    [dailyUsageInWindow, fx],
   );
   const dailyCost = useMemo(
-    () => aggregateDailyCost(dailyUsageInWindow),
-    [dailyUsageInWindow],
+    () => aggregateDailyCost(dailyUsageInWindow, fx.resolve),
+    [dailyUsageInWindow, fx],
   );
   const dailyTokens = useMemo(
     () => aggregateDailyTokens(dailyUsageInWindow),
@@ -273,8 +281,8 @@ export function DashboardPage() {
   // instead of being dropped (MUL-2382 weekly window scoping). Week
   // boundaries follow the viewer's timezone.
   const weekly = useMemo(
-    () => aggregateByWeek(dailyUsage, viewTZ, weekCount),
-    [dailyUsage, viewTZ, weekCount],
+    () => aggregateByWeek(dailyUsage, viewTZ, weekCount, fx.resolve),
+    [dailyUsage, viewTZ, weekCount, fx],
   );
   const weeklyCost = weekly.weeklyCostStack;
   const weeklyTokens = weekly.weeklyTokens;
@@ -286,9 +294,13 @@ export function DashboardPage() {
     () => aggregateWeeklyTasks(runTimeDailyRows, viewTZ, weekCount),
     [runTimeDailyRows, viewTZ, weekCount],
   );
+  const avgRate = useMemo(
+    () => weightedAvgRate(dailyUsageInWindow, fx.resolve, fx.resolve(todayIso(viewTZ))),
+    [dailyUsageInWindow, fx, viewTZ],
+  );
   const agentTokenRows = useMemo(
-    () => aggregateAgentTokens(byAgentUsage),
-    [byAgentUsage],
+    () => aggregateAgentTokens(byAgentUsage, avgRate),
+    [byAgentUsage, avgRate],
   );
 
   // Run-time totals — taskCount + failedCount summed for the KPI row.
@@ -354,13 +366,10 @@ export function DashboardPage() {
             <>
               {/* KPI row — same 3-divide-x card grid the runtime usage
                   section uses, expanded to four tiles. */}
-              <div className="mb-3 flex items-center justify-end">
-                <CostCurrencyControl />
-              </div>
               <div className="grid grid-cols-1 divide-y rounded-lg border bg-card sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
                 <KpiCard
                   label={t(($) => $.kpi.cost_label, { days })}
-                  value={formatRub(totals.cost, rubPerUsd)}
+                  value={formatRub(totals.cost)}
                 />
                 <KpiCard
                   label={t(($) => $.kpi.tokens_label, { days })}
@@ -632,7 +641,6 @@ function Leaderboard({
 }) {
   const { t } = useT("usage");
   const [sortBy, setSortBy] = useState<LeaderboardSort>("tokens");
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
 
   const sortOptions = useMemo(
     () => [
@@ -722,7 +730,7 @@ function Leaderboard({
                   <div
                     className={`text-right tabular-nums ${sortBy === "cost" ? "text-sm font-medium" : "text-xs text-muted-foreground"}`}
                   >
-                    {formatRub(row.cost, rubPerUsd)}
+                    {formatRub(row.cost)}
                   </div>
                   <div
                     className={`text-right text-xs tabular-nums ${sortBy === "time" ? "font-medium text-foreground" : "text-muted-foreground"}`}

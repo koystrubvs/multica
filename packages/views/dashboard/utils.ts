@@ -12,6 +12,7 @@ import {
   todayIso,
   weekStartIso,
   type DailyTokenData,
+  type FxResolver,
 } from "../runtimes/utils";
 import type {
   DailyTimeData,
@@ -53,14 +54,18 @@ function formatDateLabel(d: string): string {
 // Per-(date, model) rows → 1 row per date with cost broken into the three
 // segments the stacked bar chart consumes. Stable sort by date asc so the
 // chart x-axis is left-to-right oldest-to-newest.
-export function aggregateDailyCost(usage: DashboardUsageDaily[]): DailyCostStack[] {
+export function aggregateDailyCost(
+  usage: DashboardUsageDaily[],
+  fx: FxResolver = () => 1,
+): DailyCostStack[] {
   const map = new Map<string, { input: number; output: number; cacheWrite: number }>();
   for (const u of usage) {
+    const rate = fx(u.date);
     const b = estimateCostBreakdown(u);
     const entry = map.get(u.date) ?? { input: 0, output: 0, cacheWrite: 0 };
-    entry.input += b.input;
-    entry.output += b.output;
-    entry.cacheWrite += b.cacheWrite;
+    entry.input += b.input * rate;
+    entry.output += b.output * rate;
+    entry.cacheWrite += b.cacheWrite * rate;
     map.set(u.date, entry);
   }
   const round = (n: number) => Math.round(n * 100) / 100;
@@ -131,14 +136,17 @@ export interface DashboardTokenTotals {
 // the value can over-count if the same task has tokens in two days; that's
 // acceptable for a KPI ("rough volume") and the per-agent run-time card
 // gives the precise figure.
-export function computeDailyTotals(usage: DashboardUsageDaily[]): DashboardTokenTotals {
+export function computeDailyTotals(
+  usage: DashboardUsageDaily[],
+  fx: FxResolver = () => 1,
+): DashboardTokenTotals {
   return usage.reduce<DashboardTokenTotals>(
     (acc, u) => ({
       input: acc.input + u.input_tokens,
       output: acc.output + u.output_tokens,
       cacheRead: acc.cacheRead + u.cache_read_tokens,
       cacheWrite: acc.cacheWrite + u.cache_write_tokens,
-      cost: acc.cost + estimateCost(u),
+      cost: acc.cost + estimateCost(u) * fx(u.date),
       taskCount: acc.taskCount + u.task_count,
     }),
     { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, taskCount: 0 },
@@ -155,7 +163,10 @@ export interface AgentCostRow {
 // Fold per-(agent, model) rows into one row per agent. Cost is the sum
 // across this agent's models, which is the figure the user cares about.
 // Sort by cost desc so the heaviest spender lands first.
-export function aggregateAgentTokens(rows: DashboardUsageByAgent[]): AgentCostRow[] {
+export function aggregateAgentTokens(
+  rows: DashboardUsageByAgent[],
+  rate: number = 1,
+): AgentCostRow[] {
   const map = new Map<string, AgentCostRow>();
   for (const r of rows) {
     const entry = map.get(r.agent_id) ?? {
@@ -166,7 +177,7 @@ export function aggregateAgentTokens(rows: DashboardUsageByAgent[]): AgentCostRo
     };
     entry.tokens +=
       r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens;
-    entry.cost += estimateCost(r);
+    entry.cost += estimateCost(r) * rate;
     entry.taskCount += r.task_count;
     map.set(r.agent_id, entry);
   }

@@ -13,7 +13,6 @@ import {
 } from "@multica/ui/components/ui/chart";
 import type { DailyCostStackData } from "../../utils";
 import { useT } from "../../../i18n";
-import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
 import { formatRub } from "../../utils";
 
 // Three-segment stack (input / output / cache write) — keeps the user's
@@ -21,6 +20,9 @@ import { formatRub } from "../../utils";
 // because their per-token rate is two orders of magnitude smaller and
 // would be visually invisible in a stack; we surface their *savings*
 // separately as a KPI.
+//
+// Values arrive already in rubles, converted per-date at the historical CBR
+// rate by `aggregateByDate` upstream — so `formatRub` here just formats.
 //
 // Series → CSS chart token: stack reads bottom-up as chart-1 (deepest brand
 // blue, "input") → chart-2 (mid) → chart-3 (lightest, "cache write"), so the
@@ -33,7 +35,6 @@ export const costStackConfig = {
 
 export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
   const { t } = useT("runtimes");
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
   // No internal empty-state — the parent decides what to show in place of
   // the chart (often a diagnostic explaining *why* there's no cost). Letting
   // recharts render an empty axis would be both ugly and uninformative.
@@ -52,7 +53,7 @@ export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
           tickLine={false}
           axisLine={false}
           tickMargin={8}
-          tickFormatter={(v: number) => formatRub(v, rubPerUsd)}
+          tickFormatter={(v: number) => formatRub(v)}
           width={64}
         />
         <ChartTooltip
@@ -60,7 +61,7 @@ export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
             <ChartTooltipContent
               formatter={(value, name) =>
                 typeof value === "number"
-                  ? `${formatRub(value, rubPerUsd)} ${name}`
+                  ? `${formatRub(value)} ${name}`
                   : `${value} ${name}`
               }
               footer={(payload) => {
@@ -74,7 +75,7 @@ export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
                   <div className="flex items-center justify-between gap-2 font-medium">
                     <span>{t(($) => $.charts.tooltip_total)}</span>
                     <span className="font-mono tabular-nums">
-                      {formatRub(total, rubPerUsd)}
+                      {formatRub(total)}
                     </span>
                   </div>
                 );

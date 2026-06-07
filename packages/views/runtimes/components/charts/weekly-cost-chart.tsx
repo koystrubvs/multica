@@ -14,13 +14,15 @@ import {
 } from "@multica/ui/components/ui/chart";
 import type { WeeklyCostStackData } from "../../utils";
 import { useT } from "../../../i18n";
-import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
 import { formatRub } from "../../utils";
 
 // Same three-segment stack as DailyCostChart — keeping series, colours, and
 // ordering identical so the user reads "Weekly" as a coarser cut of the same
 // chart, not a different chart. Partial-week bars render at half-opacity so
 // "this week is in progress" is visually obvious without a separate legend.
+//
+// Values arrive already in rubles (per-date historical CBR conversion happens
+// in `aggregateByWeek` upstream), so `formatRub` here just formats.
 export const weeklyCostStackConfig = {
   input: { label: "Input", color: "var(--chart-1)" },
   output: { label: "Output", color: "var(--chart-2)" },
@@ -29,7 +31,6 @@ export const weeklyCostStackConfig = {
 
 export function WeeklyCostChart({ data }: { data: WeeklyCostStackData[] }) {
   const { t } = useT("runtimes");
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
   return (
     <ChartContainer config={weeklyCostStackConfig} className="aspect-[3/1] w-full">
       <BarChart data={data} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
@@ -45,7 +46,7 @@ export function WeeklyCostChart({ data }: { data: WeeklyCostStackData[] }) {
           tickLine={false}
           axisLine={false}
           tickMargin={8}
-          tickFormatter={(v: number) => formatRub(v, rubPerUsd)}
+          tickFormatter={(v: number) => formatRub(v)}
           width={64}
         />
         <ChartTooltip
@@ -64,7 +65,7 @@ export function WeeklyCostChart({ data }: { data: WeeklyCostStackData[] }) {
               }}
               formatter={(value, name) =>
                 typeof value === "number"
-                  ? `${formatRub(value, rubPerUsd)} ${name}`
+                  ? `${formatRub(value)} ${name}`
                   : `${value} ${name}`
               }
               footer={(payload) => {
@@ -77,7 +78,7 @@ export function WeeklyCostChart({ data }: { data: WeeklyCostStackData[] }) {
                   <div className="flex items-center justify-between gap-2 font-medium">
                     <span>{t(($) => $.charts.tooltip_total)}</span>
                     <span className="font-mono tabular-nums">
-                      {formatRub(total, rubPerUsd)}
+                      {formatRub(total)}
                     </span>
                   </div>
                 );

@@ -76,3 +76,19 @@ export function latestCliVersionOptions() {
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
 }
+
+// Daily USD->RUB rates (Bank of Russia) for [fromIso, toIso]. Rates are a
+// daily fact, so an hour of staleness is fine; the key omits workspace because
+// the data is workspace-independent (workspace_id only satisfies route auth).
+export function fxDailyOptions(
+  fromIso: string,
+  toIso: string,
+  workspaceId: string,
+) {
+  return queryOptions({
+    queryKey: ["fx", "daily", fromIso, toIso] as const,
+    queryFn: () =>
+      api.getFxDaily({ workspace_id: workspaceId, from: fromIso, to: toIso }),
+    staleTime: 60 * 60 * 1000,
+  });
+}

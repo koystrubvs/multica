@@ -379,6 +379,40 @@ export function estimateCacheSavings(usage: Priceable): number {
 }
 
 // ---------------------------------------------------------------------------
+// Currency conversion (USD -> RUB at the historical, per-date CBR rate)
+// ---------------------------------------------------------------------------
+// Cost is computed in USD throughout (MODEL_PRICING is USD list prices). To
+// value a task in rubles "as it was on the day it ran", every per-row USD
+// figure is multiplied by that row's date rate BEFORE any cross-date sum — so
+// each aggregator below takes an `FxResolver` and converts per date, never
+// with a single window-wide rate. Built by useFxResolver from /api/fx/daily.
+export type FxResolver = (dateIso: string) => number;
+
+// A row that is both priceable (per-model tokens) and dated.
+type DatedPriceable = Priceable & { date: string };
+
+// Cost-weighted average historical rate over dated rows: the single rate that
+// reproduces their per-date-converted total. Used only for the by-agent
+// breakdown, whose server rows carry no date and so cannot be converted
+// per-date. The window total stays exactly consistent with the per-date sum;
+// the only slack is an agent whose spend skews toward unusually high/low-rate
+// days, which shifts its share by well under a percent over a typical window.
+export function weightedAvgRate(
+  rows: readonly DatedPriceable[],
+  fx: FxResolver,
+  fallback: number,
+): number {
+  let usd = 0;
+  let rub = 0;
+  for (const r of rows) {
+    const c = estimateCost(r);
+    usd += c;
+    rub += c * fx(r.date);
+  }
+  return usd > 0 ? rub / usd : fallback;
+}
+
+// ---------------------------------------------------------------------------
 // Data aggregation
 // ---------------------------------------------------------------------------
 
@@ -446,7 +480,12 @@ export interface WeeklyCostStackData {
   total: number;
 }
 
-export function aggregateByDate(usage: RuntimeUsage[]): {
+export function aggregateByDate(
+  usage: RuntimeUsage[],
+  // Defaults to identity (no FX conversion) so cost-math tests can call it
+  // raw; production passes the per-date historical resolver.
+  fx: FxResolver = () => 1,
+): {
   dailyTokens: DailyTokenData[];
   dailyCost: DailyCostData[];
   dailyCostStack: DailyCostStackData[];
@@ -474,25 +513,26 @@ export function aggregateByDate(usage: RuntimeUsage[]): {
     existing.cacheWrite += u.cache_write_tokens;
     dateMap.set(u.date, existing);
 
-    const dayCost = (costMap.get(u.date) ?? 0) + estimateCost(u);
+    const dayCost = (costMap.get(u.date) ?? 0) + estimateCost(u) * fx(u.date);
     costMap.set(u.date, dayCost);
 
+    const rate = fx(u.date);
     const breakdown = estimateCostBreakdown(u);
     const stack = stackMap.get(u.date) ?? {
       input: 0,
       output: 0,
       cacheWrite: 0,
     };
-    stack.input += breakdown.input;
-    stack.output += breakdown.output;
-    stack.cacheWrite += breakdown.cacheWrite;
+    stack.input += breakdown.input * rate;
+    stack.output += breakdown.output * rate;
+    stack.cacheWrite += breakdown.cacheWrite * rate;
     stackMap.set(u.date, stack);
 
     const modelName = u.model || u.provider;
     const m = modelMap.get(modelName) ?? { tokens: 0, cost: 0 };
     m.tokens +=
       u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_write_tokens;
-    m.cost += estimateCost(u);
+    m.cost += estimateCost(u) * fx(u.date);
     modelMap.set(modelName, m);
   }
 
@@ -568,6 +608,7 @@ export function aggregateByWeek(
   usage: readonly WeeklyAggregable[],
   tz: string,
   weekCount: number,
+  fx: FxResolver = () => 1,
 ): {
   weeklyTokens: WeeklyTokenData[];
   weeklyCostStack: WeeklyCostStackData[];
@@ -605,12 +646,13 @@ export function aggregateByWeek(
     tokens.cacheRead += u.cache_read_tokens;
     tokens.cacheWrite += u.cache_write_tokens;
 
+    const rate = fx(u.date);
     const breakdown = estimateCostBreakdown(u);
     const stack = stackMap.get(wkStart);
     if (!stack) continue;
-    stack.input += breakdown.input;
-    stack.output += breakdown.output;
-    stack.cacheWrite += breakdown.cacheWrite;
+    stack.input += breakdown.input * rate;
+    stack.output += breakdown.output * rate;
+    stack.cacheWrite += breakdown.cacheWrite * rate;
   }
 
   const decorate = (weekStart: string) => {
@@ -760,7 +802,10 @@ export interface CostByKey {
 // Per-(agent, model) rows → per-agent totals. Cost is summed across all
 // models for that agent, then the list is sorted by cost desc so the
 // heaviest-spending agent appears first.
-export function aggregateCostByAgent(rows: RuntimeUsageByAgent[]): CostByKey[] {
+export function aggregateCostByAgent(
+  rows: RuntimeUsageByAgent[],
+  rate: number = 1,
+): CostByKey[] {
   const map = new Map<string, CostByKey>();
   for (const r of rows) {
     const entry = map.get(r.agent_id) ?? {
@@ -771,7 +816,7 @@ export function aggregateCostByAgent(rows: RuntimeUsageByAgent[]): CostByKey[] {
     };
     entry.tokens +=
       r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens;
-    entry.cost += estimateCost(r);
+    entry.cost += estimateCost(r) * rate;
     entry.taskCount += r.task_count;
     map.set(r.agent_id, entry);
   }
@@ -780,14 +825,17 @@ export function aggregateCostByAgent(rows: RuntimeUsageByAgent[]): CostByKey[] {
 
 // Per-(date, model) rows → per-model totals (the "By model" tab reuses the
 // daily-grain data we already cache, so no extra request is needed).
-export function aggregateCostByModel(rows: RuntimeUsage[]): CostByKey[] {
+export function aggregateCostByModel(
+  rows: RuntimeUsage[],
+  fx: FxResolver = () => 1,
+): CostByKey[] {
   const map = new Map<string, CostByKey>();
   for (const r of rows) {
     const key = r.model || r.provider || "unknown";
     const entry = map.get(key) ?? { key, tokens: 0, cost: 0, taskCount: 0 };
     entry.tokens +=
       r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens;
-    entry.cost += estimateCost(r);
+    entry.cost += estimateCost(r) * fx(r.date);
     map.set(key, entry);
   }
   return Array.from(map.values()).toSorted((a, b) => b.cost - a.cost);
@@ -812,13 +860,14 @@ export function computeCostInWindow(
   daysBack: number,
   tz: string,
   offsetDays: number = 0,
+  fx: FxResolver = () => 1,
 ): number {
   const today = todayIso(tz);
   const isoEnd = addDaysIso(today, -offsetDays);
   const isoStart = addDaysIso(today, -offsetDays - daysBack);
   let total = 0;
   for (const r of rows) {
-    if (r.date >= isoStart && r.date < isoEnd) total += estimateCost(r);
+    if (r.date >= isoStart && r.date < isoEnd) total += estimateCost(r) * fx(r.date);
   }
   return total;
 }
@@ -832,14 +881,15 @@ export function pctChange(current: number, previous: number): number | null {
 // Currency display (RUB)
 // ---------------------------------------------------------------------------
 // Internal cost math stays in USD (the MODEL_PRICING tables above are USD
-// provider list prices); the ruble figure is a presentation-layer multiply
-// by the user-set USD->RUB rate (see cost-currency-store). Threshold mirrors
-// the old USD fmtMoney: at/above the 100 mark we drop the kopecks for a
-// cleaner scan, below it we keep two decimals so sub-ruble costs aren't ₽0.
-export function formatRub(usd: number, rubPerUsd: number): string {
-  const rub = usd * rubPerUsd;
-  // Ruble sign goes AFTER the amount, per Russian typographic convention
-  // (unlike "$5"). NBSP binds the number and sign so they never wrap apart.
+// provider list prices); the ruble figure is produced upstream by the cost
+// aggregators, which multiply each row by the historical CBR USD->RUB rate of
+// its day (see FxResolver). Threshold mirrors the old USD fmtMoney: at/above
+// the 100 mark we drop the kopecks for a cleaner scan, below it we keep two
+// decimals so sub-ruble costs aren't 0 ₽.
+export function formatRub(rub: number): string {
+  // Amount is already in rubles (converted per-date at the historical CBR
+  // rate upstream). Ruble sign goes AFTER the number, per Russian convention;
+  // NBSP binds them so they never wrap apart.
   if (rub === 0) return "0 ₽";
   if (rub >= 100) return `${Math.round(rub).toLocaleString("ru-RU")} ₽`;
   return `${rub.toFixed(2)} ₽`;

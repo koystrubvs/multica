@@ -127,6 +127,7 @@ import { type Logger, noopLogger } from "../logger";
 import { createRequestId } from "../utils";
 import { getCurrentSlug } from "../platform/workspace-storage";
 import { parseWithFallback } from "./schema";
+import { FxRateListSchema, type FxRate } from "../runtimes/fx";
 import {
   AgentTemplateSchema,
   AgentTemplateSummaryListSchema,
@@ -1101,6 +1102,23 @@ export class ApiClient {
       [],
       { endpoint: "GET /api/runtimes/:id/activity" },
     );
+  }
+
+  async getFxDaily(params: {
+    workspace_id: string;
+    from: string;
+    to: string;
+  }): Promise<FxRate[]> {
+    const search = new URLSearchParams();
+    // workspace_id is required by the authed route group, not by FX itself
+    // (rates are workspace-independent); the membership check just gates access.
+    search.set("workspace_id", params.workspace_id);
+    search.set("from", params.from);
+    search.set("to", params.to);
+    const raw = await this.fetch<unknown>(`/api/fx/daily?${search}`);
+    return parseWithFallback<FxRate[]>(raw, FxRateListSchema, [], {
+      endpoint: "GET /api/fx/daily",
+    });
   }
 
   async getRuntimeUsageByAgent(

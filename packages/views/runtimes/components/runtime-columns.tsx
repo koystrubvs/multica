@@ -11,7 +11,8 @@ import {
   deriveRuntimeHealth,
   runtimeUsageOptions,
 } from "@multica/core/runtimes";
-import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { useFxResolver } from "../../common/use-fx-rates";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -31,11 +32,13 @@ import { ProviderLogo } from "./provider-logo";
 import { HealthIcon, useHealthLabel } from "./shared";
 import { DeleteRuntimeDialog } from "./delete-runtime-dialog";
 import {
+  addDaysIso,
   computeCostInWindow,
   formatLastSeen,
   formatRub,
   isSelfHealingRuntime,
   pctChange,
+  todayIso,
 } from "../utils";
 import { splitRuntimeName } from "./runtime-machines";
 import { useT } from "../../i18n";
@@ -315,17 +318,22 @@ const COST_CELL_DAYS = 14;
 function CostCell({ runtimeId }: { runtimeId: string }) {
   const { t } = useT("runtimes");
   const tz = useViewingTimezone();
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
+  const wsId = useWorkspaceId();
+  const fx = useFxResolver(
+    addDaysIso(todayIso(tz), -(COST_CELL_DAYS + 2)),
+    todayIso(tz),
+    wsId,
+  );
   const { data: usage = [] } = useQuery(
     runtimeUsageOptions(runtimeId, COST_CELL_DAYS, tz),
   );
   const cost7d = useMemo(
-    () => computeCostInWindow(usage, 7, tz),
-    [usage, tz],
+    () => computeCostInWindow(usage, 7, tz, 0, fx.resolve),
+    [usage, tz, fx],
   );
   const costPrev7d = useMemo(
-    () => computeCostInWindow(usage, 7, tz, 7),
-    [usage, tz],
+    () => computeCostInWindow(usage, 7, tz, 7, fx.resolve),
+    [usage, tz, fx],
   );
   const delta = pctChange(cost7d, costPrev7d);
 
@@ -336,7 +344,7 @@ function CostCell({ runtimeId }: { runtimeId: string }) {
       </div>
     );
   }
-  const fmt = formatRub(cost7d, rubPerUsd);
+  const fmt = formatRub(cost7d);
   const deltaTone =
     delta == null
       ? "text-muted-foreground"

@@ -13,8 +13,7 @@ import {
   runtimeUsageByAgentOptions,
 } from "@multica/core/runtimes/queries";
 import { useCustomPricingStore } from "@multica/core/runtimes/custom-pricing-store";
-import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
-import { CostCurrencyControl } from "./cost-currency-control";
+import { useFxResolver } from "../../common/use-fx-rates";
 import { useViewingTimezone } from "../../common/use-viewing-timezone";
 import {
   formatTokens,
@@ -28,7 +27,11 @@ import {
   collectUnmappedModels,
   pctChange,
   sliceWindow,
+  addDaysIso,
+  todayIso,
+  weightedAvgRate,
   type CostByKey,
+  type FxResolver,
 } from "../utils";
 import { KpiCard } from "./shared";
 import { ActorAvatar } from "../../common/actor-avatar";
@@ -142,9 +145,14 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
   // aggregate sub-components (WhenChart, CostByBlock, ActivityHeatmap) each
   // subscribe on their own and pass pricings as a memo dep there.
   useCustomPricingStore((s) => s.pricings);
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
+  const wsId = useWorkspaceId();
+  const fx = useFxResolver(
+    addDaysIso(todayIso(tz), -182),
+    todayIso(tz),
+    wsId,
+  );
 
-  if (loading) return <UsageSkeleton />;
+  if (loading || !fx.loaded) return <UsageSkeleton />;
   if (usage.length === 0) return <UsageEmpty />;
 
   // Slice the cached 180-day window into the user's selected sub-window AND
@@ -164,8 +172,8 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
       setDays(DEFAULT_DAYS_BY_DIM[next]);
     }
   };
-  const totals = computeTotals(filtered);
-  const prevTotals = computeTotals(prevFiltered);
+  const totals = computeTotals(filtered, fx.resolve);
+  const prevTotals = computeTotals(prevFiltered, fx.resolve);
 
   const tokensTotal =
     totals.input + totals.output + totals.cacheRead + totals.cacheWrite;
@@ -198,24 +206,18 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
             }
           />
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Currency rate sits to the LEFT of the period selector so the
-              whole right cluster reads as one toolbar line instead of a
-              second standalone row below. */}
-          <CostCurrencyControl />
-          <div className="flex items-center gap-3">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">
-              {t(($) => $.usage.period_label)}
-            </span>
-            <Segmented
-              value={days}
-              onChange={setDays}
-              options={allowedRanges.map((r) => ({
-                label: r.label,
-                value: r.days,
-              }))}
-            />
-          </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            {t(($) => $.usage.period_label)}
+          </span>
+          <Segmented
+            value={days}
+            onChange={setDays}
+            options={allowedRanges.map((r) => ({
+              label: r.label,
+              value: r.days,
+            }))}
+          />
         </div>
       </div>
 
@@ -229,7 +231,7 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
       <div className="grid grid-cols-3 divide-x rounded-lg border bg-card">
         <KpiCard
           label={t(($) => $.usage.kpi_cost_label, { days })}
-          value={formatRub(totals.cost, rubPerUsd)}
+          value={formatRub(totals.cost)}
           hint={
             costDelta == null ? undefined : (
               <span
@@ -251,7 +253,7 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
         />
         <KpiCard
           label={t(($) => $.usage.kpi_cache_label, { days })}
-          value={formatRub(totals.cacheSavings, rubPerUsd)}
+          value={formatRub(totals.cacheSavings)}
           accent={totals.cacheSavings > 0 ? "success" : "default"}
           hint={
             <span>
@@ -286,10 +288,11 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
         days={days}
         dim={dim}
         tz={tz}
+        fx={fx.resolve}
       />
 
       {/* Layer 3 — WHO/WHAT burned the spend. */}
-      <CostByBlock runtimeId={runtimeId} days={days} usage={filtered} tz={tz} />
+      <CostByBlock runtimeId={runtimeId} days={days} usage={filtered} tz={tz} fx={fx.resolve} />
 
       {/* Layer 4 — Folded raw view. The Heatmap used to live here too; it
           was promoted into the WHEN chart's toggle, leaving only the
@@ -316,12 +319,14 @@ function WhenChart({
   days,
   dim,
   tz,
+  fx,
 }: {
   usage: RuntimeUsage[];
   filtered: RuntimeUsage[];
   days: TimeRange;
   dim: Dim;
   tz: string;
+  fx: FxResolver;
 }) {
   const { t } = useT("runtimes");
   // Heatmap is the "independent" sibling — toggled here, not part of the
@@ -335,8 +340,8 @@ function WhenChart({
   const pricings = useCustomPricingStore((s) => s.pricings);
 
   const { dailyCostStack, dailyTokens } = useMemo(
-    () => aggregateByDate(filtered),
-    [filtered, pricings],
+    () => aggregateByDate(filtered, fx),
+    [filtered, pricings, fx],
   );
   // Weekly aggregation builds exactly N trailing calendar weeks anchored at
   // today (in the runtime tz). Buckets are pre-zeroed inside aggregateByWeek
@@ -345,8 +350,8 @@ function WhenChart({
   // aggregate surfaced old populated weeks instead of in-range empty ones.
   const weekCount = Math.max(1, Math.ceil(days / 7));
   const { weeklyTokens, weeklyCostStack } = useMemo(
-    () => aggregateByWeek(usage, tz, weekCount),
-    [usage, tz, weekCount, pricings],
+    () => aggregateByWeek(usage, tz, weekCount, fx),
+    [usage, tz, weekCount, pricings, fx],
   );
 
   const metricToggleVisible = !showHeatmap;
@@ -606,11 +611,13 @@ function CostByBlock({
   days,
   usage,
   tz,
+  fx,
 }: {
   runtimeId: string;
   days: number;
   usage: RuntimeUsage[];
   tz: string;
+  fx: FxResolver;
 }) {
   const { t } = useT("runtimes");
   const [tab, setTab] = useState<"agent" | "model">("agent");
@@ -628,13 +635,17 @@ function CostByBlock({
   const wsId = useWorkspaceId();
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
 
+  const avgRate = useMemo(
+    () => weightedAvgRate(usage, fx, fx(todayIso(tz))),
+    [usage, fx, tz],
+  );
   const byAgent = useMemo(
-    () => aggregateCostByAgent(byAgentRows),
-    [byAgentRows, pricings],
+    () => aggregateCostByAgent(byAgentRows, avgRate),
+    [byAgentRows, pricings, avgRate],
   );
   const byModel = useMemo(
-    () => aggregateCostByModel(usage),
-    [usage, pricings],
+    () => aggregateCostByModel(usage, fx),
+    [usage, pricings, fx],
   );
 
   const caption =
@@ -709,7 +720,6 @@ function CostByList({
   emptyHint?: string;
 }) {
   const { t } = useT("runtimes");
-  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
   if (rows.length === 0) {
     return (
       <p className="py-4 text-center text-xs text-muted-foreground">
@@ -738,7 +748,7 @@ function CostByList({
               {formatTokens(row.tokens)}
             </div>
             <div className="text-right text-sm font-medium tabular-nums">
-              {formatRub(row.cost, rubPerUsd)}
+              {formatRub(row.cost)}
             </div>
           </div>
         );
@@ -863,15 +873,15 @@ interface UsageTotals {
   cacheSavings: number;
 }
 
-function computeTotals(rows: RuntimeUsage[]): UsageTotals {
+function computeTotals(rows: RuntimeUsage[], fx: FxResolver): UsageTotals {
   return rows.reduce<UsageTotals>(
     (acc, u) => ({
       input: acc.input + u.input_tokens,
       output: acc.output + u.output_tokens,
       cacheRead: acc.cacheRead + u.cache_read_tokens,
       cacheWrite: acc.cacheWrite + u.cache_write_tokens,
-      cost: acc.cost + estimateCost(u),
-      cacheSavings: acc.cacheSavings + estimateCacheSavings(u),
+      cost: acc.cost + estimateCost(u) * fx(u.date),
+      cacheSavings: acc.cacheSavings + estimateCacheSavings(u) * fx(u.date),
     }),
     { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, cacheSavings: 0 },
   );
