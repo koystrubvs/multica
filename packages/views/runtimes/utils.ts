@@ -838,7 +838,9 @@ export function pctChange(current: number, previous: number): number | null {
 // cleaner scan, below it we keep two decimals so sub-ruble costs aren't ₽0.
 export function formatRub(usd: number, rubPerUsd: number): string {
   const rub = usd * rubPerUsd;
-  if (rub === 0) return "₽0";
-  if (rub >= 100) return `₽${Math.round(rub).toLocaleString("ru-RU")}`;
-  return `₽${rub.toFixed(2)}`;
+  // Ruble sign goes AFTER the amount, per Russian typographic convention
+  // (unlike "$5"). NBSP binds the number and sign so they never wrap apart.
+  if (rub === 0) return "0 ₽";
+  if (rub >= 100) return `${Math.round(rub).toLocaleString("ru-RU")} ₽`;
+  return `${rub.toFixed(2)} ₽`;
 }

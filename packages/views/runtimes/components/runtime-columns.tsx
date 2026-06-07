@@ -11,6 +11,7 @@ import {
   deriveRuntimeHealth,
   runtimeUsageOptions,
 } from "@multica/core/runtimes";
+import { useCostCurrencyStore } from "@multica/core/runtimes/cost-currency-store";
 import { Button } from "@multica/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ import { DeleteRuntimeDialog } from "./delete-runtime-dialog";
 import {
   computeCostInWindow,
   formatLastSeen,
+  formatRub,
   isSelfHealingRuntime,
   pctChange,
 } from "../utils";
@@ -313,6 +315,7 @@ const COST_CELL_DAYS = 14;
 function CostCell({ runtimeId }: { runtimeId: string }) {
   const { t } = useT("runtimes");
   const tz = useViewingTimezone();
+  const rubPerUsd = useCostCurrencyStore((s) => s.rubPerUsd);
   const { data: usage = [] } = useQuery(
     runtimeUsageOptions(runtimeId, COST_CELL_DAYS, tz),
   );
@@ -333,7 +336,7 @@ function CostCell({ runtimeId }: { runtimeId: string }) {
       </div>
     );
   }
-  const fmt = cost7d >= 100 ? `$${cost7d.toFixed(0)}` : `$${cost7d.toFixed(2)}`;
+  const fmt = formatRub(cost7d, rubPerUsd);
   const deltaTone =
     delta == null
       ? "text-muted-foreground"
