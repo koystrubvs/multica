@@ -870,6 +870,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/runtime/daily", h.GetDashboardRunTimeDaily)
 			})
 
+			// FX rates — daily USD->RUB (Bank of Russia) for valuing historical
+			// token cost at the exchange rate in effect on each task's day.
+			r.Get("/api/fx/daily", h.GetFxDaily)
+
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {
 				r.Get("/", h.ListAgentRuntimes)
