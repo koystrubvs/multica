@@ -56,7 +56,6 @@ import { CommentInput } from "./comment-input";
 import { collectThreadReplies } from "./thread-utils";
 import { IssueAgentHeaderChip } from "./issue-agent-header-chip";
 import { ExecutionLogSection } from "./execution-log-section";
-import { SidebarAgentWorking } from "./sidebar-agent-working";
 import { PullRequestList } from "./pull-request-list";
 import { useGitHubSettings } from "@multica/core/github";
 import { useQuery } from "@tanstack/react-query";
@@ -1285,11 +1284,6 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
 
   const sidebarContent = (
     <div className="space-y-5">
-      {/* Live "an agent is working on this issue" banner. Self-hiding
-          when no task is active; pinned to the top so it is the first
-          thing the panel shows while work is in flight. */}
-      <SidebarAgentWorking issueId={id} />
-
       {/* Properties */}
       <div>
         <button
