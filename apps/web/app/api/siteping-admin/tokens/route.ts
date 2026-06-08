@@ -81,3 +81,17 @@ export async function POST(req: NextRequest) {
   if (unauth) return unauth;
   return proxy(req, "/admin/tokens");
 }
+
+// Revoke a single token. The sibling dynamic route `tokens/[tokenId]` is
+// registered in the manifest but never matched at runtime in this Next
+// build (404 in both dev and standalone), so the id rides in a query param
+// on this working collection route instead.
+export async function DELETE(req: NextRequest) {
+  const unauth = await assertMulticaSession(req);
+  if (unauth) return unauth;
+  const token = req.nextUrl.searchParams.get("token");
+  if (!token) {
+    return NextResponse.json({ error: "token query param required" }, { status: 400 });
+  }
+  return proxy(req, `/admin/tokens/${encodeURIComponent(token)}`);
+}

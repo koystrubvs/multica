@@ -39,7 +39,12 @@ export async function createSitepingToken(
 }
 
 export async function deleteSitepingToken(token: string): Promise<void> {
-  const r = await fetch(`/api/siteping-admin/tokens/${token}`, { method: "DELETE" });
+  // DELETE on the collection route with the id as a query param — the
+  // dynamic `tokens/[tokenId]` route 404s in this Next build.
+  const r = await fetch(
+    `/api/siteping-admin/tokens?token=${encodeURIComponent(token)}`,
+    { method: "DELETE" },
+  );
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 }
 
