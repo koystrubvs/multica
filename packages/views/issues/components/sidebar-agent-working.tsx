@@ -97,7 +97,7 @@ export const SidebarAgentWorking = memo(function SidebarAgentWorking({
   const multi = agentIds.length > 1;
 
   return (
-    <div className="rounded-lg border border-info/20 bg-info/5 px-3 py-2.5">
+    <div data-sp-feature="sidebar-agent-working" className="rounded-lg border border-info/20 bg-info/5 px-3 py-2.5">
       {multi ? (
         <MultiBanner agentIds={agentIds} count={agentIds.length} isRunning={isRunning} />
       ) : (
