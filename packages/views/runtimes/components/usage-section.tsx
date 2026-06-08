@@ -183,6 +183,16 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
 
   const costDelta = pctChange(totals.cost, prevTotals.cost);
 
+  // Read-only readout of today's official CBR USD->RUB. The operator can
+  // see the current rate but not change it; the cost figures themselves are
+  // valued at each day's historical rate, not this single number.
+  const cbrReadout = `${fx
+    .resolve(todayIso(tz))
+    .toLocaleString("ru-RU", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} ₽/$`;
+
   return (
     <div className="space-y-5">
       {/* Page-wide period selector. Lives at the top because it controls
@@ -206,18 +216,29 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
             }
           />
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            {t(($) => $.usage.period_label)}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Read-only CBR rate — visible to the operator, not editable. */}
+          <span
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+            title="Текущий курс ЦБ РФ (USD→RUB). Стоимость считается по курсу на дату каждой задачи."
+          >
+            {/* eslint-disable-next-line i18next/no-literal-string -- CBR proper noun, not translatable copy */}
+            <span className="uppercase tracking-wider">Курс ЦБ</span>
+            <span className="font-medium tabular-nums text-foreground">{cbrReadout}</span>
           </span>
-          <Segmented
-            value={days}
-            onChange={setDays}
-            options={allowedRanges.map((r) => ({
-              label: r.label,
-              value: r.days,
-            }))}
-          />
+          <div className="flex items-center gap-3">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
+              {t(($) => $.usage.period_label)}
+            </span>
+            <Segmented
+              value={days}
+              onChange={setDays}
+              options={allowedRanges.map((r) => ({
+                label: r.label,
+                value: r.days,
+              }))}
+            />
+          </div>
         </div>
       </div>
 
