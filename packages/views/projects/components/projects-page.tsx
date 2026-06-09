@@ -260,7 +260,15 @@ export function ProjectsPage() {
   const openCreateProject = () => useModalStore.getState().open("create-project");
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<Set<ProjectStatus>>(new Set());
+  const statusFilterArr = useProjectViewStore((s) => s.statusFilter);
+  const setStatusFilterArr = useProjectViewStore((s) => s.setStatusFilter);
+  // Persisted across reloads (per-workspace localStorage, same store as the
+  // density toggle). Stored as an array; adapted to a Set for the filter UI.
+  const statusFilter = useMemo(() => new Set(statusFilterArr), [statusFilterArr]);
+  const setStatusFilter = useCallback(
+    (next: Set<ProjectStatus>) => setStatusFilterArr([...next]),
+    [setStatusFilterArr],
+  );
   const filteredProjects = useMemo(() => {
     const q = search.trim().toLowerCase();
     return projects.filter((p) => {
