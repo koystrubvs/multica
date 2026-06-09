@@ -7,7 +7,9 @@
     "view_compact": "Компактный",
     "view_comfortable": "Просторный",
     "search_placeholder": "Поиск проектов...",
-    "no_search_results": "Ничего не соответствует поиску"
+    "no_search_results": "Ничего не соответствует поиску",
+    "filter_status": "Статус",
+    "filter_all": "Все статусы"
   },
   "table": {
     "name": "Название",

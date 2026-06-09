@@ -7,7 +7,9 @@
     "view_compact": "간결하게",
     "view_comfortable": "넓게",
     "search_placeholder": "프로젝트 검색...",
-    "no_search_results": "검색 결과가 없습니다"
+    "no_search_results": "검색 결과가 없습니다",
+    "filter_status": "상태",
+    "filter_all": "모든 상태"
   },
   "table": {
     "name": "이름",

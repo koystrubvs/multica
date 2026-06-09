@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Plus, FolderKanban, Rows3, LayoutGrid, Search } from "lucide-react";
+import { Plus, FolderKanban, Rows3, LayoutGrid, Search, ListFilter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { projectListOptions } from "@multica/core/projects/queries";
 import { useUpdateProject } from "@multica/core/projects/mutations";
@@ -14,15 +14,24 @@ import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { cn } from "@multica/ui/lib/utils";
-import type { Project, UpdateProjectRequest } from "@multica/core/types";
+import type { Project, UpdateProjectRequest, ProjectStatus } from "@multica/core/types";
 import { PageHeader } from "../../layout/page-header";
 import { ProjectIcon } from "./project-icon";
 import { useT } from "../../i18n";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
-import { useFormatRelativeDate } from "./labels";
+import { useFormatRelativeDate, useProjectStatusLabels } from "./labels";
 import { useProjectViewStore } from "@multica/core/projects";
 import { ProjectStatusBadge, ProjectPriorityBadge } from "./project-badge";
 import { ProjectLeadPicker } from "./project-lead-picker";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+} from "@multica/ui/components/ui/dropdown-menu";
+import { PROJECT_STATUS_ORDER, PROJECT_STATUS_CONFIG } from "@multica/core/projects/config";
 
 const COMPACT_GRID = "grid w-full min-w-[860px] grid-cols-[24px_minmax(200px,1fr)_128px_116px_80px_140px_80px]";
 
@@ -180,6 +189,67 @@ function ProjectCardCompact({ project }: { project: Project }) {
   );
 }
 
+// Multi-select status filter for the projects toolbar. Empty set = "all".
+// Mirrors ProjectStatusBadge's dot+label rows; the dropdown stays open while
+// toggling (base-ui CheckboxItem), with a count badge + a clear shortcut.
+function StatusFilter({ selected, onChange }: { selected: Set<ProjectStatus>; onChange: (next: Set<ProjectStatus>) => void }) {
+  const { t } = useT("projects");
+  const statusLabels = useProjectStatusLabels();
+  const count = selected.size;
+  const toggle = (s: ProjectStatus) => {
+    const next = new Set(selected);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onChange(next);
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+              count > 0
+                ? "border-primary/40 bg-primary/5 text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/40",
+            )}
+          >
+            <ListFilter className="size-3.5" />
+            <span className="hidden sm:inline-block">{t(($) => $.page.filter_status)}</span>
+            {count > 0 && (
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground tabular-nums">
+                {count}
+              </span>
+            )}
+          </button>
+        }
+      />
+      <DropdownMenuContent align="start" className="w-48">
+        {PROJECT_STATUS_ORDER.map((sv) => (
+          <DropdownMenuCheckboxItem
+            key={sv}
+            checked={selected.has(sv)}
+            onCheckedChange={() => toggle(sv)}
+            closeOnClick={false}
+          >
+            <span className={cn("size-2 rounded-full", PROJECT_STATUS_CONFIG[sv].dotColor)} />
+            <span>{statusLabels[sv]}</span>
+          </DropdownMenuCheckboxItem>
+        ))}
+        {count > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onChange(new Set())}>
+              {t(($) => $.page.filter_all)}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function ProjectsPage() {
   const { t } = useT("projects");
   const wsId = useWorkspaceId();
@@ -190,13 +260,15 @@ export function ProjectsPage() {
   const openCreateProject = () => useModalStore.getState().open("create-project");
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Set<ProjectStatus>>(new Set());
   const filteredProjects = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return projects;
-    return projects.filter((p) =>
-      p.title.toLowerCase().includes(q) || matchesPinyin(p.title, q)
-    );
-  }, [projects, search]);
+    return projects.filter((p) => {
+      if (statusFilter.size > 0 && !statusFilter.has(p.status)) return false;
+      if (q && !(p.title.toLowerCase().includes(q) || matchesPinyin(p.title, q))) return false;
+      return true;
+    });
+  }, [projects, search, statusFilter]);
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
@@ -217,14 +289,17 @@ export function ProjectsPage() {
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
         {(projects.length > 0 || isLoading) && (
           <div className="flex h-12 shrink-0 items-center justify-between border-b px-4 gap-2 sm:gap-3">
-            <div className="relative flex-1 sm:flex-none">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={t(($) => $.page.search_placeholder)}
-                className="h-8 w-full sm:w-64 pl-8 text-sm"
-              />
+            <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-0">
+              <div className="relative flex-1 sm:flex-none">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t(($) => $.page.search_placeholder)}
+                  className="h-8 w-full sm:w-64 pl-8 text-sm"
+                />
+              </div>
+              <StatusFilter selected={statusFilter} onChange={setStatusFilter} />
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">

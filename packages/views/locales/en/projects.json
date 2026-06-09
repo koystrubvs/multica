@@ -7,7 +7,9 @@
     "view_compact": "Compact",
     "view_comfortable": "Comfortable",
     "search_placeholder": "Search projects...",
-    "no_search_results": "No results match your search"
+    "no_search_results": "No results match your search",
+    "filter_status": "Status",
+    "filter_all": "All statuses"
   },
   "table": {
     "name": "Name",

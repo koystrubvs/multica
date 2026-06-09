@@ -7,7 +7,9 @@
     "view_compact": "コンパクト",
     "view_comfortable": "ゆったり",
     "search_placeholder": "プロジェクトを検索...",
-    "no_search_results": "検索条件に一致する結果はありません"
+    "no_search_results": "検索条件に一致する結果はありません",
+    "filter_status": "ステータス",
+    "filter_all": "すべてのステータス"
   },
   "table": {
     "name": "名前",
