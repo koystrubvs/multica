@@ -17,7 +17,9 @@
     "status": "Статус",
     "progress": "Прогресс",
     "lead": "Ответственный",
-    "created": "Создан"
+    "created": "Создан",
+    "siteping": "SitePing",
+    "siteping_connected": "Подключён"
   },
   "status": {
     "planned": "Запланирован",

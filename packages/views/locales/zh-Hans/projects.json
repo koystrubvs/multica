@@ -17,7 +17,9 @@
     "status": "状态",
     "progress": "进度",
     "lead": "负责人",
-    "created": "创建时间"
+    "created": "创建时间",
+    "siteping": "SitePing",
+    "siteping_connected": "已连接"
   },
   "status": {
     "planned": "计划中",

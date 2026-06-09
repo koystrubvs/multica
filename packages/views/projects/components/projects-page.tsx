@@ -21,6 +21,7 @@ import { useT } from "../../i18n";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { useFormatRelativeDate, useProjectStatusLabels } from "./labels";
 import { useProjectViewStore } from "@multica/core/projects";
+import { fetchSitepingStatus, sitepingKeys, type SitepingStatusEntry } from "../siteping-api";
 import { ProjectStatusBadge, ProjectPriorityBadge } from "./project-badge";
 import { ProjectLeadPicker } from "./project-lead-picker";
 import {
@@ -33,9 +34,28 @@ import {
 } from "@multica/ui/components/ui/dropdown-menu";
 import { PROJECT_STATUS_ORDER, PROJECT_STATUS_CONFIG } from "@multica/core/projects/config";
 
-const COMPACT_GRID = "grid w-full min-w-[860px] grid-cols-[24px_minmax(200px,1fr)_128px_116px_80px_140px_80px]";
+const COMPACT_GRID = "grid w-full min-w-[960px] grid-cols-[24px_minmax(200px,1fr)_128px_116px_80px_140px_104px_80px]";
 
-function ProjectCard({ project }: { project: Project }) {
+// "SitePing" cell — green badge when the project has a provisioned widget
+// (>=1 share-token on the bridge), a muted dash otherwise. Tooltip carries
+// the site URL + feedback count.
+function SitepingCell({ siteping }: { siteping?: SitepingStatusEntry }) {
+  const { t } = useT("projects");
+  if (!siteping?.connected) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      title={siteping.siteUrl ? `${siteping.siteUrl} · ${siteping.feedbackCount}` : undefined}
+    >
+      <span className="size-1.5 rounded-full bg-emerald-500" />
+      {t(($) => $.table.siteping_connected)}
+    </span>
+  );
+}
+
+function ProjectCard({ project, siteping }: { project: Project; siteping?: SitepingStatusEntry }) {
   const { t } = useT("projects");
   const wsPaths = useWorkspacePaths();
   const formatRelativeDate = useFormatRelativeDate();
@@ -118,6 +138,7 @@ function ProjectCard({ project }: { project: Project }) {
         />
 
         <div className="flex items-center gap-2">
+          {siteping?.connected && <SitepingCell siteping={siteping} />}
           <ProjectPriorityBadge project={project} handleUpdate={handleUpdate} align="start" />
           <span className="text-[10px] text-muted-foreground">
             {formatRelativeDate(project.created_at)}
@@ -128,7 +149,7 @@ function ProjectCard({ project }: { project: Project }) {
   );
 }
 
-function ProjectCardCompact({ project }: { project: Project }) {
+function ProjectCardCompact({ project, siteping }: { project: Project; siteping?: SitepingStatusEntry }) {
   const wsPaths = useWorkspacePaths();
   const formatRelativeDate = useFormatRelativeDate();
   const updateProject = useUpdateProject();
@@ -181,6 +202,10 @@ function ProjectCardCompact({ project }: { project: Project }) {
           </button>
         )}
       />
+
+      <div className="flex items-center justify-start">
+        <SitepingCell siteping={siteping} />
+      </div>
 
       <span className="text-left text-xs text-muted-foreground tabular-nums">
         {formatRelativeDate(project.created_at)}
@@ -257,6 +282,11 @@ export function ProjectsPage() {
   const setViewMode = useProjectViewStore((s) => s.setViewMode);
   const isCompact = viewMode === "compact";
   const { data: projects = [], isLoading } = useQuery(projectListOptions(wsId));
+  const { data: sitepingStatus = {} } = useQuery({
+    queryKey: sitepingKeys.status(),
+    queryFn: fetchSitepingStatus,
+    staleTime: 60_000,
+  });
   const openCreateProject = () => useModalStore.getState().open("create-project");
 
   const [search, setSearch] = useState("");
@@ -346,7 +376,7 @@ export function ProjectsPage() {
           {isLoading ? (
             isCompact ? (
               <div className="pt-4 mx-5 overflow-x-auto rounded-md border pb-4 mb-5">
-                <div className="min-w-[860px]">
+                <div className="min-w-[960px]">
                   <div className={cn(COMPACT_GRID, "h-10 items-center gap-2 px-4 border-b")}>
                     <Skeleton className="h-6 w-6 rounded" />
                     <Skeleton className="h-4 w-48" />
@@ -394,7 +424,7 @@ export function ProjectsPage() {
             </div>
           ) : isCompact ? (
             <div className="mt-4 mx-5 rounded-md border mb-5 overflow-auto flex-1">
-              <div className="min-w-[860px]">
+              <div className="min-w-[960px]">
                 <div className={cn(COMPACT_GRID, "h-8 shrink-0 items-center gap-2 px-4 text-xs font-medium text-muted-foreground border-b bg-muted/30 backdrop-blur sticky top-0 z-10")}>
                   <span />
                   <span className="text-left">{t(($) => $.table.name)}</span>
@@ -402,11 +432,12 @@ export function ProjectsPage() {
                   <span className="text-left">{t(($) => $.table.status)}</span>
                   <span className="text-left">{t(($) => $.table.progress)}</span>
                   <span className="text-left">{t(($) => $.table.lead)}</span>
+                  <span className="text-left">{t(($) => $.table.siteping)}</span>
                   <span className="text-left">{t(($) => $.table.created)}</span>
                 </div>
                 <div className="pb-4">
                   {filteredProjects.map((project) => (
-                    <ProjectCardCompact key={project.id} project={project} />
+                    <ProjectCardCompact key={project.id} project={project} siteping={sitepingStatus[project.id]} />
                   ))}
                 </div>
               </div>
@@ -414,7 +445,7 @@ export function ProjectsPage() {
           ) : (
             <div className="pt-4 pb-5 px-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {filteredProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard key={project.id} project={project} siteping={sitepingStatus[project.id]} />
               ))}
             </div>
           )}

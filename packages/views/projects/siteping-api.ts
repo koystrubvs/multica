@@ -65,9 +65,26 @@ export async function saveSitepingMeta(projectId: string, siteUrl: string): Prom
 
 // React-query keys shared across components so a token/meta mutation in one
 // place refreshes the other.
+export interface SitepingStatusEntry {
+  connected: boolean;
+  siteUrl: string | null;
+  tokenCount: number;
+  feedbackCount: number;
+}
+
+// Bulk per-project SitePing connection status (one request for the whole
+// projects list). Map is keyed by Multica project id; absent = never set up.
+export async function fetchSitepingStatus(): Promise<Record<string, SitepingStatusEntry>> {
+  const r = await fetch("/api/siteping-admin/status");
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const j = await r.json();
+  return (j.projects as Record<string, SitepingStatusEntry>) || {};
+}
+
 export const sitepingKeys = {
   tokens: (projectId: string) => ["siteping-tokens", projectId] as const,
   meta: (projectId: string) => ["siteping-meta", projectId] as const,
+  status: () => ["siteping-status"] as const,
 };
 
 // Build the shareable site URL for a token. Falls back to a placeholder host

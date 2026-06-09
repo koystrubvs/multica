@@ -17,7 +17,9 @@
     "status": "Status",
     "progress": "Progress",
     "lead": "Lead",
-    "created": "Created"
+    "created": "Created",
+    "siteping": "SitePing",
+    "siteping_connected": "Connected"
   },
   "status": {
     "planned": "Planned",

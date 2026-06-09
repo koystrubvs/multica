@@ -17,7 +17,9 @@
     "status": "ステータス",
     "progress": "進捗",
     "lead": "リード",
-    "created": "作成日"
+    "created": "作成日",
+    "siteping": "SitePing",
+    "siteping_connected": "接続済み"
   },
   "status": {
     "planned": "計画中",
