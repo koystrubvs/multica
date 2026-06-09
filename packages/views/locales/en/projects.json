@@ -19,7 +19,8 @@
     "lead": "Lead",
     "created": "Created",
     "siteping": "SitePing",
-    "siteping_connected": "Connected"
+    "siteping_connected": "Connected",
+    "siteping_not_installed": "No widget"
   },
   "status": {
     "planned": "Planned",

@@ -67,6 +67,8 @@ export async function saveSitepingMeta(projectId: string, siteUrl: string): Prom
 // place refreshes the other.
 export interface SitepingStatusEntry {
   connected: boolean;
+  installed: boolean | null;
+  pingedAt: string | null;
   siteUrl: string | null;
   tokenCount: number;
   feedbackCount: number;

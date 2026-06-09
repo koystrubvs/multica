@@ -19,7 +19,8 @@
     "lead": "Ответственный",
     "created": "Создан",
     "siteping": "SitePing",
-    "siteping_connected": "Подключён"
+    "siteping_connected": "Подключён",
+    "siteping_not_installed": "Нет виджета"
   },
   "status": {
     "planned": "Запланирован",

@@ -41,18 +41,31 @@ const COMPACT_GRID = "grid w-full min-w-[960px] grid-cols-[24px_minmax(200px,1fr
 // the site URL + feedback count.
 function SitepingCell({ siteping }: { siteping?: SitepingStatusEntry }) {
   const { t } = useT("projects");
-  if (!siteping?.connected) {
-    return <span className="text-xs text-muted-foreground">—</span>;
+  // Three states, driven by the bridge ping check (is our loader actually live
+  // on the site?): installed → green, configured-but-not-found → amber, none.
+  if (siteping?.installed === true) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+        title={siteping.siteUrl ? `${siteping.siteUrl} · ${siteping.feedbackCount}` : undefined}
+      >
+        <span className="size-1.5 rounded-full bg-emerald-500" />
+        {t(($) => $.table.siteping_connected)}
+      </span>
+    );
   }
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-      title={siteping.siteUrl ? `${siteping.siteUrl} · ${siteping.feedbackCount}` : undefined}
-    >
-      <span className="size-1.5 rounded-full bg-emerald-500" />
-      {t(($) => $.table.siteping_connected)}
-    </span>
-  );
+  if (siteping?.siteUrl && siteping?.installed === false) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        title={siteping.siteUrl}
+      >
+        <span className="size-1.5 rounded-full bg-amber-500" />
+        {t(($) => $.table.siteping_not_installed)}
+      </span>
+    );
+  }
+  return <span className="text-xs text-muted-foreground">—</span>;
 }
 
 function ProjectCard({ project, siteping }: { project: Project; siteping?: SitepingStatusEntry }) {
@@ -138,7 +151,7 @@ function ProjectCard({ project, siteping }: { project: Project; siteping?: Sitep
         />
 
         <div className="flex items-center gap-2">
-          {siteping?.connected && <SitepingCell siteping={siteping} />}
+          {siteping?.siteUrl && <SitepingCell siteping={siteping} />}
           <ProjectPriorityBadge project={project} handleUpdate={handleUpdate} align="start" />
           <span className="text-[10px] text-muted-foreground">
             {formatRelativeDate(project.created_at)}
@@ -285,7 +298,9 @@ export function ProjectsPage() {
   const { data: sitepingStatus = {} } = useQuery({
     queryKey: sitepingKeys.status(),
     queryFn: fetchSitepingStatus,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
   const openCreateProject = () => useModalStore.getState().open("create-project");
 

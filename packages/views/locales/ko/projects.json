@@ -19,7 +19,8 @@
     "lead": "리드",
     "created": "생성일",
     "siteping": "SitePing",
-    "siteping_connected": "연결됨"
+    "siteping_connected": "연결됨",
+    "siteping_not_installed": "위젯 없음"
   },
   "status": {
     "planned": "계획됨",

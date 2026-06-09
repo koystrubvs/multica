@@ -19,7 +19,8 @@
     "lead": "リード",
     "created": "作成日",
     "siteping": "SitePing",
-    "siteping_connected": "接続済み"
+    "siteping_connected": "接続済み",
+    "siteping_not_installed": "ウィジェットなし"
   },
   "status": {
     "planned": "計画中",

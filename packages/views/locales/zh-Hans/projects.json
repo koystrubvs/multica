@@ -19,7 +19,8 @@
     "lead": "负责人",
     "created": "创建时间",
     "siteping": "SitePing",
-    "siteping_connected": "已连接"
+    "siteping_connected": "已连接",
+    "siteping_not_installed": "无组件"
   },
   "status": {
     "planned": "计划中",
