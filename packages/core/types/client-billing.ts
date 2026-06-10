@@ -65,6 +65,8 @@ export interface ClientBillingCharge {
   issue_id: string;
   project_id: string;
   workspace_id: string;
+  /** Billing period the confirmed charge is attached to (null until confirm). */
+  period_id: string | null;
   usage: ClientBillingUsageLine[];
   /** Token cost at public list prices with NO cache discounts, USD. */
   nocache_usd: number;
@@ -80,4 +82,37 @@ export interface ClientBillingCharge {
   updated_at: string;
   /** Present in project-level charge lists only. */
   issue_title?: string;
+}
+
+export type ClientBillingPeriodStatus = "open" | "closed" | "invoiced" | "paid";
+
+/** One invoicing cycle of a project (phase 2, migration 121). */
+export interface ClientBillingPeriod {
+  id: string;
+  project_id: string;
+  workspace_id: string;
+  /** Date-only "YYYY-MM-DD" (may arrive with a time suffix — slice to 10). */
+  starts_on: string;
+  /** Exclusive upper bound, same format. */
+  ends_on: string;
+  status: ClientBillingPeriodStatus;
+  total_rub: number;
+  last_alert_percent: number;
+  elba_invoice_id: string | null;
+  elba_act_id: string | null;
+  report_file: string | null;
+  closed_at: string | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Live progress for the cycle covering today (GET .../periods/current). */
+export interface ClientBillingCurrentPeriod {
+  period: ClientBillingPeriod;
+  confirmed_total: number;
+  draft_count: number;
+  /** budget_rub (mode=budget) or fair_use_rub (mode=subscription); 0 = no cap. */
+  limit_rub: number;
+  percent: number;
 }

@@ -770,6 +770,12 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Get("/billing/config", h.GetProjectBillingConfig)
 					r.Put("/billing/config", h.PutProjectBillingConfig)
 					r.Get("/billing/charges", h.ListProjectBillingCharges)
+					r.Get("/billing/periods", h.ListProjectBillingPeriods)
+					r.Get("/billing/periods/current", h.GetProjectBillingCurrentPeriod)
+					r.Get("/billing/periods/{periodId}/charges", h.ListBillingPeriodCharges)
+					r.Post("/billing/periods/{periodId}/close", h.CloseBillingPeriod)
+					r.Post("/billing/periods/{periodId}/reopen", h.ReopenBillingPeriod)
+					r.Post("/billing/periods/{periodId}/mark-paid", h.MarkBillingPeriodPaid)
 				})
 			})
 

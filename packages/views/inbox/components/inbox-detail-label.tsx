@@ -31,6 +31,7 @@ export function useTypeLabels(): Record<InboxItemType, string> {
     reaction_added: t(($) => $.types.reaction_added),
     quick_create_done: t(($) => $.types.quick_create_done),
     quick_create_failed: t(($) => $.types.quick_create_failed),
+    billing_budget_alert: t(($) => $.types.billing_budget_alert),
   };
 }
 

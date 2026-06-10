@@ -470,6 +470,9 @@ func (h *Handler) ConfirmIssueBillingCharge(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	slog.Info("billing: charge confirmed", "issue_id", uuidToString(issue.ID), "price_rub", charge.PriceRub)
+	// Phase 2: attach to the open billing period, refresh its total and fire
+	// budget / fair-use threshold alerts. Best-effort by design.
+	h.afterChargeConfirmed(r.Context(), db.GetClientBillingChargeByIssueRow(charge), requestUserID(r))
 	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
 }
 
@@ -492,6 +495,8 @@ func (h *Handler) VoidIssueBillingCharge(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to void charge")
 		return
 	}
+	// A voided charge that was already attached must leave the period total.
+	h.recalcPeriodTotal(r.Context(), charge.PeriodID)
 	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
 }
 
