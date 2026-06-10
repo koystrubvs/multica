@@ -200,5 +200,26 @@
     "copy_link_copied": "Site link copied",
     "copy_link_failed": "Failed to copy link",
     "copy_link_no_site_url": "Set the site URL in the SitePing section first"
+  },
+  "billing": {
+    "section_title": "Client billing",
+    "not_configured": "Billing is not configured for this project.",
+    "enable": "Enable billing",
+    "enabled_label": "Billing enabled",
+    "mode": "Billing mode",
+    "mode_postpaid": "Postpaid (by usage)",
+    "mode_budget": "Monthly budget",
+    "mode_subscription": "Subscription",
+    "markup": "Markup (K)",
+    "fx_markup": "FX markup, %",
+    "min_price": "Min price, RUB",
+    "rounding": "Rounding step, RUB",
+    "budget": "Budget per period, RUB",
+    "subscription_fee": "Fee per period, RUB",
+    "fair_use": "Fair-use cap, RUB",
+    "save": "Save",
+    "saved_toast": "Billing settings saved",
+    "save_failed_toast": "Failed to save billing settings",
+    "charges_summary": "{{total}} confirmed · {{drafts}} drafts"
   }
 }

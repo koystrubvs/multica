@@ -88,6 +88,9 @@ export const issueKeys = {
     [...issueKeys.subscribersAll(), issueId] as const,
   usageAll: () => ["issues", "usage"] as const,
   usage: (issueId: string) => [...issueKeys.usageAll(), issueId] as const,
+  billingChargeAll: () => ["issues", "billing-charge"] as const,
+  billingCharge: (issueId: string) =>
+    [...issueKeys.billingChargeAll(), issueId] as const,
   attachmentsAll: () => ["issues", "attachments"] as const,
   /** Issue-level attachments — used by the description editor so its
    *  inline file-card / image NodeViews can re-sign download URLs at
@@ -512,6 +515,15 @@ export function issueUsageOptions(issueId: string) {
   return queryOptions({
     queryKey: issueKeys.usage(issueId),
     queryFn: () => api.getIssueUsage(issueId),
+  });
+}
+
+// Agency billing (fork): the issue's frozen price snapshot, null until the
+// done-transition creates one (or when the project has billing disabled).
+export function issueBillingChargeOptions(issueId: string) {
+  return queryOptions({
+    queryKey: issueKeys.billingCharge(issueId),
+    queryFn: () => api.getIssueBillingCharge(issueId),
   });
 }
 

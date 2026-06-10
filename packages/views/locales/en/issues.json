@@ -219,7 +219,20 @@
     "link_copy_failed": "Failed to copy link",
     "workdir_path_copied": "Workdir path copied",
     "workdir_path_copy_failed": "Failed to copy workdir path",
-    "workdir_path_unavailable": "No local workdir yet — issue has not been run by a local agent"
+    "workdir_path_unavailable": "No local workdir yet — issue has not been run by a local agent",
+    "billing_section": "Billing",
+    "billing_status_draft": "Draft",
+    "billing_status_confirmed": "Confirmed",
+    "billing_status_void": "Voided",
+    "billing_prop_compute": "Compute (no-cache)",
+    "billing_prop_fx": "FX rate",
+    "billing_prop_markup": "Markup",
+    "billing_prop_adjusted": "Adjusted",
+    "billing_confirm": "Confirm",
+    "billing_void": "Void",
+    "billing_confirmed_toast": "Charge confirmed",
+    "billing_voided_toast": "Charge voided",
+    "billing_action_failed_toast": "Billing action failed"
   },
   "timeline": {
     "loading": "Loading..."

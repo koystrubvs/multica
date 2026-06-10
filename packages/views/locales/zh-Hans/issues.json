@@ -218,7 +218,20 @@
     "link_copy_failed": "复制链接失败",
     "workdir_path_copied": "已复制本地 workdir 路径",
     "workdir_path_copy_failed": "复制本地 workdir 路径失败",
-    "workdir_path_unavailable": "暂无本地 workdir — 这个 issue 还没被本地 agent 运行过"
+    "workdir_path_unavailable": "暂无本地 workdir — 这个 issue 还没被本地 agent 运行过",
+    "billing_section": "Billing",
+    "billing_status_draft": "Draft",
+    "billing_status_confirmed": "Confirmed",
+    "billing_status_void": "Voided",
+    "billing_prop_compute": "Compute (no-cache)",
+    "billing_prop_fx": "FX rate",
+    "billing_prop_markup": "Markup",
+    "billing_prop_adjusted": "Adjusted",
+    "billing_confirm": "Confirm",
+    "billing_void": "Void",
+    "billing_confirmed_toast": "Charge confirmed",
+    "billing_voided_toast": "Charge voided",
+    "billing_action_failed_toast": "Billing action failed"
   },
   "timeline": {
     "loading": "加载中…"

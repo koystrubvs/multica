@@ -51,6 +51,7 @@ import { TitleEditor, ContentEditor, type ContentEditorRef } from "../../editor"
 import { PriorityIcon } from "../../issues/components/priority-icon";
 import { ProjectResourcesSection } from "./project-resources-section";
 import { SitepingIntegrationSection } from "./siteping-integration-section";
+import { ProjectBillingSection } from "./project-billing-section";
 import { IssuesHeader } from "../../issues/components/issues-header";
 import { BoardView } from "../../issues/components/board-view";
 import { ListView } from "../../issues/components/list-view";
@@ -945,6 +946,9 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       {/* Resources */}
       <ProjectResourcesSection projectId={projectId} />
       <SitepingIntegrationSection projectId={projectId} />
+
+      {/* Agency billing config (fork) */}
+      <ProjectBillingSection projectId={projectId} />
     </div>
   );
 
