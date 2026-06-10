@@ -6,6 +6,7 @@
     "table": {
       "name": "Название",
       "agent": "Агент",
+      "created_by": "Создал",
       "mode": "Режим",
       "status": "Статус",
       "last_run": "Последний запуск"
@@ -71,6 +72,7 @@
     "section_run_history": "История запусков",
     "section_danger": "Опасная зона",
     "field_agent": "Агент",
+    "field_created_by": "Создал",
     "field_output_mode": "Режим вывода",
     "field_project": "Проект",
     "no_project": "Без проекта",
