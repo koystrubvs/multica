@@ -1,4 +1,4 @@
--- 118: daily USD->RUB FX rates (Bank of Russia / ЦБ РФ).
+-- 119: daily USD->RUB FX rates (Bank of Russia / ЦБ РФ). Renumbered from 118 (collision with upstream 118_agent_task_queue…_drop_fk).
 --
 -- Lets us value historical agent token cost at the exchange rate that was in
 -- effect on the day each task ran, instead of re-pricing all of history at a
