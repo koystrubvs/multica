@@ -216,7 +216,20 @@
     "link_copy_failed": "リンクをコピーできませんでした",
     "workdir_path_copied": "作業ディレクトリのパスをコピーしました",
     "workdir_path_copy_failed": "作業ディレクトリのパスをコピーできませんでした",
-    "workdir_path_unavailable": "まだローカルの作業ディレクトリがありません。ローカルエージェントがこのイシューを実行していません"
+    "workdir_path_unavailable": "まだローカルの作業ディレクトリがありません。ローカルエージェントがこのイシューを実行していません",
+    "billing_section": "Billing",
+    "billing_status_draft": "Draft",
+    "billing_status_confirmed": "Confirmed",
+    "billing_status_void": "Voided",
+    "billing_prop_compute": "Compute (no-cache)",
+    "billing_prop_fx": "FX rate",
+    "billing_prop_markup": "Markup",
+    "billing_prop_adjusted": "Adjusted",
+    "billing_confirm": "Confirm",
+    "billing_void": "Void",
+    "billing_confirmed_toast": "Charge confirmed",
+    "billing_voided_toast": "Charge voided",
+    "billing_action_failed_toast": "Billing action failed"
   },
   "timeline": {
     "loading": "読み込み中..."

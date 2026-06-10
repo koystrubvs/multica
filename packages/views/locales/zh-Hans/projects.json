@@ -196,5 +196,26 @@
     "copy_link_copied": "已复制网站链接",
     "copy_link_failed": "复制链接失败",
     "copy_link_no_site_url": "请先在 SitePing 部分填写网站 URL"
+  },
+  "billing": {
+    "section_title": "Client billing",
+    "not_configured": "Billing is not configured for this project.",
+    "enable": "Enable billing",
+    "enabled_label": "Billing enabled",
+    "mode": "Billing mode",
+    "mode_postpaid": "Postpaid (by usage)",
+    "mode_budget": "Monthly budget",
+    "mode_subscription": "Subscription",
+    "markup": "Markup (K)",
+    "fx_markup": "FX markup, %",
+    "min_price": "Min price, RUB",
+    "rounding": "Rounding step, RUB",
+    "budget": "Budget per period, RUB",
+    "subscription_fee": "Fee per period, RUB",
+    "fair_use": "Fair-use cap, RUB",
+    "save": "Save",
+    "saved_toast": "Billing settings saved",
+    "save_failed_toast": "Failed to save billing settings",
+    "charges_summary": "{{total}} confirmed · {{drafts}} drafts"
   }
 }

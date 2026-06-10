@@ -200,5 +200,26 @@
     "copy_link_copied": "Ссылка скопирована",
     "copy_link_failed": "Не удалось скопировать ссылку",
     "copy_link_no_site_url": "Сначала укажите URL сайта в разделе «Виджет SitePing»"
+  },
+  "billing": {
+    "section_title": "Биллинг клиента",
+    "not_configured": "Биллинг для этого проекта не настроен.",
+    "enable": "Включить биллинг",
+    "enabled_label": "Биллинг включён",
+    "mode": "Режим",
+    "mode_postpaid": "По факту",
+    "mode_budget": "С бюджетом",
+    "mode_subscription": "Абонемент",
+    "markup": "Коэффициент (K)",
+    "fx_markup": "Надбавка к курсу, %",
+    "min_price": "Минималка, ₽",
+    "rounding": "Округление, ₽",
+    "budget": "Бюджет на период, ₽",
+    "subscription_fee": "Абонплата, ₽",
+    "fair_use": "Fair-use лимит, ₽",
+    "save": "Сохранить",
+    "saved_toast": "Настройки биллинга сохранены",
+    "save_failed_toast": "Не удалось сохранить настройки",
+    "charges_summary": "{{total}} подтверждено · черновиков: {{drafts}}"
   }
 }

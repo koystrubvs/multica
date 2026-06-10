@@ -216,7 +216,20 @@
     "link_copy_failed": "Не удалось скопировать ссылку",
     "workdir_path_copied": "Путь к workdir скопирован",
     "workdir_path_copy_failed": "Не удалось скопировать путь к workdir",
-    "workdir_path_unavailable": "Локального workdir пока нет — задача не запускался локальным агентом"
+    "workdir_path_unavailable": "Локального workdir пока нет — задача не запускался локальным агентом",
+    "billing_section": "Биллинг",
+    "billing_status_draft": "Черновик",
+    "billing_status_confirmed": "Подтверждено",
+    "billing_status_void": "Аннулировано",
+    "billing_prop_compute": "Вычисления (без кэша)",
+    "billing_prop_fx": "Курс",
+    "billing_prop_markup": "Коэффициент",
+    "billing_prop_adjusted": "Скорректировано",
+    "billing_confirm": "Подтвердить",
+    "billing_void": "Аннулировать",
+    "billing_confirmed_toast": "Стоимость подтверждена",
+    "billing_voided_toast": "Стоимость аннулирована",
+    "billing_action_failed_toast": "Не удалось выполнить действие"
   },
   "timeline": {
     "loading": "Загрузка..."

@@ -160,3 +160,12 @@ export type {
   BillingCheckoutSessionStatus,
   CreateBillingPortalSessionResponse,
 } from "./billing";
+
+export type {
+  ClientBillingMode,
+  ClientBillingChargeStatus,
+  ClientBillingConfig,
+  ClientBillingConfigUpdate,
+  ClientBillingUsageLine,
+  ClientBillingCharge,
+} from "./client-billing";

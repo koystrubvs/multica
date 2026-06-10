@@ -44,6 +44,9 @@ import type {
   CreatePersonalAccessTokenResponse,
   RuntimeUsage,
   IssueUsageSummary,
+  ClientBillingCharge,
+  ClientBillingConfig,
+  ClientBillingConfigUpdate,
   RuntimeHourlyActivity,
   RuntimeUsageByAgent,
   RuntimeUsageByHour,
@@ -1355,6 +1358,65 @@ export class ApiClient {
 
   async getIssueUsage(issueId: string): Promise<IssueUsageSummary> {
     return this.fetch(`/api/issues/${issueId}/usage`);
+  }
+
+  // --- Agency client billing (fork; server/internal/handler/client_billing.go) ---
+
+  /** Price snapshot for an issue, or null when none exists. */
+  async getIssueBillingCharge(issueId: string): Promise<ClientBillingCharge | null> {
+    try {
+      return await this.fetch(`/api/issues/${issueId}/billing/charge`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  async confirmIssueBillingCharge(issueId: string): Promise<ClientBillingCharge> {
+    return this.fetch(`/api/issues/${issueId}/billing/charge/confirm`, { method: "POST" });
+  }
+
+  async voidIssueBillingCharge(issueId: string): Promise<ClientBillingCharge> {
+    return this.fetch(`/api/issues/${issueId}/billing/charge/void`, { method: "POST" });
+  }
+
+  async adjustIssueBillingCharge(
+    issueId: string,
+    priceRub: number,
+    reason: string,
+  ): Promise<ClientBillingCharge> {
+    return this.fetch(`/api/issues/${issueId}/billing/charge/adjust`, {
+      method: "POST",
+      body: JSON.stringify({ price_rub: priceRub, reason }),
+    });
+  }
+
+  /** Project billing config, or null when billing was never configured. */
+  async getProjectBillingConfig(projectId: string): Promise<ClientBillingConfig | null> {
+    try {
+      return await this.fetch(`/api/projects/${projectId}/billing/config`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  async putProjectBillingConfig(
+    projectId: string,
+    update: ClientBillingConfigUpdate,
+  ): Promise<ClientBillingConfig> {
+    return this.fetch(`/api/projects/${projectId}/billing/config`, {
+      method: "PUT",
+      body: JSON.stringify(update),
+    });
+  }
+
+  async listProjectBillingCharges(
+    projectId: string,
+    status?: "draft" | "confirmed" | "void",
+  ): Promise<ClientBillingCharge[]> {
+    const qs = status ? `?status=${status}` : "";
+    return this.fetch(`/api/projects/${projectId}/billing/charges${qs}`);
   }
 
   async cancelTask(issueId: string, taskId: string): Promise<AgentTask> {
