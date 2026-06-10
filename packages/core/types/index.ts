@@ -168,4 +168,7 @@ export type {
   ClientBillingConfigUpdate,
   ClientBillingUsageLine,
   ClientBillingCharge,
+  ClientBillingPeriodStatus,
+  ClientBillingPeriod,
+  ClientBillingCurrentPeriod,
 } from "./client-billing";

@@ -16,7 +16,7 @@ UPDATE client_billing_charge
 SET price_rub = $1::float8, adjusted_reason = $2, updated_at = now()
 WHERE issue_id = $3 AND status = 'draft'
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -35,6 +35,7 @@ type AdjustClientBillingChargeRow struct {
 	IssueID        pgtype.UUID        `json:"issue_id"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
 	Usage          []byte             `json:"usage"`
 	NocacheUsd     float64            `json:"nocache_usd"`
 	FxRate         float64            `json:"fx_rate"`
@@ -57,6 +58,7 @@ func (q *Queries) AdjustClientBillingCharge(ctx context.Context, arg AdjustClien
 		&i.IssueID,
 		&i.ProjectID,
 		&i.WorkspaceID,
+		&i.PeriodID,
 		&i.Usage,
 		&i.NocacheUsd,
 		&i.FxRate,
@@ -77,7 +79,7 @@ UPDATE client_billing_charge
 SET status = 'confirmed', confirmed_by = $1, confirmed_at = now(), updated_at = now()
 WHERE issue_id = $2 AND status = 'draft'
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -95,6 +97,7 @@ type ConfirmClientBillingChargeRow struct {
 	IssueID        pgtype.UUID        `json:"issue_id"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
 	Usage          []byte             `json:"usage"`
 	NocacheUsd     float64            `json:"nocache_usd"`
 	FxRate         float64            `json:"fx_rate"`
@@ -116,6 +119,7 @@ func (q *Queries) ConfirmClientBillingCharge(ctx context.Context, arg ConfirmCli
 		&i.IssueID,
 		&i.ProjectID,
 		&i.WorkspaceID,
+		&i.PeriodID,
 		&i.Usage,
 		&i.NocacheUsd,
 		&i.FxRate,
@@ -140,7 +144,7 @@ INSERT INTO client_billing_charge (
     $5::float8, $6::float8, $7::float8, $8::float8
 )
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -164,6 +168,7 @@ type CreateClientBillingChargeRow struct {
 	IssueID        pgtype.UUID        `json:"issue_id"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
 	Usage          []byte             `json:"usage"`
 	NocacheUsd     float64            `json:"nocache_usd"`
 	FxRate         float64            `json:"fx_rate"`
@@ -194,6 +199,7 @@ func (q *Queries) CreateClientBillingCharge(ctx context.Context, arg CreateClien
 		&i.IssueID,
 		&i.ProjectID,
 		&i.WorkspaceID,
+		&i.PeriodID,
 		&i.Usage,
 		&i.NocacheUsd,
 		&i.FxRate,
@@ -211,7 +217,7 @@ func (q *Queries) CreateClientBillingCharge(ctx context.Context, arg CreateClien
 
 const getClientBillingChargeByIssue = `-- name: GetClientBillingChargeByIssue :one
 SELECT
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -226,6 +232,7 @@ type GetClientBillingChargeByIssueRow struct {
 	IssueID        pgtype.UUID        `json:"issue_id"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
 	Usage          []byte             `json:"usage"`
 	NocacheUsd     float64            `json:"nocache_usd"`
 	FxRate         float64            `json:"fx_rate"`
@@ -247,6 +254,7 @@ func (q *Queries) GetClientBillingChargeByIssue(ctx context.Context, issueID pgt
 		&i.IssueID,
 		&i.ProjectID,
 		&i.WorkspaceID,
+		&i.PeriodID,
 		&i.Usage,
 		&i.NocacheUsd,
 		&i.FxRate,
@@ -323,7 +331,7 @@ func (q *Queries) GetClientBillingConfig(ctx context.Context, projectID pgtype.U
 
 const listClientBillingChargesByProject = `-- name: ListClientBillingChargesByProject :many
 SELECT
-    cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.usage,
+    cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.period_id, cbc.usage,
     cbc.nocache_usd::float8 AS nocache_usd,
     cbc.fx_rate::float8     AS fx_rate,
     cbc.markup::float8      AS markup,
@@ -348,6 +356,7 @@ type ListClientBillingChargesByProjectRow struct {
 	IssueID        pgtype.UUID        `json:"issue_id"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
 	Usage          []byte             `json:"usage"`
 	NocacheUsd     float64            `json:"nocache_usd"`
 	FxRate         float64            `json:"fx_rate"`
@@ -376,6 +385,7 @@ func (q *Queries) ListClientBillingChargesByProject(ctx context.Context, arg Lis
 			&i.IssueID,
 			&i.ProjectID,
 			&i.WorkspaceID,
+			&i.PeriodID,
 			&i.Usage,
 			&i.NocacheUsd,
 			&i.FxRate,
@@ -564,7 +574,7 @@ UPDATE client_billing_charge
 SET status = 'void', updated_at = now()
 WHERE issue_id = $1 AND status <> 'void'
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -577,6 +587,7 @@ type VoidClientBillingChargeRow struct {
 	IssueID        pgtype.UUID        `json:"issue_id"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
 	Usage          []byte             `json:"usage"`
 	NocacheUsd     float64            `json:"nocache_usd"`
 	FxRate         float64            `json:"fx_rate"`
@@ -598,6 +609,7 @@ func (q *Queries) VoidClientBillingCharge(ctx context.Context, issueID pgtype.UU
 		&i.IssueID,
 		&i.ProjectID,
 		&i.WorkspaceID,
+		&i.PeriodID,
 		&i.Usage,
 		&i.NocacheUsd,
 		&i.FxRate,

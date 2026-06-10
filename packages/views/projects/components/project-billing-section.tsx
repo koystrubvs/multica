@@ -19,12 +19,15 @@ import type {
   ClientBillingConfig,
   ClientBillingConfigUpdate,
   ClientBillingMode,
+  ClientBillingPeriod,
 } from "@multica/core/types";
 import { useT } from "../../i18n";
 
 export const clientBillingKeys = {
   config: (projectId: string) => ["client-billing", "config", projectId] as const,
   charges: (projectId: string) => ["client-billing", "charges", projectId] as const,
+  currentPeriod: (projectId: string) => ["client-billing", "current-period", projectId] as const,
+  periods: (projectId: string) => ["client-billing", "periods", projectId] as const,
 };
 
 function formatRub(value: number): string {
@@ -41,26 +44,16 @@ export function ProjectBillingSection({ projectId }: { projectId: string }) {
     queryFn: () => api.getProjectBillingConfig(projectId),
   });
 
-  const { data: charges = [] } = useQuery({
-    queryKey: clientBillingKeys.charges(projectId),
-    queryFn: () => api.listProjectBillingCharges(projectId),
-    enabled: !!config?.enabled,
-  });
-
   const saveMut = useMutation({
     mutationFn: (update: ClientBillingConfigUpdate) =>
       api.putProjectBillingConfig(projectId, update),
     onSuccess: () => {
       toast.success(t(($) => $.billing.saved_toast));
       qc.invalidateQueries({ queryKey: clientBillingKeys.config(projectId) });
+      qc.invalidateQueries({ queryKey: clientBillingKeys.currentPeriod(projectId) });
     },
     onError: () => toast.error(t(($) => $.billing.save_failed_toast)),
   });
-
-  const confirmedTotal = charges
-    .filter((c) => c.status === "confirmed")
-    .reduce((sum, c) => sum + c.price_rub, 0);
-  const draftCount = charges.filter((c) => c.status === "draft").length;
 
   return (
     <div>
@@ -93,16 +86,197 @@ export function ProjectBillingSection({ projectId }: { projectId: string }) {
               </Button>
             </div>
           ) : (
-            <ConfigForm
-              config={config}
-              confirmedTotal={confirmedTotal}
-              draftCount={draftCount}
-              saving={saveMut.isPending}
-              onSave={(u) => saveMut.mutate(u)}
-            />
+            <div className="flex flex-col gap-4">
+              {config.enabled && <CurrentPeriodCard projectId={projectId} />}
+              <ConfigForm
+                config={config}
+                saving={saveMut.isPending}
+                onSave={(u) => saveMut.mutate(u)}
+              />
+              {config.enabled && <PeriodHistory projectId={projectId} />}
+            </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function fmtDate(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function PeriodStatusBadge({ status }: { status: ClientBillingPeriod["status"] }) {
+  const { t } = useT("projects");
+  const styles: Record<ClientBillingPeriod["status"], string> = {
+    open: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    closed: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    invoiced: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+    paid: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  };
+  const labels: Record<ClientBillingPeriod["status"], string> = {
+    open: t(($) => $.billing.period_status_open),
+    closed: t(($) => $.billing.period_status_closed),
+    invoiced: t(($) => $.billing.period_status_invoiced),
+    paid: t(($) => $.billing.period_status_paid),
+  };
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${styles[status]}`}>
+      {labels[status]}
+    </span>
+  );
+}
+
+// Current cycle: dates, confirmed total, progress against the budget /
+// fair-use cap (when the mode has one) and the close action.
+function CurrentPeriodCard({ projectId }: { projectId: string }) {
+  const { t } = useT("projects");
+  const qc = useQueryClient();
+  const { data: current } = useQuery({
+    queryKey: clientBillingKeys.currentPeriod(projectId),
+    queryFn: () => api.getProjectBillingCurrentPeriod(projectId),
+  });
+
+  const invalidatePeriods = () => {
+    qc.invalidateQueries({ queryKey: clientBillingKeys.currentPeriod(projectId) });
+    qc.invalidateQueries({ queryKey: clientBillingKeys.periods(projectId) });
+  };
+
+  const closeMut = useMutation({
+    mutationFn: (periodId: string) => api.closeBillingPeriod(projectId, periodId),
+    onSuccess: () => {
+      toast.success(t(($) => $.billing.period_closed_toast));
+      invalidatePeriods();
+    },
+    onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
+  });
+
+  if (!current) return null;
+  const { period, confirmed_total, draft_count, limit_rub, percent } = current;
+  const overBudget = limit_rub > 0 && percent >= 100;
+
+  return (
+    <div className="rounded-md border border-border/60 p-2.5 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          {t(($) => $.billing.current_period, {
+            from: fmtDate(period.starts_on),
+            to: fmtDate(period.ends_on),
+          })}
+        </span>
+        <PeriodStatusBadge status={period.status} />
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-sm font-semibold">{formatRub(confirmed_total)}</span>
+        {draft_count > 0 && (
+          <span className="text-[11px] text-muted-foreground">
+            {t(($) => $.billing.draft_count, { count: draft_count })}
+          </span>
+        )}
+      </div>
+      {limit_rub > 0 && (
+        <div className="flex flex-col gap-1">
+          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${overBudget ? "bg-destructive" : "bg-primary"}`}
+              style={{ width: `${Math.min(percent, 100)}%` }}
+            />
+          </div>
+          <span className={`text-[11px] ${overBudget ? "text-destructive" : "text-muted-foreground"}`}>
+            {t(($) => $.billing.budget_progress, {
+              percent,
+              limit: formatRub(limit_rub),
+            })}
+          </span>
+        </div>
+      )}
+      <div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-xs"
+          disabled={closeMut.isPending}
+          onClick={() => closeMut.mutate(period.id)}
+        >
+          {t(($) => $.billing.close_period)}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Past cycles with their frozen totals and the payment lifecycle actions.
+function PeriodHistory({ projectId }: { projectId: string }) {
+  const { t } = useT("projects");
+  const qc = useQueryClient();
+  const { data: periods = [] } = useQuery({
+    queryKey: clientBillingKeys.periods(projectId),
+    queryFn: () => api.listProjectBillingPeriods(projectId),
+  });
+
+  const invalidatePeriods = () => {
+    qc.invalidateQueries({ queryKey: clientBillingKeys.currentPeriod(projectId) });
+    qc.invalidateQueries({ queryKey: clientBillingKeys.periods(projectId) });
+  };
+
+  const paidMut = useMutation({
+    mutationFn: (periodId: string) => api.markBillingPeriodPaid(projectId, periodId),
+    onSuccess: () => {
+      toast.success(t(($) => $.billing.period_paid_toast));
+      invalidatePeriods();
+    },
+    onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
+  });
+
+  const reopenMut = useMutation({
+    mutationFn: (periodId: string) => api.reopenBillingPeriod(projectId, periodId),
+    onSuccess: invalidatePeriods,
+    onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
+  });
+
+  const past = periods.filter((p) => p.status !== "open");
+  if (past.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        {t(($) => $.billing.period_history)}
+      </span>
+      {past.map((p) => (
+        <div key={p.id} className="flex items-center justify-between gap-2 rounded-md border border-border/40 px-2 py-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {fmtDate(p.starts_on)} — {fmtDate(p.ends_on)}
+            </span>
+            <PeriodStatusBadge status={p.status} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium whitespace-nowrap">{formatRub(p.total_rub)}</span>
+            {(p.status === "closed" || p.status === "invoiced") && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-5 px-1.5 text-[11px]"
+                  disabled={paidMut.isPending}
+                  onClick={() => paidMut.mutate(p.id)}
+                >
+                  {t(($) => $.billing.mark_paid)}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-5 px-1.5 text-[11px] text-muted-foreground"
+                  disabled={reopenMut.isPending}
+                  onClick={() => reopenMut.mutate(p.id)}
+                >
+                  {t(($) => $.billing.reopen_period)}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -134,14 +308,10 @@ function NumberField({
 
 function ConfigForm({
   config,
-  confirmedTotal,
-  draftCount,
   saving,
   onSave,
 }: {
   config: ClientBillingConfig;
-  confirmedTotal: number;
-  draftCount: number;
   saving: boolean;
   onSave: (u: ClientBillingConfigUpdate) => void;
 }) {
@@ -235,28 +405,11 @@ function ConfigForm({
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div>
         <Button size="sm" className="h-7 px-3 text-xs" disabled={saving} onClick={handleSave}>
           {t(($) => $.billing.save)}
         </Button>
-        {charges_summary(confirmedTotal, draftCount, t)}
       </div>
     </div>
-  );
-}
-
-function charges_summary(
-  confirmedTotal: number,
-  draftCount: number,
-  t: ReturnType<typeof useT<"projects">>["t"],
-) {
-  if (confirmedTotal <= 0 && draftCount <= 0) return null;
-  return (
-    <span className="text-[11px] text-muted-foreground">
-      {t(($) => $.billing.charges_summary, {
-        total: formatRub(confirmedTotal),
-        drafts: draftCount,
-      })}
-    </span>
   );
 }

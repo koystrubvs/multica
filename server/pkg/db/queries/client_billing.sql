@@ -81,7 +81,7 @@ INSERT INTO client_billing_charge (
     @nocache_usd::float8, @fx_rate::float8, @markup::float8, @price_rub::float8
 )
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -90,7 +90,7 @@ RETURNING
 
 -- name: GetClientBillingChargeByIssue :one
 SELECT
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -104,7 +104,7 @@ UPDATE client_billing_charge
 SET status = 'confirmed', confirmed_by = @user_id, confirmed_at = now(), updated_at = now()
 WHERE issue_id = @issue_id AND status = 'draft'
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -116,7 +116,7 @@ UPDATE client_billing_charge
 SET status = 'void', updated_at = now()
 WHERE issue_id = @issue_id AND status <> 'void'
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -129,7 +129,7 @@ UPDATE client_billing_charge
 SET price_rub = @price_rub::float8, adjusted_reason = @reason, updated_at = now()
 WHERE issue_id = @issue_id AND status = 'draft'
 RETURNING
-    id, issue_id, project_id, workspace_id, usage,
+    id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
@@ -138,7 +138,7 @@ RETURNING
 
 -- name: ListClientBillingChargesByProject :many
 SELECT
-    cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.usage,
+    cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.period_id, cbc.usage,
     cbc.nocache_usd::float8 AS nocache_usd,
     cbc.fx_rate::float8     AS fx_rate,
     cbc.markup::float8      AS markup,

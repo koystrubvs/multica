@@ -44,7 +44,8 @@
     "agent_completed": "エージェントが完了",
     "reaction_added": "リアクションあり",
     "quick_create_done": "エージェントで作成",
-    "quick_create_failed": "エージェントでの作成に失敗"
+    "quick_create_failed": "エージェントでの作成に失敗",
+    "billing_budget_alert": "Billing budget alert"
   },
   "labels": {
     "set_status_to": "ステータスを変更:",

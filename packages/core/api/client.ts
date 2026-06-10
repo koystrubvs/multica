@@ -47,6 +47,8 @@ import type {
   ClientBillingCharge,
   ClientBillingConfig,
   ClientBillingConfigUpdate,
+  ClientBillingPeriod,
+  ClientBillingCurrentPeriod,
   RuntimeHourlyActivity,
   RuntimeUsageByAgent,
   RuntimeUsageByHour,
@@ -1417,6 +1419,36 @@ export class ApiClient {
   ): Promise<ClientBillingCharge[]> {
     const qs = status ? `?status=${status}` : "";
     return this.fetch(`/api/projects/${projectId}/billing/charges${qs}`);
+  }
+
+  /** The cycle covering today, with live progress (materializes it lazily). */
+  async getProjectBillingCurrentPeriod(projectId: string): Promise<ClientBillingCurrentPeriod | null> {
+    try {
+      return await this.fetch(`/api/projects/${projectId}/billing/periods/current`);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null;
+      throw e;
+    }
+  }
+
+  async listProjectBillingPeriods(projectId: string): Promise<ClientBillingPeriod[]> {
+    return this.fetch(`/api/projects/${projectId}/billing/periods`);
+  }
+
+  async listBillingPeriodCharges(projectId: string, periodId: string): Promise<ClientBillingCharge[]> {
+    return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/charges`);
+  }
+
+  async closeBillingPeriod(projectId: string, periodId: string): Promise<ClientBillingPeriod> {
+    return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/close`, { method: "POST" });
+  }
+
+  async reopenBillingPeriod(projectId: string, periodId: string): Promise<ClientBillingPeriod> {
+    return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/reopen`, { method: "POST" });
+  }
+
+  async markBillingPeriodPaid(projectId: string, periodId: string): Promise<ClientBillingPeriod> {
+    return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/mark-paid`, { method: "POST" });
   }
 
   async cancelTask(issueId: string, taskId: string): Promise<AgentTask> {

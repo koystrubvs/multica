@@ -171,6 +171,20 @@
     "save": "Save",
     "saved_toast": "Billing settings saved",
     "save_failed_toast": "Failed to save billing settings",
-    "charges_summary": "{{total}} confirmed · {{drafts}} drafts"
+    "charges_summary": "{{total}} confirmed · {{drafts}} drafts",
+    "current_period": "Current period: {{from}} — {{to}}",
+    "draft_count": "+{{count}} drafts",
+    "budget_progress": "{{percent}}% of {{limit}}",
+    "close_period": "Close period",
+    "period_closed_toast": "Billing period closed",
+    "period_paid_toast": "Period marked as paid",
+    "period_action_failed_toast": "Period action failed",
+    "period_history": "Past periods",
+    "mark_paid": "Mark paid",
+    "reopen_period": "Reopen",
+    "period_status_open": "Open",
+    "period_status_closed": "Closed",
+    "period_status_invoiced": "Invoiced",
+    "period_status_paid": "Paid"
   }
 }

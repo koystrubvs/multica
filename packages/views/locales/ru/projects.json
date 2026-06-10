@@ -220,6 +220,20 @@
     "save": "Сохранить",
     "saved_toast": "Настройки биллинга сохранены",
     "save_failed_toast": "Не удалось сохранить настройки",
-    "charges_summary": "{{total}} подтверждено · черновиков: {{drafts}}"
+    "charges_summary": "{{total}} подтверждено · черновиков: {{drafts}}",
+    "current_period": "Текущий период: {{from}} — {{to}}",
+    "draft_count": "+{{count}} черновиков",
+    "budget_progress": "{{percent}}% от {{limit}}",
+    "close_period": "Закрыть период",
+    "period_closed_toast": "Период закрыт",
+    "period_paid_toast": "Период отмечен оплаченным",
+    "period_action_failed_toast": "Не удалось выполнить действие",
+    "period_history": "Прошлые периоды",
+    "mark_paid": "Оплачен",
+    "reopen_period": "Переоткрыть",
+    "period_status_open": "Открыт",
+    "period_status_closed": "Закрыт",
+    "period_status_invoiced": "Выставлен счёт",
+    "period_status_paid": "Оплачен"
   }
 }

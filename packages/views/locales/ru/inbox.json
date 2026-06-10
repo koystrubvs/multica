@@ -44,7 +44,8 @@
     "agent_completed": "Агент завершил работу",
     "reaction_added": "Реакция",
     "quick_create_done": "Создано с агентом",
-    "quick_create_failed": "Создание с агентом не удалось"
+    "quick_create_failed": "Создание с агентом не удалось",
+    "billing_budget_alert": "Алерт по бюджету биллинга"
   },
   "labels": {
     "set_status_to": "Установить статус на",
