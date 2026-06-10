@@ -473,7 +473,12 @@ func (h *Handler) ConfirmIssueBillingCharge(w http.ResponseWriter, r *http.Reque
 	// Phase 2: attach to the open billing period, refresh its total and fire
 	// budget / fair-use threshold alerts. Best-effort by design.
 	h.afterChargeConfirmed(r.Context(), db.GetClientBillingChargeByIssueRow(charge), requestUserID(r))
-	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
+	// Re-read so the response carries the period_id the attach just set.
+	out := db.GetClientBillingChargeByIssueRow(charge)
+	if fresh, err := h.Queries.GetClientBillingChargeByIssue(r.Context(), issue.ID); err == nil {
+		out = fresh
+	}
+	writeJSON(w, http.StatusOK, chargeJSON(out))
 }
 
 // VoidIssueBillingCharge cancels a charge (draft or confirmed) so it never
