@@ -197,6 +197,41 @@ type ChatSession struct {
 	RuntimeID   pgtype.UUID        `json:"runtime_id"`
 }
 
+type ClientBillingCharge struct {
+	ID             pgtype.UUID        `json:"id"`
+	IssueID        pgtype.UUID        `json:"issue_id"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	Usage          []byte             `json:"usage"`
+	NocacheUsd     pgtype.Numeric     `json:"nocache_usd"`
+	FxRate         pgtype.Numeric     `json:"fx_rate"`
+	Markup         pgtype.Numeric     `json:"markup"`
+	PriceRub       pgtype.Numeric     `json:"price_rub"`
+	Status         string             `json:"status"`
+	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
+	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
+	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ClientBillingConfig struct {
+	ProjectID          pgtype.UUID        `json:"project_id"`
+	Enabled            bool               `json:"enabled"`
+	Mode               string             `json:"mode"`
+	Markup             pgtype.Numeric     `json:"markup"`
+	MinPriceRub        pgtype.Numeric     `json:"min_price_rub"`
+	RoundingRub        pgtype.Numeric     `json:"rounding_rub"`
+	FxMarkupPercent    pgtype.Numeric     `json:"fx_markup_percent"`
+	BudgetRub          pgtype.Numeric     `json:"budget_rub"`
+	SubscriptionFeeRub pgtype.Numeric     `json:"subscription_fee_rub"`
+	FairUseRub         pgtype.Numeric     `json:"fair_use_rub"`
+	PeriodMonths       int32              `json:"period_months"`
+	AnchorDay          int32              `json:"anchor_day"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Comment struct {
 	ID             pgtype.UUID        `json:"id"`
 	IssueID        pgtype.UUID        `json:"issue_id"`
@@ -267,6 +302,13 @@ type Feedback struct {
 	Message     string             `json:"message"`
 	Metadata    []byte             `json:"metadata"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type FxRateDaily struct {
+	Date      pgtype.Date        `json:"date"`
+	UsdRub    pgtype.Numeric     `json:"usd_rub"`
+	Source    string             `json:"source"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type GithubInstallation struct {
