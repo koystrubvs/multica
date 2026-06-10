@@ -195,7 +195,6 @@
     "prop_input": "入力",
     "prop_output": "出力",
     "prop_cache": "キャッシュ",
-    "prop_cost": "コスト",
     "prop_cache_value": "読み取り {{read}} / 書き込み {{write}}",
     "prop_runs": "実行",
     "activity_section": "アクティビティ",
@@ -269,13 +268,17 @@
     "leave_comment_placeholder": "コメントを残す...",
     "send_tooltip": "送信",
     "resolve": {
-      "resolve_action": "コメントを解決",
-      "unresolve_action": "コメントの解決を取り消す",
+      "resolve_thread_action": "スレッドを解決",
+      "unresolve_thread_action": "スレッドの解決を取り消す",
+      "resolve_with_comment_action": "このコメントでスレッドを解決",
+      "unresolve_action": "解決を取り消す",
+      "resolution_badge": "解決",
       "collapse": "折りたたむ",
       "bar_other": "{{authors}} による解決済みコメント {{count}} 件",
+      "fold_other": "{{authors}} のコメント {{count}} 件",
       "bar_authors_more_other": "{{names}} 他 {{count}} 名",
-      "resolve_failed": "コメントを解決できませんでした",
-      "unresolve_failed": "コメントの解決を取り消せませんでした"
+      "resolve_failed": "スレッドを解決できませんでした",
+      "unresolve_failed": "スレッドの解決を取り消せませんでした"
     }
   },
   "reply": {

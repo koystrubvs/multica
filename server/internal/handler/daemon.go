@@ -398,28 +398,6 @@ func (h *Handler) DaemonRegister(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// MUL-2863: durable dispatch hook. DaemonRegister is the second of
-		// two runtime-comes-online transition points (the first is the
-		// heartbeat path's recordHeartbeat). For a freshly inserted runtime
-		// row the new ID is brand-new — it cannot have pending runs queued
-		// against it — so the hook is a no-op in that case. For an upsert
-		// (daemon reconnect on an existing row that was previously
-		// offline) the same logic as the heartbeat hook applies: drain
-		// any 'pending_runtime' autopilot_run rows that were waiting for
-		// this runtime.
-		//
-		// We always call — the function is idempotent and short-circuits
-		// on an empty pending set — rather than gating on row.Inserted
-		// because a reconnect on an offline runtime is exactly the case
-		// the user is asking us to handle ("my laptop slept, the cron
-		// fired while the daemon was offline, now the daemon came back").
-		if registered.Status == "online" && h.AutopilotService != nil {
-			if err := h.AutopilotService.DispatchPendingRuntimeRunsForRuntime(r.Context(), registered.ID); err != nil {
-				slog.Warn("autopilot dispatch: failed to drain pending_runtime runs on register",
-					"runtime_id", uuidToString(registered.ID), "error", err)
-			}
-		}
-
 		// Seamless migration from the previous hostname-derived identity. The
 		// daemon sends every legacy daemon_id it may have registered under
 		// (e.g. "host.local", "host", "host-staging"); for each match we
@@ -858,30 +836,7 @@ func (h *Handler) recordHeartbeat(ctx context.Context, rt db.AgentRuntime) error
 	// Either bumps last_seen_at on an already-online row (Touch + race
 	// fallback) or flips status from offline to online. The scheduler
 	// chooses sync vs batched per case; see HeartbeatScheduler doc.
-	if err := h.HeartbeatScheduler.Schedule(ctx, rt); err != nil {
-		return err
-	}
-
-	// MUL-2863: durable dispatch hook. After a successful DB write on the
-	// heartbeat path (which is the only way a runtime's DB row transitions
-	// from offline to online, since the sweeper only flips the other way),
-	// drain any autopilot_run rows that were parked waiting for this
-	// runtime to come back online. We dispatch the hook from here rather
-	// than from the autopilot listeners so the call site is co-located
-	// with the runtime-online transition itself — the only other flip
-	// point is DaemonRegister, which hooks the same call below.
-	//
-	// Errors are logged, not returned: a failed dispatch drain should not
-	// turn a healthy 200 heartbeat into a 500, and the next beat (or
-	// registration) will retry. The function is itself idempotent and
-	// short-circuits on an empty pending set.
-	if h.AutopilotService != nil {
-		if err := h.AutopilotService.DispatchPendingRuntimeRunsForRuntime(ctx, rt.ID); err != nil {
-			slog.Warn("autopilot dispatch: failed to drain pending_runtime runs on heartbeat",
-				"runtime_id", uuidToString(rt.ID), "error", err)
-		}
-	}
-	return nil
+	return h.HeartbeatScheduler.Schedule(ctx, rt)
 }
 
 // heartbeatMetrics carries per-stage timings out of processHeartbeat so the
@@ -2125,7 +2080,7 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 		if msg.Input != nil {
 			inputJSON, _ = json.Marshal(msg.Input)
 		}
-		h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParams{
+		created, createErr := h.Queries.CreateTaskMessage(r.Context(), db.CreateTaskMessageParams{
 			TaskID:  parseUUID(taskID),
 			Seq:     int32(msg.Seq),
 			Type:    msg.Type,
@@ -2134,22 +2089,54 @@ func (h *Handler) ReportTaskMessages(w http.ResponseWriter, r *http.Request) {
 			Input:   inputJSON,
 			Output:  pgtype.Text{String: msg.Output, Valid: msg.Output != ""},
 		})
+		if createErr != nil {
+			slog.Error("failed to create task message", "task_id", taskID, "seq", msg.Seq, "error", createErr)
+			writeError(w, http.StatusInternalServerError, "failed to persist task message")
+			return
+		}
 
 		if workspaceID != "" {
+			createdAt := ""
+			if created.CreatedAt.Valid {
+				createdAt = created.CreatedAt.Time.UTC().Format(time.RFC3339Nano)
+			}
 			h.publishTask(protocol.EventTaskMessage, workspaceID, "system", "", taskID, protocol.TaskMessagePayload{
-				TaskID:  taskID,
-				IssueID: uuidToString(task.IssueID),
-				Seq:     msg.Seq,
-				Type:    msg.Type,
-				Tool:    msg.Tool,
-				Content: msg.Content,
-				Input:   msg.Input,
-				Output:  msg.Output,
+				TaskID:    taskID,
+				IssueID:   uuidToString(task.IssueID),
+				Seq:       msg.Seq,
+				Type:      msg.Type,
+				Tool:      msg.Tool,
+				Content:   msg.Content,
+				Input:     msg.Input,
+				Output:    msg.Output,
+				CreatedAt: createdAt,
 			})
 		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func taskMessageToPayload(m db.TaskMessage, taskID, issueID string) protocol.TaskMessagePayload {
+	var input map[string]any
+	if m.Input != nil {
+		json.Unmarshal(m.Input, &input)
+	}
+	createdAt := ""
+	if m.CreatedAt.Valid {
+		createdAt = m.CreatedAt.Time.UTC().Format(time.RFC3339Nano)
+	}
+	return protocol.TaskMessagePayload{
+		TaskID:    taskID,
+		IssueID:   issueID,
+		Seq:       int(m.Seq),
+		Type:      m.Type,
+		Tool:      m.Tool.String,
+		Content:   m.Content.String,
+		Input:     input,
+		Output:    m.Output.String,
+		CreatedAt: createdAt,
+	}
 }
 
 // ListTaskMessages returns the persisted messages for a task (for catch-up after reconnect).
@@ -2188,7 +2175,7 @@ func (h *Handler) ListTaskMessages(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]protocol.TaskMessagePayload, len(messages))
 	for i, m := range messages {
-		resp[i] = taskMessagePayloadFromRow(m, taskID, issueID)
+		resp[i] = taskMessageToPayload(m, taskID, issueID)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -2318,27 +2305,10 @@ func (h *Handler) ListTaskMessagesByUser(w http.ResponseWriter, r *http.Request)
 
 	resp := make([]protocol.TaskMessagePayload, len(messages))
 	for i, m := range messages {
-		resp[i] = taskMessagePayloadFromRow(m, taskID, issueID)
+		resp[i] = taskMessageToPayload(m, taskID, issueID)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func taskMessagePayloadFromRow(m db.TaskMessage, taskID, issueID string) protocol.TaskMessagePayload {
-	var input map[string]any
-	if m.Input != nil {
-		json.Unmarshal(m.Input, &input)
-	}
-	return protocol.TaskMessagePayload{
-		TaskID:  taskID,
-		IssueID: issueID,
-		Seq:     int(m.Seq),
-		Type:    m.Type,
-		Tool:    m.Tool.String,
-		Content: redact.Text(m.Content.String),
-		Input:   redact.InputMap(input),
-		Output:  redact.Text(m.Output.String),
-	}
 }
 
 // GetIssueUsage returns aggregated token usage for all tasks belonging to an issue.
@@ -2355,49 +2325,12 @@ func (h *Handler) GetIssueUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per-(UTC date, model) breakdown so the client can price the issue's
-	// spend and convert it to rubles at the CBR rate of each task's day.
-	// Day granularity (UTC) is all the daily FX needs.
-	type issueUsageBreakdownRow struct {
-		Date             string `json:"date"`
-		Model            string `json:"model"`
-		InputTokens      int64  `json:"input_tokens"`
-		OutputTokens     int64  `json:"output_tokens"`
-		CacheReadTokens  int64  `json:"cache_read_tokens"`
-		CacheWriteTokens int64  `json:"cache_write_tokens"`
-	}
-	breakdown := []issueUsageBreakdownRow{}
-	if brows, berr := h.DB.Query(r.Context(),
-		`SELECT to_char(DATE(tu.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
-		        tu.model,
-		        SUM(tu.input_tokens)::bigint,
-		        SUM(tu.output_tokens)::bigint,
-		        SUM(tu.cache_read_tokens)::bigint,
-		        SUM(tu.cache_write_tokens)::bigint
-		   FROM task_usage tu
-		   JOIN agent_task_queue atq ON atq.id = tu.task_id
-		  WHERE atq.issue_id = $1
-		  GROUP BY DATE(tu.created_at AT TIME ZONE 'UTC'), tu.model
-		  ORDER BY date`, issue.ID); berr == nil {
-		defer brows.Close()
-		for brows.Next() {
-			var b issueUsageBreakdownRow
-			if scanErr := brows.Scan(
-				&b.Date, &b.Model, &b.InputTokens, &b.OutputTokens,
-				&b.CacheReadTokens, &b.CacheWriteTokens,
-			); scanErr == nil {
-				breakdown = append(breakdown, b)
-			}
-		}
-	}
-
 	writeJSON(w, http.StatusOK, map[string]any{
 		"total_input_tokens":       row.TotalInputTokens,
 		"total_output_tokens":      row.TotalOutputTokens,
 		"total_cache_read_tokens":  row.TotalCacheReadTokens,
 		"total_cache_write_tokens": row.TotalCacheWriteTokens,
 		"task_count":               row.TaskCount,
-		"breakdown":                breakdown,
 	})
 }
 

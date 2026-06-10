@@ -873,9 +873,19 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 	// entity-encode Markdown syntax characters (>, ", &, <) and corrupt the
 	// source. See issue #1303 / discussion in MUL-1119, MUL-1125.
 
-	// parent_id stores the exact comment being replied to. Per-comment
-	// auto-reopen uses only that direct parent so unrelated resolved ancestors
-	// or siblings stay resolved.
+	// parent_id stores the exact comment being replied to. Thread-level behavior
+	// (for example auto-unresolving a resolved thread) resolves the root
+	// separately so storing a reply-to-reply does not destroy the direct-parent
+	// signal used by trigger decisions.
+	var rootComment *db.Comment
+	if parentID.Valid {
+		if root, err := h.Queries.GetThreadRoot(r.Context(), db.GetThreadRootParams{
+			CommentID:   parentID,
+			WorkspaceID: issue.WorkspaceID,
+		}); err == nil {
+			rootComment = &root
+		}
+	}
 
 	comment, err := h.Queries.CreateComment(r.Context(), db.CreateCommentParams{
 		IssueID:     issue.ID,
@@ -909,10 +919,11 @@ func (h *Handler) CreateComment(w http.ResponseWriter, r *http.Request) {
 		"issue_status":        issue.Status,
 	})
 
-	// A reply to a resolved direct parent re-opens that parent comment.
-	// Done after CreateComment commits so the reply is visible regardless of
-	// the unresolve outcome.
-	h.TaskService.AutoUnresolveCommentsOnReply(r.Context(), []*db.Comment{parentComment}, uuidToString(issue.WorkspaceID), authorType, authorID)
+	// A reply in a resolved thread re-opens it. Done after CreateComment commits
+	// so the reply is visible regardless of the unresolve outcome. Shared with
+	// the agent task path (TaskService.createAgentComment) — both reply paths
+	// must keep the resolved root in sync.
+	h.TaskService.AutoUnresolveThreadOnReply(r.Context(), rootComment, uuidToString(issue.WorkspaceID), authorType, authorID)
 
 	h.triggerTasksForComment(r.Context(), issue, comment, parentComment, authorType, authorID)
 
@@ -1387,7 +1398,10 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 // loadCommentForActor resolves a {commentId} URL param to a comment in the
 // caller's workspace. Returns the comment, the workspace UUID, the actor
 // identity, and ok. Resolve / unresolve handlers share this scaffolding so the
-// workspace membership and tenant guard stay identical for every comment row.
+// workspace membership + tenant guard stay identical. Any comment (root or
+// reply) may be resolved: resolving a root collapses the whole thread; resolving
+// a reply marks it as the thread's resolution. Which one is the thread's
+// resolution is a pure frontend derivation, so the backend stays a plain setter.
 func (h *Handler) loadCommentForActor(w http.ResponseWriter, r *http.Request) (db.Comment, string, string, string, bool) {
 	commentId := chi.URLParam(r, "commentId")
 	userID, ok := requireUserID(w, r)

@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/service"
-	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -123,20 +122,198 @@ func TestAutopilotRunOnlyTaskTerminalEventsUpdateRun(t *testing.T) {
 	}
 }
 
-// TestAutopilotDispatchParksWhenRuntimeOffline locks in the MUL-2863
-// durable-dispatch path. The cron tick must:
-//
-//  1. NOT record a `skipped` run when the runtime is offline — that would
-//     silently drop the cron for any user whose laptop is asleep at the
-//     scheduled time (the canonical bug from MUL-2863).
-//  2. Instead record a `pending_runtime` run with the runtime_id queued
-//     behind and a failure_reason that names the runtime-offline condition.
-//     The runtime-comes-online hook (covered by
-//     TestDispatchPendingRuntimeRunsForRuntime below) will pick this up.
-//  3. NEVER enqueue an agent_task_queue row while the runtime is offline —
-//     the MUL-1899 admission gate's other half ("stop piling doomed tasks
-//     onto the queue") still applies. Durable != "execute now anyway".
-func TestAutopilotDispatchParksWhenRuntimeOffline(t *testing.T) {
+// linkedIssueAutopilotFixture is the starting state every create_issue
+// linked-issue listener test shares: a dispatched create_issue run sitting in
+// issue_created with exactly one issue task that carries no autopilot_run_id
+// (so it must be reached via the issue_id lookup, not SyncRunFromTask).
+type linkedIssueAutopilotFixture struct {
+	taskSvc *service.TaskService
+	queries *db.Queries
+	run     *db.AutopilotRun
+	taskID  pgtype.UUID
+}
+
+// dispatchCreateIssueAutopilot creates an active create_issue autopilot,
+// dispatches it, and returns the linked run plus its single issue task.
+// Cleanup (autopilot, issue, tasks, comments) is registered on t.
+func dispatchCreateIssueAutopilot(t *testing.T, title string) linkedIssueAutopilotFixture {
+	t.Helper()
+	ctx := context.Background()
+	queries := db.New(testPool)
+	bus := events.New()
+	taskSvc := service.NewTaskService(queries, testPool, nil, bus)
+	autopilotSvc := service.NewAutopilotService(queries, testPool, bus, taskSvc)
+	registerAutopilotListeners(bus, autopilotSvc)
+
+	var agentID string
+	if err := testPool.QueryRow(ctx,
+		`SELECT id::text FROM agent WHERE workspace_id = $1 ORDER BY created_at ASC LIMIT 1`,
+		testWorkspaceID,
+	).Scan(&agentID); err != nil {
+		t.Fatalf("load fixture agent: %v", err)
+	}
+
+	ap, err := queries.CreateAutopilot(ctx, db.CreateAutopilotParams{
+		WorkspaceID:        parseUUID(testWorkspaceID),
+		Title:              title,
+		Description:        pgtype.Text{String: "VEN-661 / VEN-662 regression test", Valid: true},
+		AssigneeType:       "agent",
+		AssigneeID:         parseUUID(agentID),
+		Status:             "active",
+		ExecutionMode:      "create_issue",
+		IssueTitleTemplate: pgtype.Text{String: "Linked issue", Valid: true},
+		CreatedByType:      "member",
+		CreatedByID:        parseUUID(testUserID),
+	})
+	if err != nil {
+		t.Fatalf("CreateAutopilot: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM autopilot WHERE id = $1`, ap.ID)
+	})
+
+	run, err := autopilotSvc.DispatchAutopilot(ctx, ap, pgtype.UUID{}, "schedule", nil)
+	if err != nil {
+		t.Fatalf("DispatchAutopilot: %v", err)
+	}
+	if !run.IssueID.Valid {
+		t.Fatal("create_issue dispatch did not link an issue")
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM agent_task_queue WHERE issue_id = $1`, run.IssueID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM comment WHERE issue_id = $1`, run.IssueID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM issue WHERE id = $1`, run.IssueID)
+	})
+
+	tasks, err := queries.ListTasksByIssue(ctx, run.IssueID)
+	if err != nil {
+		t.Fatalf("ListTasksByIssue: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("expected one issue task, got %d", len(tasks))
+	}
+	if tasks[0].AutopilotRunID.Valid {
+		t.Fatal("create_issue issue task unexpectedly has autopilot_run_id; test must exercise linked issue lookup")
+	}
+	if run.Status != "issue_created" {
+		t.Fatalf("expected pre-failure run status issue_created, got %q", run.Status)
+	}
+
+	return linkedIssueAutopilotFixture{taskSvc: taskSvc, queries: queries, run: run, taskID: tasks[0].ID}
+}
+
+// runTaskWithBudget marks the issue task dispatched with the given attempt
+// budget and transitions it to running, mirroring the daemon claim → start
+// flow so FailTask sees a realistic row (and so the auto-retry budget is
+// whatever the test wants).
+func runTaskWithBudget(t *testing.T, queries *db.Queries, taskID pgtype.UUID, maxAttempts int) {
+	t.Helper()
+	if _, err := testPool.Exec(context.Background(),
+		`UPDATE agent_task_queue SET status = 'dispatched', dispatched_at = now(), max_attempts = $2 WHERE id = $1`,
+		taskID, maxAttempts,
+	); err != nil {
+		t.Fatalf("mark task dispatched: %v", err)
+	}
+	if _, err := queries.StartAgentTask(context.Background(), taskID); err != nil {
+		t.Fatalf("StartAgentTask: %v", err)
+	}
+}
+
+// TestAutopilotCreateIssueTaskNoProgressFailureUpdatesRun is the original
+// VEN-661 regression: a Codex no-progress failure with no retries left fails
+// the linked run.
+func TestAutopilotCreateIssueTaskNoProgressFailureUpdatesRun(t *testing.T) {
+	ctx := context.Background()
+	f := dispatchCreateIssueAutopilot(t, "Create-issue no-progress listener")
+
+	// max_attempts = 1 means the failed attempt has no retry budget left.
+	runTaskWithBudget(t, f.queries, f.taskID, 1)
+
+	const errMsg = "codex app-server no progress timeout after 30s"
+	if _, err := f.taskSvc.FailTask(ctx, f.taskID, errMsg, "", "", "codex_semantic_inactivity"); err != nil {
+		t.Fatalf("FailTask: %v", err)
+	}
+
+	updatedRun, err := f.queries.GetAutopilotRun(ctx, f.run.ID)
+	if err != nil {
+		t.Fatalf("GetAutopilotRun: %v", err)
+	}
+	if updatedRun.Status != "failed" {
+		t.Fatalf("expected run status failed, got %q", updatedRun.Status)
+	}
+	if !updatedRun.FailureReason.Valid || !strings.Contains(updatedRun.FailureReason.String, "no progress timeout") {
+		t.Fatalf("expected no-progress failure reason, got %+v", updatedRun.FailureReason)
+	}
+}
+
+// TestAutopilotCreateIssueTaskAgentErrorFailureUpdatesRun covers the VEN-662
+// generalization: an ordinary, non-retryable agent failure must also close the
+// linked run instead of leaving it stuck in issue_created.
+func TestAutopilotCreateIssueTaskAgentErrorFailureUpdatesRun(t *testing.T) {
+	ctx := context.Background()
+	f := dispatchCreateIssueAutopilot(t, "Create-issue agent-error listener")
+
+	runTaskWithBudget(t, f.queries, f.taskID, 1)
+
+	// agent_error is not in retryableReasons, so the first terminal failure is
+	// final — the run must fail carrying the agent's error text.
+	const errMsg = "build failed: ./pkg/foo: undefined: Bar"
+	if _, err := f.taskSvc.FailTask(ctx, f.taskID, errMsg, "", "", "agent_error"); err != nil {
+		t.Fatalf("FailTask: %v", err)
+	}
+
+	updatedRun, err := f.queries.GetAutopilotRun(ctx, f.run.ID)
+	if err != nil {
+		t.Fatalf("GetAutopilotRun: %v", err)
+	}
+	if updatedRun.Status != "failed" {
+		t.Fatalf("expected run status failed, got %q", updatedRun.Status)
+	}
+	if !updatedRun.FailureReason.Valid || !strings.Contains(updatedRun.FailureReason.String, "build failed") {
+		t.Fatalf("expected agent-error failure reason, got %+v", updatedRun.FailureReason)
+	}
+}
+
+// TestAutopilotCreateIssueTaskRetryPendingKeepsRunOpen locks in the wait guard:
+// when FailTask auto-retries a retryable failure (attempt budget remaining), an
+// active retry task still exists for the issue, so the run must stay open until
+// the final attempt resolves.
+func TestAutopilotCreateIssueTaskRetryPendingKeepsRunOpen(t *testing.T) {
+	ctx := context.Background()
+	f := dispatchCreateIssueAutopilot(t, "Create-issue retry-pending listener")
+
+	// max_attempts = 2 with attempt = 1 leaves budget for one auto-retry.
+	runTaskWithBudget(t, f.queries, f.taskID, 2)
+
+	// timeout is retryable, so FailTask enqueues a fresh attempt before it
+	// broadcasts the failure event.
+	if _, err := f.taskSvc.FailTask(ctx, f.taskID, "runtime went offline", "", "", "timeout"); err != nil {
+		t.Fatalf("FailTask: %v", err)
+	}
+
+	hasActive, err := f.queries.HasActiveTaskForIssue(ctx, f.run.IssueID)
+	if err != nil {
+		t.Fatalf("HasActiveTaskForIssue: %v", err)
+	}
+	if !hasActive {
+		t.Fatal("expected an active retry task for the issue after a retryable failure")
+	}
+
+	updatedRun, err := f.queries.GetAutopilotRun(ctx, f.run.ID)
+	if err != nil {
+		t.Fatalf("GetAutopilotRun: %v", err)
+	}
+	if updatedRun.Status != "issue_created" {
+		t.Fatalf("expected run to stay issue_created while a retry is pending, got %q", updatedRun.Status)
+	}
+}
+
+// TestAutopilotDispatchSkipsWhenRuntimeOffline locks in the MUL-1899
+// admission gate: when the assignee agent's runtime is not online we must
+// record a `skipped` autopilot_run with a failure_reason and NOT enqueue an
+// agent_task_queue row. This is the fix for "活跃 schedule 持续给离线 local
+// agent 入队".
+func TestAutopilotDispatchSkipsWhenRuntimeOffline(t *testing.T) {
 	ctx := context.Background()
 	queries := db.New(testPool)
 	bus := events.New()
@@ -150,7 +327,7 @@ func TestAutopilotDispatchParksWhenRuntimeOffline(t *testing.T) {
 		INSERT INTO agent_runtime (
 			workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at
 		)
-		VALUES ($1, NULL, 'Offline runtime', 'local', 'mul2863_offline_runtime', 'offline', '{}'::jsonb, '{}'::jsonb, now())
+		VALUES ($1, NULL, 'Offline runtime', 'local', 'mul1899_offline_runtime', 'offline', '{}'::jsonb, '{}'::jsonb, now())
 		RETURNING id::text
 	`, parseUUID(testWorkspaceID)).Scan(&runtimeID); err != nil {
 		t.Fatalf("create offline runtime: %v", err)
@@ -164,7 +341,7 @@ func TestAutopilotDispatchParksWhenRuntimeOffline(t *testing.T) {
 			workspace_id, name, description, runtime_mode, runtime_config,
 			runtime_id, visibility, max_concurrent_tasks, owner_id
 		)
-		VALUES ($1, 'mul2863-offline-agent', '', 'local', '{}'::jsonb, $2, 'workspace', 1, $3)
+		VALUES ($1, 'mul1899-offline-agent', '', 'local', '{}'::jsonb, $2, 'workspace', 1, $3)
 		RETURNING id::text
 	`, parseUUID(testWorkspaceID), runtimeID, parseUUID(testUserID)).Scan(&agentID); err != nil {
 		t.Fatalf("create offline agent: %v", err)
@@ -176,7 +353,7 @@ func TestAutopilotDispatchParksWhenRuntimeOffline(t *testing.T) {
 	ap, err := queries.CreateAutopilot(ctx, db.CreateAutopilotParams{
 		WorkspaceID:        parseUUID(testWorkspaceID),
 		Title:              "Offline-runtime autopilot",
-		Description:        pgtype.Text{String: "MUL-2863 durable dispatch test", Valid: true},
+		Description:        pgtype.Text{String: "MUL-1899 admission test", Valid: true},
 		AssigneeType:       "agent",
 		AssigneeID:         parseUUID(agentID),
 		Status:             "active",
@@ -199,29 +376,17 @@ func TestAutopilotDispatchParksWhenRuntimeOffline(t *testing.T) {
 	if run == nil {
 		t.Fatal("expected a run, got nil")
 	}
-	// MUL-2863: status is 'pending_runtime', not 'skipped'. The "the
-	// runtime is offline" admission outcome is durable: the run will
-	// be re-dispatched when the runtime/daemon comes back online.
-	if run.Status != "pending_runtime" {
-		t.Fatalf("expected run status 'pending_runtime', got %q", run.Status)
+	if run.Status != "skipped" {
+		t.Fatalf("expected run status 'skipped', got %q", run.Status)
 	}
 	if !run.FailureReason.Valid || !strings.Contains(run.FailureReason.String, "offline") {
 		t.Fatalf("expected failure reason mentioning 'offline', got %+v", run.FailureReason)
-	}
-	// pending_runtime_id must point at the runtime we're queued behind,
-	// so the runtime-comes-online hook can find this row.
-	if !run.PendingRuntimeID.Valid {
-		t.Fatalf("expected pending_runtime_id to be set, got invalid")
-	}
-	if run.PendingRuntimeID != parseUUID(runtimeID) {
-		t.Fatalf("expected pending_runtime_id=%s, got %s", runtimeID, util.UUIDToString(run.PendingRuntimeID))
 	}
 	if run.TaskID.Valid {
 		t.Fatalf("expected no task to be enqueued, got task_id %v", run.TaskID)
 	}
 
-	// Defensive: confirm at the DB layer that nothing landed on the queue
-	// (MUL-1899's "stop piling doomed tasks" half still applies).
+	// Defensive: confirm at the DB layer that nothing landed on the queue.
 	var taskCount int
 	if err := testPool.QueryRow(ctx,
 		`SELECT count(*) FROM agent_task_queue WHERE agent_id = $1`,
@@ -231,211 +396,6 @@ func TestAutopilotDispatchParksWhenRuntimeOffline(t *testing.T) {
 	}
 	if taskCount != 0 {
 		t.Fatalf("expected 0 queued tasks for offline-runtime agent, got %d", taskCount)
-	}
-}
-
-// TestDispatchPendingRuntimeRunsForRuntime exercises the runtime-comes-
-// online hook end-to-end (MUL-2863). The fixture parks a run with
-// status='pending_runtime' (via the same code path the cron scheduler
-// uses), then we flip the runtime to online and assert the run gets
-// dispatched through the standard create_issue / run_only branch —
-// moving to 'running' (run_only) or 'issue_created' (create_issue) and
-// landing a task in agent_task_queue.
-func TestDispatchPendingRuntimeRunsForRuntime(t *testing.T) {
-	ctx := context.Background()
-	queries := db.New(testPool)
-	bus := events.New()
-	taskSvc := service.NewTaskService(queries, testPool, nil, bus)
-	autopilotSvc := service.NewAutopilotService(queries, testPool, bus, taskSvc)
-
-	var runtimeID, agentID string
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO agent_runtime (
-			workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at
-		)
-		VALUES ($1, NULL, 'MUL-2863 hook runtime', 'local', 'mul2863_hook_runtime', 'offline', '{}'::jsonb, '{}'::jsonb, now())
-		RETURNING id::text
-	`, parseUUID(testWorkspaceID)).Scan(&runtimeID); err != nil {
-		t.Fatalf("create runtime: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM agent_runtime WHERE id = $1`, runtimeID)
-	})
-
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO agent (
-			workspace_id, name, description, runtime_mode, runtime_config,
-			runtime_id, visibility, max_concurrent_tasks, owner_id
-		)
-		VALUES ($1, 'mul2863-hook-agent', '', 'local', '{}'::jsonb, $2, 'workspace', 1, $3)
-		RETURNING id::text
-	`, parseUUID(testWorkspaceID), runtimeID, parseUUID(testUserID)).Scan(&agentID); err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM agent WHERE id = $1`, agentID)
-	})
-
-	ap, err := queries.CreateAutopilot(ctx, db.CreateAutopilotParams{
-		WorkspaceID:        parseUUID(testWorkspaceID),
-		Title:              "MUL-2863 durable-dispatch autopilot",
-		Description:        pgtype.Text{String: "Durable-dispatch hook test", Valid: true},
-		AssigneeType:       "agent",
-		AssigneeID:         parseUUID(agentID),
-		Status:             "active",
-		ExecutionMode:      "run_only",
-		IssueTitleTemplate: pgtype.Text{},
-		CreatedByType:      "member",
-		CreatedByID:        parseUUID(testUserID),
-	})
-	if err != nil {
-		t.Fatalf("CreateAutopilot: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM autopilot WHERE id = $1`, ap.ID)
-	})
-
-	// Park a run via the same path the cron scheduler uses.
-	run, err := autopilotSvc.DispatchAutopilot(ctx, ap, pgtype.UUID{}, "schedule", nil)
-	if err != nil {
-		t.Fatalf("DispatchAutopilot (offline): %v", err)
-	}
-	if run.Status != "pending_runtime" {
-		t.Fatalf("expected pending_runtime, got %q", run.Status)
-	}
-
-	// No task yet.
-	var taskCount int
-	if err := testPool.QueryRow(ctx,
-		`SELECT count(*) FROM agent_task_queue WHERE agent_id = $1`,
-		agentID,
-	).Scan(&taskCount); err != nil {
-		t.Fatalf("count tasks before hook: %v", err)
-	}
-	if taskCount != 0 {
-		t.Fatalf("expected 0 queued tasks before hook, got %d", taskCount)
-	}
-
-	// Flip the runtime to online. DispatchPendingRuntimeRunsForRuntime
-	// only fires when the runtime is online; the in-process hook from
-	// recordHeartbeat / DaemonRegister will then drain the queue.
-	if _, err := testPool.Exec(ctx, `UPDATE agent_runtime SET status = 'online' WHERE id = $1`, runtimeID); err != nil {
-		t.Fatalf("flip runtime online: %v", err)
-	}
-
-	if err := autopilotSvc.DispatchPendingRuntimeRunsForRuntime(ctx, parseUUID(runtimeID)); err != nil {
-		t.Fatalf("DispatchPendingRuntimeRunsForRuntime: %v", err)
-	}
-
-	// Run should now be in 'running' (run_only mode) with a task_id set.
-	updated, err := queries.GetAutopilotRun(ctx, run.ID)
-	if err != nil {
-		t.Fatalf("GetAutopilotRun: %v", err)
-	}
-	if updated.Status != "running" {
-		t.Fatalf("expected run status 'running' after dispatch, got %q", updated.Status)
-	}
-	if !updated.TaskID.Valid {
-		t.Fatalf("expected task_id to be set after dispatch")
-	}
-	// pending_runtime_id should be cleared so future ListPendingRuntimeAutopilotRunsForRuntime
-	// calls do not re-dispatch the same run.
-	if updated.PendingRuntimeID.Valid {
-		t.Fatalf("expected pending_runtime_id to be cleared after dispatch, got %s", util.UUIDToString(updated.PendingRuntimeID))
-	}
-
-	// And the task should have landed on agent_task_queue.
-	if err := testPool.QueryRow(ctx,
-		`SELECT count(*) FROM agent_task_queue WHERE agent_id = $1`,
-		agentID,
-	).Scan(&taskCount); err != nil {
-		t.Fatalf("count tasks after hook: %v", err)
-	}
-	if taskCount != 1 {
-		t.Fatalf("expected 1 queued task after hook, got %d", taskCount)
-	}
-}
-
-// TestDispatchPendingRuntimeRunsKeepsPendingWhenStillOffline locks in
-// the "still offline" branch of the runtime-comes-online hook. If the
-// runtime flipped offline again between the original parking and the
-// hook call, the run must stay in 'pending_runtime' rather than be
-// marked as a real failure (which would trigger the failure-rate auto-
-// pause monitor for a user who is just running their laptop in cycles).
-func TestDispatchPendingRuntimeRunsKeepsPendingWhenStillOffline(t *testing.T) {
-	ctx := context.Background()
-	queries := db.New(testPool)
-	bus := events.New()
-	taskSvc := service.NewTaskService(queries, testPool, nil, bus)
-	autopilotSvc := service.NewAutopilotService(queries, testPool, bus, taskSvc)
-
-	var runtimeID, agentID string
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO agent_runtime (
-			workspace_id, daemon_id, name, runtime_mode, provider, status, device_info, metadata, last_seen_at
-		)
-		VALUES ($1, NULL, 'MUL-2863 still-offline runtime', 'local', 'mul2863_stilloffline_runtime', 'offline', '{}'::jsonb, '{}'::jsonb, now())
-		RETURNING id::text
-	`, parseUUID(testWorkspaceID)).Scan(&runtimeID); err != nil {
-		t.Fatalf("create runtime: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM agent_runtime WHERE id = $1`, runtimeID)
-	})
-
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO agent (
-			workspace_id, name, description, runtime_mode, runtime_config,
-			runtime_id, visibility, max_concurrent_tasks, owner_id
-		)
-		VALUES ($1, 'mul2863-stilloffline-agent', '', 'local', '{}'::jsonb, $2, 'workspace', 1, $3)
-		RETURNING id::text
-	`, parseUUID(testWorkspaceID), runtimeID, parseUUID(testUserID)).Scan(&agentID); err != nil {
-		t.Fatalf("create agent: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM agent WHERE id = $1`, agentID)
-	})
-
-	ap, err := queries.CreateAutopilot(ctx, db.CreateAutopilotParams{
-		WorkspaceID:        parseUUID(testWorkspaceID),
-		Title:              "MUL-2863 still-offline autopilot",
-		Description:        pgtype.Text{String: "Runtime-comes-online hook still-offline branch", Valid: true},
-		AssigneeType:       "agent",
-		AssigneeID:         parseUUID(agentID),
-		Status:             "active",
-		ExecutionMode:      "run_only",
-		IssueTitleTemplate: pgtype.Text{},
-		CreatedByType:      "member",
-		CreatedByID:        parseUUID(testUserID),
-	})
-	if err != nil {
-		t.Fatalf("CreateAutopilot: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM autopilot WHERE id = $1`, ap.ID)
-	})
-
-	run, err := autopilotSvc.DispatchAutopilot(ctx, ap, pgtype.UUID{}, "schedule", nil)
-	if err != nil {
-		t.Fatalf("DispatchAutopilot: %v", err)
-	}
-
-	// The runtime is still offline in the DB; the hook should leave
-	// the run in 'pending_runtime' rather than fail it.
-	if err := autopilotSvc.DispatchPendingRuntimeRunsForRuntime(ctx, parseUUID(runtimeID)); err != nil {
-		t.Fatalf("DispatchPendingRuntimeRunsForRuntime: %v", err)
-	}
-
-	updated, err := queries.GetAutopilotRun(ctx, run.ID)
-	if err != nil {
-		t.Fatalf("GetAutopilotRun: %v", err)
-	}
-	if updated.Status != "pending_runtime" {
-		t.Fatalf("expected run to stay pending_runtime (runtime still offline), got %q", updated.Status)
-	}
-	if !updated.PendingRuntimeID.Valid {
-		t.Fatalf("expected pending_runtime_id to remain set, got invalid")
 	}
 }
 
@@ -521,13 +481,7 @@ func TestManualTriggerDoesNotErrorOnPostAdmissionSkip(t *testing.T) {
 	if run == nil {
 		t.Fatal("expected a run, got nil")
 	}
-	// MUL-2863: a runtime-offline admission outcome is now durable
-	// ('pending_runtime'), not a terminal 'skipped'. The same property
-	// the original PR #2888 fix #2 cared about (no 500 on the manual
-	// trigger) still holds: the function returns (run, nil), the UI
-	// surfaces "Waiting for agent runtime to come online", and the
-	// run will be re-dispatched when the runtime comes back.
-	if run.Status != "pending_runtime" {
-		t.Fatalf("expected run status 'pending_runtime', got %q", run.Status)
+	if run.Status != "skipped" {
+		t.Fatalf("expected run status 'skipped', got %q", run.Status)
 	}
 }

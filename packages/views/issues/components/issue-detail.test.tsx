@@ -200,8 +200,6 @@ const mockApiObj = vi.hoisted(() => ({
   createComment: vi.fn(),
   updateComment: vi.fn(),
   deleteComment: vi.fn(),
-  resolveComment: vi.fn(),
-  unresolveComment: vi.fn(),
   deleteIssue: vi.fn(),
   updateIssue: vi.fn(),
   listIssueSubscribers: vi.fn().mockResolvedValue([]),
@@ -305,11 +303,14 @@ vi.mock("@multica/core/issues/stores", () => ({
 // compute a 0-height viewport and render nothing. The mock renders every item
 // inline so id="comment-..." nodes are always present in the DOM — this
 // matches the production cold-path where `initialItemCount` force-mounts
-// items[0..targetIdx], giving the native scrollIntoView a real target.
+// items[0..targetIdx], giving the deep-link effect a real target node.
 //
-// scrollIntoViewSpy: we spy on Element.prototype.scrollIntoView (jsdom no-ops
-// it by default) so tests can assert the deep-link effect dispatched a
-// native scroll on the target node.
+// scrollIntoViewSpy: the deep-link effect no longer calls native
+// scrollIntoView (it drives the timeline container's scrollTop directly to
+// avoid scrolling ancestor overflow:hidden boxes — see issue-detail.tsx). We
+// keep a no-op stub on the prototype so any stray scrollIntoView call from
+// other components doesn't throw; deep-link tests assert the highlight ring
+// instead, which is mechanism-independent and observable without layout.
 const scrollIntoViewSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("react-virtuoso", () => ({
@@ -319,7 +320,8 @@ vi.mock("react-virtuoso", () => ({
   ) {
     useImperativeHandle(ref, () => ({
       // Real Virtuoso ref methods are not exercised by tests in this file
-      // since the cold-path uses native scrollIntoView on the DOM node.
+      // since the deep-link cold-path drives the container's scrollTop on the
+      // real DOM node, not Virtuoso's imperative API.
       scrollIntoView: vi.fn(),
       scrollToIndex: vi.fn(),
     }));
@@ -504,8 +506,6 @@ describe("IssueDetail (shared)", () => {
     mockApiObj.listIssues.mockResolvedValue({ issues: [], total: 0 });
     mockApiObj.getActiveTasksForIssue.mockResolvedValue({ tasks: [] });
     mockApiObj.listTasksByIssue.mockResolvedValue([]);
-    mockApiObj.resolveComment.mockResolvedValue({ ...mockTimeline[0], issue_id: "issue-1" });
-    mockApiObj.unresolveComment.mockResolvedValue({ ...mockTimeline[0], issue_id: "issue-1" });
     mockApiObj.listMembers.mockResolvedValue([
       { user_id: "user-1", name: "Test User", email: "test@test.com", role: "admin" },
     ]);
@@ -533,84 +533,6 @@ describe("IssueDetail (shared)", () => {
     });
 
     expect(screen.getByDisplayValue("Add JWT auth to the backend")).toBeInTheDocument();
-  });
-
-  it("folds only a resolved root comment and keeps its unresolved replies visible", async () => {
-    mockApiObj.listTimeline.mockResolvedValue([
-      {
-        type: "comment",
-        id: "root-resolved",
-        actor_type: "member",
-        actor_id: "user-1",
-        content: "Resolved root content",
-        parent_id: null,
-        created_at: "2026-01-18T00:00:00Z",
-        updated_at: "2026-01-18T00:00:00Z",
-        comment_type: "comment",
-        resolved_at: "2026-01-19T00:00:00Z",
-      },
-      {
-        type: "comment",
-        id: "reply-open",
-        actor_type: "member",
-        actor_id: "user-1",
-        content: "Unresolved reply stays visible",
-        parent_id: "root-resolved",
-        created_at: "2026-01-18T01:00:00Z",
-        updated_at: "2026-01-18T01:00:00Z",
-        comment_type: "comment",
-      },
-    ] as TimelineEntry[]);
-
-    renderIssueDetail();
-
-    await waitFor(() => {
-      expect(screen.getByText("1 resolved comment from Test User")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("Resolved root content")).not.toBeInTheDocument();
-    expect(screen.getByText("Unresolved reply stays visible")).toBeInTheDocument();
-  });
-
-  it("folds a resolved reply independently and expands it in place", async () => {
-    mockApiObj.listTimeline.mockResolvedValue([
-      {
-        type: "comment",
-        id: "root-open",
-        actor_type: "member",
-        actor_id: "user-1",
-        content: "Open root content",
-        parent_id: null,
-        created_at: "2026-01-18T00:00:00Z",
-        updated_at: "2026-01-18T00:00:00Z",
-        comment_type: "comment",
-      },
-      {
-        type: "comment",
-        id: "reply-resolved",
-        actor_type: "member",
-        actor_id: "user-1",
-        content: "Resolved reply content",
-        parent_id: "root-open",
-        created_at: "2026-01-18T01:00:00Z",
-        updated_at: "2026-01-18T01:00:00Z",
-        comment_type: "comment",
-        resolved_at: "2026-01-19T00:00:00Z",
-      },
-    ] as TimelineEntry[]);
-
-    renderIssueDetail();
-
-    await waitFor(() => {
-      expect(screen.getByText("Open root content")).toBeInTheDocument();
-    });
-    const foldedReply = screen.getByText("1 resolved comment from Test User");
-    expect(screen.queryByText("Resolved reply content")).not.toBeInTheDocument();
-
-    fireEvent.click(foldedReply);
-
-    await waitFor(() => {
-      expect(screen.getByText("Resolved reply content")).toBeInTheDocument();
-    });
   });
 
   it("renders the issue title leaf as a link to the issue detail page", async () => {
@@ -1056,22 +978,23 @@ describe("IssueDetail (shared)", () => {
         ).not.toBeNull();
       });
 
-      // The deep-link useLayoutEffect calls native scrollIntoView on the
-      // target node ({block: 'center'}).
+      // The deep-link effect lands on AND highlights the target comment: it
+      // drives the timeline container's scrollTop directly (jsdom has no
+      // layout, so the scroll itself isn't observable here) and applies the
+      // brand highlight ring. Assert the user-facing highlight.
       await waitFor(() => {
-        expect(scrollIntoViewSpy).toHaveBeenCalled();
+        expect(
+          document.getElementById("comment-comment-2")?.querySelector(".ring-2"),
+        ).not.toBeNull();
       });
-      expect(scrollIntoViewSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ block: "center" }),
-      );
     });
 
     it("still scrolls when the timeline is ready before the issue (regression for inbox click)", async () => {
       // Reproduces the inbox-click race: timeline data is in the cache
       // before the issue resolves. While loading is true, IssueDetail
-      // renders the loading skeleton (Virtuoso never mounts), so no
-      // scroll can fire. After the issue resolves, Virtuoso mounts and
-      // the useLayoutEffect dispatches the native scroll.
+      // renders the loading skeleton (the timeline never mounts), so no
+      // scroll/highlight can fire. After the issue resolves, the timeline
+      // mounts and the deep-link effect lands on + highlights the comment.
       let resolveIssue: (value: Issue) => void = () => {};
       const issuePromise = new Promise<Issue>((resolve) => {
         resolveIssue = resolve;
@@ -1083,7 +1006,8 @@ describe("IssueDetail (shared)", () => {
       expect(
         document.getElementById("comment-comment-2"),
       ).toBeNull();
-      expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+      // Nothing highlighted while the loading skeleton is up.
+      expect(document.querySelector(".ring-2")).toBeNull();
 
       resolveIssue(mockIssue);
 
@@ -1093,14 +1017,19 @@ describe("IssueDetail (shared)", () => {
         ).not.toBeNull();
       });
       await waitFor(() => {
-        expect(scrollIntoViewSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ block: "center" }),
-        );
+        expect(
+          document.getElementById("comment-comment-2")?.querySelector(".ring-2"),
+        ).not.toBeNull();
       });
     });
 
-    it("auto-expands a folded resolved comment when it is the deep-link target", async () => {
-      const timelineWithResolvedComment: TimelineEntry[] = [
+    it("auto-expands a folded resolved thread when deep-link target is a reply inside it", async () => {
+      // Seed a timeline where comment-3 is resolved (so it renders as a
+      // resolved-bar by default) and has a reply, reply-1, whose id is the
+      // deep-link target. The reply is not in the flat items array — only
+      // the resolved-bar root is. The effect must detect this, expand the
+      // thread, then on re-run scroll to the reply's id="comment-reply-1" node.
+      const timelineWithResolvedThread: TimelineEntry[] = [
         ...mockTimeline,
         {
           type: "comment",
@@ -1119,31 +1048,37 @@ describe("IssueDetail (shared)", () => {
           id: "reply-1",
           actor_type: "member",
           actor_id: "user-1",
-          content: "Reply inside resolved comment group",
+          content: "Reply inside resolved thread",
           parent_id: "comment-3",
           created_at: "2026-01-18T01:00:00Z",
           updated_at: "2026-01-18T01:00:00Z",
           comment_type: "comment",
         } as TimelineEntry,
       ];
-      mockApiObj.listTimeline.mockResolvedValue(timelineWithResolvedComment);
+      mockApiObj.listTimeline.mockResolvedValue(timelineWithResolvedThread);
 
       const queryClient = createTestQueryClient();
       render(
         <I18nProvider locale="en" resources={TEST_RESOURCES}>
           <QueryClientProvider client={queryClient}>
-            <IssueDetail issueId="issue-1" highlightCommentId="comment-3" />
+            <IssueDetail issueId="issue-1" highlightCommentId="reply-1" />
           </QueryClientProvider>
         </I18nProvider>,
       );
 
+      // After expansion, the reply must appear in the DOM (inside the now
+      // -unfolded CommentCard) and the deep-link effect must land on + highlight
+      // it. The reply highlight renders as a computed bg tint on its row (see
+      // CommentCard's reply branch), so assert the row carries the brand tint.
       await waitFor(() => {
-        expect(screen.getByText("Resolved root")).toBeInTheDocument();
+        expect(
+          document.getElementById("comment-reply-1"),
+        ).not.toBeNull();
       });
       await waitFor(() => {
-        expect(scrollIntoViewSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ block: "center" }),
-        );
+        expect(
+          document.getElementById("comment-reply-1")?.className,
+        ).toContain("bg-[color-mix(in_srgb,var(--card)_95%,var(--brand)_5%)]");
       });
     });
   });
