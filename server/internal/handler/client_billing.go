@@ -198,6 +198,26 @@ func (h *Handler) requireBillingEditor(w http.ResponseWriter, r *http.Request, w
 	return member.UserID, true
 }
 
+// --- JSON shaping ---
+
+// clientBillingChargeJSON re-types the snapshot's raw JSONB bytes so they
+// serialize as the JSON array they are — a bare []byte field would be
+// marshaled as base64 by encoding/json. The outer Usage (shallower depth)
+// wins over the embedded row's field of the same JSON name.
+type clientBillingChargeJSON struct {
+	db.GetClientBillingChargeByIssueRow
+	Usage json.RawMessage `json:"usage"`
+}
+
+func chargeJSON(row db.GetClientBillingChargeByIssueRow) clientBillingChargeJSON {
+	return clientBillingChargeJSON{row, json.RawMessage(row.Usage)}
+}
+
+type clientBillingChargeListJSON struct {
+	db.ListClientBillingChargesByProjectRow
+	Usage json.RawMessage `json:"usage"`
+}
+
 // --- Project billing config ---
 
 type clientBillingConfigRequest struct {
@@ -399,7 +419,11 @@ func (h *Handler) ListProjectBillingCharges(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "failed to list charges")
 		return
 	}
-	writeJSON(w, http.StatusOK, charges)
+	resp := make([]clientBillingChargeListJSON, 0, len(charges))
+	for _, c := range charges {
+		resp = append(resp, clientBillingChargeListJSON{c, json.RawMessage(c.Usage)})
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // --- Issue billing charge ---
@@ -419,7 +443,7 @@ func (h *Handler) GetIssueBillingCharge(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to load billing charge")
 		return
 	}
-	writeJSON(w, http.StatusOK, charge)
+	writeJSON(w, http.StatusOK, chargeJSON(charge))
 }
 
 // ConfirmIssueBillingCharge moves a draft charge to confirmed, recording the
@@ -446,7 +470,7 @@ func (h *Handler) ConfirmIssueBillingCharge(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	slog.Info("billing: charge confirmed", "issue_id", uuidToString(issue.ID), "price_rub", charge.PriceRub)
-	writeJSON(w, http.StatusOK, charge)
+	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
 }
 
 // VoidIssueBillingCharge cancels a charge (draft or confirmed) so it never
@@ -468,7 +492,7 @@ func (h *Handler) VoidIssueBillingCharge(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to void charge")
 		return
 	}
-	writeJSON(w, http.StatusOK, charge)
+	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
 }
 
 type adjustChargeRequest struct {
@@ -513,5 +537,5 @@ func (h *Handler) AdjustIssueBillingCharge(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	slog.Info("billing: charge adjusted", "issue_id", uuidToString(issue.ID), "price_rub", charge.PriceRub, "reason", req.Reason)
-	writeJSON(w, http.StatusOK, charge)
+	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
 }
