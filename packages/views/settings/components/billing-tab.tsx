@@ -11,7 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
-import { api } from "@multica/core/api";
+import { api, ApiError } from "@multica/core/api";
 import type { ClientBillingWorkspaceConfigUpdate } from "@multica/core/types";
 import { useT } from "../../i18n";
 
@@ -153,7 +153,13 @@ export function BillingTab() {
         <p className="mt-1 text-xs text-muted-foreground">{t(($) => $.billing.elba_description)}</p>
         {orgsQuery.isError ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            {t(($) => $.billing.elba_unavailable)}
+            {/* 503 = ELBA_API_KEY missing on the server; anything else is a
+                live upstream failure — show it instead of blaming the key. */}
+            {orgsQuery.error instanceof ApiError && orgsQuery.error.status === 503
+              ? t(($) => $.billing.elba_unavailable)
+              : t(($) => $.billing.elba_error, {
+                  error: orgsQuery.error instanceof Error ? orgsQuery.error.message : "",
+                })}
           </p>
         ) : (
           <div className="mt-4 flex flex-col gap-4">

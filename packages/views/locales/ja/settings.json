@@ -396,6 +396,7 @@
     "elba_bank_account_none": "Not selected",
     "save": "Save",
     "saved_toast": "Billing settings saved",
-    "save_failed_toast": "Failed to save billing settings"
+    "save_failed_toast": "Failed to save billing settings",
+    "elba_error": "Elba request failed: {{error}}"
   }
 }
