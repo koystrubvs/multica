@@ -12,6 +12,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,10 +41,18 @@ func newElbaClient() (*elbaClient, error) {
 	if base == "" {
 		base = elbaDefaultBaseURL
 	}
+	// api.kontur.ru sits behind a WAF that (empirically, 2026-06-11) RSTs
+	// h2 streams (curl: PROTOCOL_ERROR; Go: hang awaiting headers) and drops
+	// requests from non-allowlisted clients, while python-requests — what the
+	// proven Plane integration uses — passes. Force HTTP/1.1 and present the
+	// same client identity.
+	transport := &http.Transport{
+		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
+	}
 	return &elbaClient{
 		baseURL: base,
 		apiKey:  key,
-		http:    &http.Client{Timeout: 15 * time.Second},
+		http:    &http.Client{Timeout: 15 * time.Second, Transport: transport},
 	}, nil
 }
 
@@ -63,6 +72,9 @@ func (c *elbaClient) do(ctx context.Context, method, path string, payload any) (
 	req.Header.Set("X-Kontur-Apikey", c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	// Mirror the client identity of the working Plane integration; the
+	// default Go-http-client UA is a common WAF block target.
+	req.Header.Set("User-Agent", "python-requests/2.32.3")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
