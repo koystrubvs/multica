@@ -234,6 +234,17 @@
     "period_status_open": "Открыт",
     "period_status_closed": "Закрыт",
     "period_status_invoiced": "Выставлен счёт",
-    "period_status_paid": "Оплачен"
+    "period_status_paid": "Оплачен",
+    "inherit_hint": "Пустое поле = наследуется из настроек воркспейса (значение в плейсхолдере).",
+    "elba_contractor": "Контрагент в Эльбе",
+    "elba_contractor_none": "Не привязан (без автосчёта)",
+    "elba_contractor_hint": "При закрытии периода для этого контрагента автоматически создаются счёт и акт.",
+    "elba_bank_account": "Расчётный счёт для проекта",
+    "elba_bank_account_default": "По умолчанию из настроек воркспейса",
+    "elba_org_missing_hint": "Для автосчёта выбери организацию Эльбы в Настройки -> Биллинг.",
+    "create_invoice": "Выставить счёт",
+    "period_invoiced_toast": "Период закрыт, счёт и акт созданы в Эльбе",
+    "elba_push_failed_toast": "Не удалось выставить счёт в Эльбе: {{error}}",
+    "elba_invoice_ref": "Счёт в Эльбе: {{id}}"
   }
 }

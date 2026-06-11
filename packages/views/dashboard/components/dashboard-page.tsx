@@ -370,6 +370,9 @@ export function DashboardPage() {
                 <KpiCard
                   label={t(($) => $.kpi.cost_label, { days })}
                   value={formatRub(totals.cost)}
+                  hint={t(($) => $.kpi.cost_nocache_hint, {
+                    value: formatRub(totals.nocacheCost),
+                  })}
                 />
                 <KpiCard
                   label={t(($) => $.kpi.tokens_label, { days })}
@@ -665,6 +668,21 @@ function Leaderboard({
     return sortedRows.reduce((m, r) => Math.max(m, metric(r)), 0);
   }, [sortedRows, sortBy]);
 
+  // Window totals across every agent — the leaderboard footer.
+  const columnTotals = useMemo(
+    () =>
+      rows.reduce(
+        (a, r) => ({
+          tokens: a.tokens + r.tokens,
+          cost: a.cost + r.cost,
+          seconds: a.seconds + r.seconds,
+          taskCount: a.taskCount + r.taskCount,
+        }),
+        { tokens: 0, cost: 0, seconds: 0, taskCount: 0 },
+      ),
+    [rows],
+  );
+
   // Active column gets foreground text; others stay muted. Helps the user
   // see "this is what the bar is measuring" at a glance.
   const colClass = (key: LeaderboardSort) =>
@@ -745,6 +763,16 @@ function Leaderboard({
                 </div>
               );
             })}
+          </div>
+          {/* Totals footer — same grid as the rows so the numbers line up
+              under their columns. */}
+          <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_5rem_5rem_5rem_4rem] items-center gap-3 border-t px-4 py-2 bg-muted/30">
+            <span className="text-xs font-semibold">{t(($) => $.leaderboard.total_label)}</span>
+            <span />
+            <span className="text-right text-xs font-semibold tabular-nums">{formatTokens(columnTotals.tokens)}</span>
+            <span className="text-right text-xs font-semibold tabular-nums">{formatRub(columnTotals.cost)}</span>
+            <span className="text-right text-xs font-semibold tabular-nums">{formatDuration(columnTotals.seconds, lessThanMinuteLabel)}</span>
+            <span className="text-right text-xs font-semibold tabular-nums">{columnTotals.taskCount}</span>
           </div>
         </>
       )}

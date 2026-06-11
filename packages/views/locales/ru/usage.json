@@ -13,7 +13,8 @@
     "run_time_label": "Время выполнения · {{days}}д",
     "run_time_hint": "По {{tasks}} task",
     "tasks_label": "Tasks · {{days}}д",
-    "tasks_hint": "{{failed}} с ошибкой"
+    "tasks_hint": "{{failed}} с ошибкой",
+    "cost_nocache_hint": "без кэша (для клиента): {{value}}"
   },
   "dim": {
     "label": "Размерность",
@@ -46,7 +47,8 @@
     "header_cost": "Стоимость",
     "header_time": "Время",
     "header_tasks": "Tasks",
-    "no_data": "Нет активности агентов в этом окне."
+    "no_data": "Нет активности агентов в этом окне.",
+    "total_label": "Итого"
   },
   "empty": {
     "title": "Пока нет использования",

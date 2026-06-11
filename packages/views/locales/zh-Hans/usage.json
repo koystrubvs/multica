@@ -13,7 +13,8 @@
     "run_time_label": "运行时长 · {{days}}天",
     "run_time_hint": "共 {{tasks}} 个任务",
     "tasks_label": "任务数 · {{days}}天",
-    "tasks_hint": "失败 {{failed}} 个"
+    "tasks_hint": "失败 {{failed}} 个",
+    "cost_nocache_hint": "no-cache (client base): {{value}}"
   },
   "dim": {
     "label": "维度",
@@ -46,7 +47,8 @@
     "header_cost": "费用",
     "header_time": "运行时长",
     "header_tasks": "任务数",
-    "no_data": "所选时间范围内暂无智能体活动。"
+    "no_data": "所选时间范围内暂无智能体活动。",
+    "total_label": "Total"
   },
   "empty": {
     "title": "暂无消耗数据",

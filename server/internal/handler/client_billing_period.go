@@ -414,7 +414,140 @@ func (h *Handler) CloseBillingPeriod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("billing: period closed", "period_id", uuidToString(closed.ID), "total_rub", closed.TotalRub)
-	writeJSON(w, http.StatusOK, closed)
+
+	// Auto-invoice: when the project is wired to an Elba contractor (and the
+	// workspace to an organization), closing immediately creates the счёт +
+	// акт. Failure keeps the period `closed` — the UI can retry via the
+	// explicit /invoice endpoint.
+	resp := map[string]any{"period": closed}
+	if invoiced, pushErr := h.pushPeriodToElba(r.Context(), project, db.GetClientBillingPeriodInProjectRow(closed)); pushErr == nil {
+		resp["period"] = invoiced
+	} else if !errors.Is(pushErr, errElbaSkipped) {
+		slog.Warn("billing: elba auto-invoice failed", "period_id", uuidToString(closed.ID), "error", pushErr)
+		resp["elba_error"] = pushErr.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// errElbaSkipped marks "not configured for this project" — a normal state,
+// not an error to surface.
+var errElbaSkipped = errors.New("elba push skipped: not configured")
+
+// pushPeriodToElba creates the счёт + акт for a closed period and flips it
+// to `invoiced`. One warehouse line per confirmed charge; in subscription
+// mode a negative «Скидка по абонементу» line caps the bill at the fixed fee
+// while still showing the full delivered value (same trick Plane used).
+func (h *Handler) pushPeriodToElba(ctx context.Context, project db.Project, period db.GetClientBillingPeriodInProjectRow) (db.SetClientBillingPeriodElbaRow, error) {
+	var zero db.SetClientBillingPeriodElbaRow
+	cfg, err := h.Queries.GetClientBillingConfig(ctx, project.ID)
+	if err != nil || !cfg.ElbaContractorID.Valid {
+		return zero, errElbaSkipped
+	}
+	wsCfg, err := h.Queries.GetClientBillingWorkspaceConfig(ctx, project.WorkspaceID)
+	if err != nil || !wsCfg.ElbaOrgID.Valid {
+		return zero, errElbaSkipped
+	}
+	client, err := newElbaClient()
+	if errors.Is(err, errElbaNotConfigured) {
+		return zero, errElbaSkipped
+	}
+	if err != nil {
+		return zero, err
+	}
+
+	charges, err := h.Queries.ListClientBillingChargesByPeriod(ctx, period.ID)
+	if err != nil {
+		return zero, err
+	}
+	items := make([]elbaDocItem, 0, len(charges))
+	var total float64
+	for _, c := range charges {
+		if c.Status != "confirmed" {
+			continue
+		}
+		items = append(items, elbaDocItem{Name: c.IssueTitle, Quantity: 1, Price: c.PriceRub, Unit: "усл"})
+		total += c.PriceRub
+	}
+	if len(items) == 0 {
+		return zero, errors.New("period has no confirmed charges to invoice")
+	}
+
+	opts := elbaDocOptions{
+		Date: time.Now().UTC().Format("2006-01-02"),
+		Comment: fmt.Sprintf("%s: работы за период %s — %s", project.Title,
+			period.StartsOn.Time.Format("02.01.2006"), period.EndsOn.Time.Format("02.01.2006")),
+	}
+	if cfg.ElbaBankAccountID.Valid {
+		opts.BankAccountID = cfg.ElbaBankAccountID.String
+	} else if wsCfg.ElbaBankAccountID.Valid {
+		opts.BankAccountID = wsCfg.ElbaBankAccountID.String
+	}
+	// Subscription: bill the fixed fee — full work list + negative discount line.
+	if cfg.Mode == "subscription" && cfg.SubscriptionFeeRub > 0 && total > cfg.SubscriptionFeeRub {
+		items = append(items, elbaDocItem{
+			Name:     "Скидка по абонементу",
+			Quantity: 1,
+			Price:    -(total - cfg.SubscriptionFeeRub),
+			Unit:     "шт",
+		})
+		opts.WithDiscount = true
+	}
+
+	orgID := wsCfg.ElbaOrgID.String
+	contractorID := cfg.ElbaContractorID.String
+	billID, err := client.CreateBill(ctx, orgID, contractorID, items, opts)
+	if err != nil {
+		return zero, fmt.Errorf("create bill: %w", err)
+	}
+	actID, err := client.CreateAct(ctx, orgID, contractorID, items, opts)
+	if err != nil {
+		// The bill exists — still record it so a retry doesn't duplicate it.
+		slog.Error("billing: elba act creation failed after bill", "period_id", uuidToString(period.ID), "bill_id", billID, "error", err)
+	}
+	updated, uerr := h.Queries.SetClientBillingPeriodElba(ctx, db.SetClientBillingPeriodElbaParams{
+		ID:        period.ID,
+		InvoiceID: pgtype.Text{String: billID, Valid: billID != ""},
+		ActID:     pgtype.Text{String: actID, Valid: actID != ""},
+	})
+	if uerr != nil {
+		return zero, fmt.Errorf("record elba documents: %w", uerr)
+	}
+	if err != nil {
+		return updated, fmt.Errorf("act creation failed (bill %s created): %w", billID, err)
+	}
+	slog.Info("billing: period invoiced in Elba",
+		"period_id", uuidToString(period.ID), "bill_id", billID, "act_id", actID, "total_rub", total)
+	return updated, nil
+}
+
+// InvoiceBillingPeriod pushes a closed period to Elba on demand (retry path
+// for failed auto-invoicing, or when the contractor was linked after close).
+func (h *Handler) InvoiceBillingPeriod(w http.ResponseWriter, r *http.Request) {
+	project, ok := h.loadProjectForBilling(w, r)
+	if !ok {
+		return
+	}
+	if _, ok := h.requireBillingEditor(w, r, uuidToString(project.WorkspaceID)); !ok {
+		return
+	}
+	period, ok := h.loadPeriodForProject(w, r, project.ID)
+	if !ok {
+		return
+	}
+	if period.Status != "closed" {
+		writeError(w, http.StatusConflict, "only closed periods can be invoiced")
+		return
+	}
+	invoiced, err := h.pushPeriodToElba(r.Context(), project, period)
+	if errors.Is(err, errElbaSkipped) {
+		writeError(w, http.StatusBadRequest, "Elba is not configured: link a contractor in the project and an organization in workspace billing settings")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"period": invoiced})
 }
 
 // ReopenBillingPeriod reverts a closed (not yet paid) period to open.

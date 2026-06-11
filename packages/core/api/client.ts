@@ -49,6 +49,9 @@ import type {
   ClientBillingConfigUpdate,
   ClientBillingPeriod,
   ClientBillingCurrentPeriod,
+  ClientBillingWorkspaceConfig,
+  ClientBillingWorkspaceConfigUpdate,
+  ElbaEntity,
   RuntimeHourlyActivity,
   RuntimeUsageByAgent,
   RuntimeUsageByHour,
@@ -1439,8 +1442,45 @@ export class ApiClient {
     return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/charges`);
   }
 
-  async closeBillingPeriod(projectId: string, periodId: string): Promise<ClientBillingPeriod> {
+  /** Closing auto-invoices into Elba when the project has a contractor;
+   *  elba_error carries the push failure (period stays closed, retryable). */
+  async closeBillingPeriod(
+    projectId: string,
+    periodId: string,
+  ): Promise<{ period: ClientBillingPeriod; elba_error?: string }> {
     return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/close`, { method: "POST" });
+  }
+
+  async invoiceBillingPeriod(
+    projectId: string,
+    periodId: string,
+  ): Promise<{ period: ClientBillingPeriod }> {
+    return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/invoice`, { method: "POST" });
+  }
+
+  async getWorkspaceBillingConfig(): Promise<ClientBillingWorkspaceConfig> {
+    return this.fetch(`/api/billing/workspace-config`);
+  }
+
+  async putWorkspaceBillingConfig(
+    update: ClientBillingWorkspaceConfigUpdate,
+  ): Promise<ClientBillingWorkspaceConfig> {
+    return this.fetch(`/api/billing/workspace-config`, {
+      method: "PUT",
+      body: JSON.stringify(update),
+    });
+  }
+
+  async getElbaOrganizations(): Promise<ElbaEntity[]> {
+    return this.fetch(`/api/billing/elba/organizations`);
+  }
+
+  async getElbaContractors(orgId: string): Promise<ElbaEntity[]> {
+    return this.fetch(`/api/billing/elba/contractors?org_id=${encodeURIComponent(orgId)}`);
+  }
+
+  async getElbaBankAccounts(orgId: string): Promise<ElbaEntity[]> {
+    return this.fetch(`/api/billing/elba/bank-accounts?org_id=${encodeURIComponent(orgId)}`);
   }
 
   async reopenBillingPeriod(projectId: string, periodId: string): Promise<ClientBillingPeriod> {

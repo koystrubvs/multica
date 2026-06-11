@@ -1,19 +1,31 @@
--- client_billing.sql — agency-side client billing (see migration 120).
+-- client_billing.sql — agency-side client billing (see migrations 120/122).
 -- All NUMERIC columns are cast to/from float8 at the query boundary so the
 -- generated Go code works in float64 instead of pgtype.Numeric. Precision is
--- fine for this domain: prices are rubles rounded to a 50₽ step.
+-- fine for this domain: prices are rubles rounded to a 50-RUB step.
+--
+-- Since migration 122 the four pricing knobs (markup, min_price_rub,
+-- rounding_rub, fx_markup_percent) are NULLable on the project config — NULL
+-- means "inherit the workspace default". sqlc can't express nullable float8
+-- outputs cleanly, so each knob crosses the boundary as a (value, *_set)
+-- pair: COALESCE(x, 0) + (x IS NOT NULL).
 
 -- name: GetClientBillingConfig :one
 SELECT
     project_id, enabled, mode,
-    markup::float8            AS markup,
-    min_price_rub::float8     AS min_price_rub,
-    rounding_rub::float8      AS rounding_rub,
-    fx_markup_percent::float8 AS fx_markup_percent,
+    (markup IS NOT NULL)::bool            AS markup_set,
+    COALESCE(markup, 0)::float8           AS markup,
+    (min_price_rub IS NOT NULL)::bool     AS min_price_rub_set,
+    COALESCE(min_price_rub, 0)::float8    AS min_price_rub,
+    (rounding_rub IS NOT NULL)::bool      AS rounding_rub_set,
+    COALESCE(rounding_rub, 0)::float8     AS rounding_rub,
+    (fx_markup_percent IS NOT NULL)::bool AS fx_markup_percent_set,
+    COALESCE(fx_markup_percent, 0)::float8 AS fx_markup_percent,
     COALESCE(budget_rub, 0)::float8 AS budget_rub,
     COALESCE(subscription_fee_rub, 0)::float8 AS subscription_fee_rub,
     COALESCE(fair_use_rub, 0)::float8 AS fair_use_rub,
-    period_months, anchor_day, created_at, updated_at
+    period_months, anchor_day,
+    elba_contractor_id, elba_bank_account_id,
+    created_at, updated_at
 FROM client_billing_config
 WHERE project_id = @project_id;
 
@@ -21,15 +33,21 @@ WHERE project_id = @project_id;
 INSERT INTO client_billing_config (
     project_id, enabled, mode, markup, min_price_rub, rounding_rub,
     fx_markup_percent, budget_rub, subscription_fee_rub, fair_use_rub,
-    period_months, anchor_day, updated_at
+    period_months, anchor_day, elba_contractor_id, elba_bank_account_id,
+    updated_at
 ) VALUES (
     @project_id, @enabled, @mode,
-    @markup::float8, @min_price_rub::float8, @rounding_rub::float8,
-    @fx_markup_percent::float8,
+    sqlc.narg('markup')::float8,
+    sqlc.narg('min_price_rub')::float8,
+    sqlc.narg('rounding_rub')::float8,
+    sqlc.narg('fx_markup_percent')::float8,
     sqlc.narg('budget_rub')::float8,
     sqlc.narg('subscription_fee_rub')::float8,
     sqlc.narg('fair_use_rub')::float8,
-    @period_months, @anchor_day, now()
+    @period_months, @anchor_day,
+    sqlc.narg('elba_contractor_id'),
+    sqlc.narg('elba_bank_account_id'),
+    now()
 )
 ON CONFLICT (project_id) DO UPDATE SET
     enabled = EXCLUDED.enabled,
@@ -43,17 +61,25 @@ ON CONFLICT (project_id) DO UPDATE SET
     fair_use_rub = EXCLUDED.fair_use_rub,
     period_months = EXCLUDED.period_months,
     anchor_day = EXCLUDED.anchor_day,
+    elba_contractor_id = EXCLUDED.elba_contractor_id,
+    elba_bank_account_id = EXCLUDED.elba_bank_account_id,
     updated_at = now()
 RETURNING
     project_id, enabled, mode,
-    markup::float8            AS markup,
-    min_price_rub::float8     AS min_price_rub,
-    rounding_rub::float8      AS rounding_rub,
-    fx_markup_percent::float8 AS fx_markup_percent,
+    (markup IS NOT NULL)::bool            AS markup_set,
+    COALESCE(markup, 0)::float8           AS markup,
+    (min_price_rub IS NOT NULL)::bool     AS min_price_rub_set,
+    COALESCE(min_price_rub, 0)::float8    AS min_price_rub,
+    (rounding_rub IS NOT NULL)::bool      AS rounding_rub_set,
+    COALESCE(rounding_rub, 0)::float8     AS rounding_rub,
+    (fx_markup_percent IS NOT NULL)::bool AS fx_markup_percent_set,
+    COALESCE(fx_markup_percent, 0)::float8 AS fx_markup_percent,
     COALESCE(budget_rub, 0)::float8 AS budget_rub,
     COALESCE(subscription_fee_rub, 0)::float8 AS subscription_fee_rub,
     COALESCE(fair_use_rub, 0)::float8 AS fair_use_rub,
-    period_months, anchor_day, created_at, updated_at;
+    period_months, anchor_day,
+    elba_contractor_id, elba_bank_account_id,
+    created_at, updated_at;
 
 -- name: ListIssueUsageByModel :many
 -- Per-(provider, model) token totals for every task of an issue. This is the
@@ -151,3 +177,41 @@ JOIN issue i ON i.id = cbc.issue_id
 WHERE cbc.project_id = @project_id
   AND (sqlc.narg('status')::text IS NULL OR cbc.status = sqlc.narg('status'))
 ORDER BY cbc.created_at DESC;
+
+-- name: GetClientBillingWorkspaceConfig :one
+SELECT workspace_id,
+    markup::float8            AS markup,
+    min_price_rub::float8     AS min_price_rub,
+    rounding_rub::float8      AS rounding_rub,
+    fx_markup_percent::float8 AS fx_markup_percent,
+    elba_org_id, elba_bank_account_id,
+    created_at, updated_at
+FROM client_billing_workspace_config
+WHERE workspace_id = @workspace_id;
+
+-- name: UpsertClientBillingWorkspaceConfig :one
+INSERT INTO client_billing_workspace_config (
+    workspace_id, markup, min_price_rub, rounding_rub, fx_markup_percent,
+    elba_org_id, elba_bank_account_id, updated_at
+) VALUES (
+    @workspace_id,
+    @markup::float8, @min_price_rub::float8, @rounding_rub::float8,
+    @fx_markup_percent::float8,
+    sqlc.narg('elba_org_id'), sqlc.narg('elba_bank_account_id'),
+    now()
+)
+ON CONFLICT (workspace_id) DO UPDATE SET
+    markup = EXCLUDED.markup,
+    min_price_rub = EXCLUDED.min_price_rub,
+    rounding_rub = EXCLUDED.rounding_rub,
+    fx_markup_percent = EXCLUDED.fx_markup_percent,
+    elba_org_id = EXCLUDED.elba_org_id,
+    elba_bank_account_id = EXCLUDED.elba_bank_account_id,
+    updated_at = now()
+RETURNING workspace_id,
+    markup::float8            AS markup,
+    min_price_rub::float8     AS min_price_rub,
+    rounding_rub::float8      AS rounding_rub,
+    fx_markup_percent::float8 AS fx_markup_percent,
+    elba_org_id, elba_bank_account_id,
+    created_at, updated_at;

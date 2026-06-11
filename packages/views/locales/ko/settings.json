@@ -35,7 +35,8 @@
       "github": "GitHub",
       "integrations": "연동",
       "labs": "실험실",
-      "members": "멤버"
+      "members": "멤버",
+      "billing": "Billing"
     }
   },
   "account": {
@@ -376,5 +377,25 @@
     "install_error_session_lost": "설치 세션이 만료되었거나 유실되었어요. 다시 스캔해 처음부터 진행하세요.",
     "install_error_forbidden": "이 워크스페이스에 Lark 봇을 설치할 권한이 더 이상 없어요. 워크스페이스 관리자에게 문의하세요.",
     "install_error_generic": "설치에 실패했어요. 다시 시도하세요."
+  },
+  "billing": {
+    "pricing_title": "Pricing defaults",
+    "pricing_description": "Every project inherits these unless it sets its own override on the project page.",
+    "markup": "Markup (K)",
+    "markup_hint": "Multiplier on top of the no-cache token cost; covers team shares, review and margin.",
+    "fx_markup": "FX markup, %",
+    "fx_markup_hint": "Added to the CBR USD-RUB rate; frozen into each task snapshot.",
+    "min_price": "Min price per task, RUB",
+    "rounding": "Rounding step, RUB",
+    "elba_title": "Kontur Elba",
+    "elba_description": "Pick the organization and default bank account; closing a billing period then auto-creates the invoice and act. Contractors are linked per project.",
+    "elba_unavailable": "Elba integration is not configured on the server (ELBA_API_KEY).",
+    "elba_org": "Organization",
+    "elba_org_none": "Not selected",
+    "elba_bank_account": "Default bank account",
+    "elba_bank_account_none": "Not selected",
+    "save": "Save",
+    "saved_toast": "Billing settings saved",
+    "save_failed_toast": "Failed to save billing settings"
   }
 }

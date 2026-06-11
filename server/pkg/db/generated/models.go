@@ -231,6 +231,8 @@ type ClientBillingConfig struct {
 	AnchorDay          int32              `json:"anchor_day"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ElbaContractorID   pgtype.Text        `json:"elba_contractor_id"`
+	ElbaBankAccountID  pgtype.Text        `json:"elba_bank_account_id"`
 }
 
 type ClientBillingPeriod struct {
@@ -249,6 +251,18 @@ type ClientBillingPeriod struct {
 	PaidAt           pgtype.Timestamptz `json:"paid_at"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ClientBillingWorkspaceConfig struct {
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	Markup            pgtype.Numeric     `json:"markup"`
+	MinPriceRub       pgtype.Numeric     `json:"min_price_rub"`
+	RoundingRub       pgtype.Numeric     `json:"rounding_rub"`
+	FxMarkupPercent   pgtype.Numeric     `json:"fx_markup_percent"`
+	ElbaOrgID         pgtype.Text        `json:"elba_org_id"`
+	ElbaBankAccountID pgtype.Text        `json:"elba_bank_account_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Comment struct {

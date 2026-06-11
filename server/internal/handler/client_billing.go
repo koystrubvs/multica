@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -97,6 +98,40 @@ func computePriceRub(nocacheUSD, fxRate, markup, minPrice, rounding float64) flo
 	return math.Round(raw*100) / 100
 }
 
+// billingPricing is the fully resolved set of pricing knobs used for a
+// charge: project override when set, else workspace default, else the
+// hardcoded fallbacks (which match migration 122's workspace defaults).
+type billingPricing struct {
+	Markup          float64 `json:"markup"`
+	MinPriceRub     float64 `json:"min_price_rub"`
+	RoundingRub     float64 `json:"rounding_rub"`
+	FxMarkupPercent float64 `json:"fx_markup_percent"`
+}
+
+var defaultBillingPricing = billingPricing{Markup: 3.0, MinPriceRub: 500, RoundingRub: 50, FxMarkupPercent: 5.0}
+
+// resolveBillingPricing applies the inheritance chain:
+// project override -> workspace default -> hardcoded fallback.
+func (h *Handler) resolveBillingPricing(ctx context.Context, cfg db.GetClientBillingConfigRow, workspaceID pgtype.UUID) billingPricing {
+	p := defaultBillingPricing
+	if ws, err := h.Queries.GetClientBillingWorkspaceConfig(ctx, workspaceID); err == nil {
+		p = billingPricing{ws.Markup, ws.MinPriceRub, ws.RoundingRub, ws.FxMarkupPercent}
+	}
+	if cfg.MarkupSet {
+		p.Markup = cfg.Markup
+	}
+	if cfg.MinPriceRubSet {
+		p.MinPriceRub = cfg.MinPriceRub
+	}
+	if cfg.RoundingRubSet {
+		p.RoundingRub = cfg.RoundingRub
+	}
+	if cfg.FxMarkupPercentSet {
+		p.FxMarkupPercent = cfg.FxMarkupPercent
+	}
+	return p
+}
+
 // latestFxRubPerUsd returns the most recent CBR USD->RUB rate, lazily
 // backfilling fx_rate_daily (same mechanism as GET /api/fx/daily). Falls back
 // to fxFallbackRubPerUsd when both CBR and the table yield nothing.
@@ -152,9 +187,10 @@ func (h *Handler) maybeCreateBillingChargeForIssue(ctx context.Context, issue db
 		slog.Info("billing: skipping issue with no agent usage", "issue_id", uuidToString(issue.ID))
 		return
 	}
-	fx := h.latestFxRubPerUsd(ctx) * (1 + cfg.FxMarkupPercent/100)
+	pricing := h.resolveBillingPricing(ctx, cfg, issue.WorkspaceID)
+	fx := h.latestFxRubPerUsd(ctx) * (1 + pricing.FxMarkupPercent/100)
 	fx = math.Round(fx*10000) / 10000
-	price := computePriceRub(totalUSD, fx, cfg.Markup, cfg.MinPriceRub, cfg.RoundingRub)
+	price := computePriceRub(totalUSD, fx, pricing.Markup, pricing.MinPriceRub, pricing.RoundingRub)
 	usageJSON, err := json.Marshal(lines)
 	if err != nil {
 		slog.Warn("billing: usage marshal failed", "issue_id", uuidToString(issue.ID), "error", err)
@@ -167,7 +203,7 @@ func (h *Handler) maybeCreateBillingChargeForIssue(ctx context.Context, issue db
 		Usage:       usageJSON,
 		NocacheUsd:  totalUSD,
 		FxRate:      fx,
-		Markup:      cfg.Markup,
+		Markup:      pricing.Markup,
 		PriceRub:    price,
 	})
 	if err != nil {
@@ -232,6 +268,60 @@ type clientBillingConfigRequest struct {
 	FairUseRub         *float64 `json:"fair_use_rub"`
 	PeriodMonths       *int32   `json:"period_months"`
 	AnchorDay          *int32   `json:"anchor_day"`
+	ElbaContractorID   *string  `json:"elba_contractor_id"`
+	ElbaBankAccountID  *string  `json:"elba_bank_account_id"`
+}
+
+// clientBillingConfigJSON is the API shape of a project billing config.
+// Pricing knobs are pointers: null = inherited from the workspace; the
+// resolved values the snapshot will actually use are in `effective`.
+type clientBillingConfigJSON struct {
+	ProjectID          string             `json:"project_id"`
+	Enabled            bool               `json:"enabled"`
+	Mode               string             `json:"mode"`
+	Markup             *float64           `json:"markup"`
+	MinPriceRub        *float64           `json:"min_price_rub"`
+	RoundingRub        *float64           `json:"rounding_rub"`
+	FxMarkupPercent    *float64           `json:"fx_markup_percent"`
+	BudgetRub          float64            `json:"budget_rub"`
+	SubscriptionFeeRub float64            `json:"subscription_fee_rub"`
+	FairUseRub         float64            `json:"fair_use_rub"`
+	PeriodMonths       int32              `json:"period_months"`
+	AnchorDay          int32              `json:"anchor_day"`
+	ElbaContractorID   *string            `json:"elba_contractor_id"`
+	ElbaBankAccountID  *string            `json:"elba_bank_account_id"`
+	Effective          billingPricing     `json:"effective"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func optFloat(set bool, v float64) *float64 {
+	if !set {
+		return nil
+	}
+	return &v
+}
+
+func (h *Handler) billingConfigJSON(ctx context.Context, cfg db.GetClientBillingConfigRow, workspaceID pgtype.UUID) clientBillingConfigJSON {
+	return clientBillingConfigJSON{
+		ProjectID:          uuidToString(cfg.ProjectID),
+		Enabled:            cfg.Enabled,
+		Mode:               cfg.Mode,
+		Markup:             optFloat(cfg.MarkupSet, cfg.Markup),
+		MinPriceRub:        optFloat(cfg.MinPriceRubSet, cfg.MinPriceRub),
+		RoundingRub:        optFloat(cfg.RoundingRubSet, cfg.RoundingRub),
+		FxMarkupPercent:    optFloat(cfg.FxMarkupPercentSet, cfg.FxMarkupPercent),
+		BudgetRub:          cfg.BudgetRub,
+		SubscriptionFeeRub: cfg.SubscriptionFeeRub,
+		FairUseRub:         cfg.FairUseRub,
+		PeriodMonths:       cfg.PeriodMonths,
+		AnchorDay:          cfg.AnchorDay,
+		ElbaContractorID:   textToPtr(cfg.ElbaContractorID),
+		ElbaBankAccountID:  textToPtr(cfg.ElbaBankAccountID),
+		Effective:          h.resolveBillingPricing(ctx, cfg, workspaceID),
+		CreatedAt:          cfg.CreatedAt,
+		UpdatedAt:          cfg.UpdatedAt,
+	}
 }
 
 // loadProjectForBilling resolves {id} -> project within the caller's
@@ -271,12 +361,12 @@ func (h *Handler) GetProjectBillingConfig(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "failed to load billing config")
 		return
 	}
-	writeJSON(w, http.StatusOK, cfg)
+	writeJSON(w, http.StatusOK, h.billingConfigJSON(r.Context(), cfg, project.WorkspaceID))
 }
 
 // PutProjectBillingConfig creates or updates the project's billing config.
-// Omitted fields keep their current value (or the documented default when the
-// config is being created).
+// Pricing knobs are tri-state: omitted = keep current, explicit null = reset
+// to "inherit from workspace", a number = project-level override.
 func (h *Handler) PutProjectBillingConfig(w http.ResponseWriter, r *http.Request) {
 	project, ok := h.loadProjectForBilling(w, r)
 	if !ok {
@@ -285,42 +375,45 @@ func (h *Handler) PutProjectBillingConfig(w http.ResponseWriter, r *http.Request
 	if _, ok := h.requireBillingEditor(w, r, uuidToString(project.WorkspaceID)); !ok {
 		return
 	}
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
 	var req clientBillingConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	var rawFields map[string]json.RawMessage
+	_ = json.Unmarshal(bodyBytes, &rawFields)
+	fieldNull := func(key string) bool {
+		raw, ok := rawFields[key]
+		return ok && string(raw) == "null"
+	}
 
-	// Start from current config or defaults (mirrors migration 120 DEFAULTs).
+	// Start from the current config; a fresh config inherits everything.
 	params := db.UpsertClientBillingConfigParams{
-		ProjectID:       project.ID,
-		Enabled:         true,
-		Mode:            "postpaid",
-		Markup:          3.0,
-		MinPriceRub:     500,
-		RoundingRub:     50,
-		FxMarkupPercent: 5.0,
-		PeriodMonths:    1,
-		AnchorDay:       1,
+		ProjectID:    project.ID,
+		Enabled:      true,
+		Mode:         "postpaid",
+		PeriodMonths: 1,
+		AnchorDay:    1,
 	}
 	if cur, err := h.Queries.GetClientBillingConfig(r.Context(), project.ID); err == nil {
 		params.Enabled = cur.Enabled
 		params.Mode = cur.Mode
-		params.Markup = cur.Markup
-		params.MinPriceRub = cur.MinPriceRub
-		params.RoundingRub = cur.RoundingRub
-		params.FxMarkupPercent = cur.FxMarkupPercent
 		params.PeriodMonths = cur.PeriodMonths
 		params.AnchorDay = cur.AnchorDay
-		if cur.BudgetRub > 0 {
-			params.BudgetRub = pgtype.Float8{Float64: cur.BudgetRub, Valid: true}
-		}
-		if cur.SubscriptionFeeRub > 0 {
-			params.SubscriptionFeeRub = pgtype.Float8{Float64: cur.SubscriptionFeeRub, Valid: true}
-		}
-		if cur.FairUseRub > 0 {
-			params.FairUseRub = pgtype.Float8{Float64: cur.FairUseRub, Valid: true}
-		}
+		params.Markup = pgtype.Float8{Float64: cur.Markup, Valid: cur.MarkupSet}
+		params.MinPriceRub = pgtype.Float8{Float64: cur.MinPriceRub, Valid: cur.MinPriceRubSet}
+		params.RoundingRub = pgtype.Float8{Float64: cur.RoundingRub, Valid: cur.RoundingRubSet}
+		params.FxMarkupPercent = pgtype.Float8{Float64: cur.FxMarkupPercent, Valid: cur.FxMarkupPercentSet}
+		params.BudgetRub = pgtype.Float8{Float64: cur.BudgetRub, Valid: cur.BudgetRub > 0}
+		params.SubscriptionFeeRub = pgtype.Float8{Float64: cur.SubscriptionFeeRub, Valid: cur.SubscriptionFeeRub > 0}
+		params.FairUseRub = pgtype.Float8{Float64: cur.FairUseRub, Valid: cur.FairUseRub > 0}
+		params.ElbaContractorID = cur.ElbaContractorID
+		params.ElbaBankAccountID = cur.ElbaBankAccountID
 	}
 
 	if req.Enabled != nil {
@@ -334,6 +427,198 @@ func (h *Handler) PutProjectBillingConfig(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusBadRequest, "mode must be one of: postpaid, budget, subscription")
 			return
 		}
+	}
+
+	// Tri-state pricing overrides.
+	switch {
+	case fieldNull("markup"):
+		params.Markup = pgtype.Float8{}
+	case req.Markup != nil:
+		if *req.Markup <= 0 {
+			writeError(w, http.StatusBadRequest, "markup must be positive")
+			return
+		}
+		params.Markup = pgtype.Float8{Float64: *req.Markup, Valid: true}
+	}
+	switch {
+	case fieldNull("min_price_rub"):
+		params.MinPriceRub = pgtype.Float8{}
+	case req.MinPriceRub != nil:
+		if *req.MinPriceRub < 0 {
+			writeError(w, http.StatusBadRequest, "min_price_rub must be >= 0")
+			return
+		}
+		params.MinPriceRub = pgtype.Float8{Float64: *req.MinPriceRub, Valid: true}
+	}
+	switch {
+	case fieldNull("rounding_rub"):
+		params.RoundingRub = pgtype.Float8{}
+	case req.RoundingRub != nil:
+		if *req.RoundingRub < 0 {
+			writeError(w, http.StatusBadRequest, "rounding_rub must be >= 0")
+			return
+		}
+		params.RoundingRub = pgtype.Float8{Float64: *req.RoundingRub, Valid: true}
+	}
+	switch {
+	case fieldNull("fx_markup_percent"):
+		params.FxMarkupPercent = pgtype.Float8{}
+	case req.FxMarkupPercent != nil:
+		params.FxMarkupPercent = pgtype.Float8{Float64: *req.FxMarkupPercent, Valid: true}
+	}
+
+	if req.BudgetRub != nil || fieldNull("budget_rub") {
+		v := 0.0
+		if req.BudgetRub != nil {
+			v = *req.BudgetRub
+		}
+		params.BudgetRub = pgtype.Float8{Float64: v, Valid: v > 0}
+	}
+	if req.SubscriptionFeeRub != nil || fieldNull("subscription_fee_rub") {
+		v := 0.0
+		if req.SubscriptionFeeRub != nil {
+			v = *req.SubscriptionFeeRub
+		}
+		params.SubscriptionFeeRub = pgtype.Float8{Float64: v, Valid: v > 0}
+	}
+	if req.FairUseRub != nil || fieldNull("fair_use_rub") {
+		v := 0.0
+		if req.FairUseRub != nil {
+			v = *req.FairUseRub
+		}
+		params.FairUseRub = pgtype.Float8{Float64: v, Valid: v > 0}
+	}
+	if req.PeriodMonths != nil {
+		if *req.PeriodMonths < 1 || *req.PeriodMonths > 12 {
+			writeError(w, http.StatusBadRequest, "period_months must be between 1 and 12")
+			return
+		}
+		params.PeriodMonths = *req.PeriodMonths
+	}
+	if req.AnchorDay != nil {
+		if *req.AnchorDay < 1 || *req.AnchorDay > 28 {
+			writeError(w, http.StatusBadRequest, "anchor_day must be between 1 and 28")
+			return
+		}
+		params.AnchorDay = *req.AnchorDay
+	}
+	if fieldNull("elba_contractor_id") {
+		params.ElbaContractorID = pgtype.Text{}
+	} else if req.ElbaContractorID != nil {
+		params.ElbaContractorID = pgtype.Text{String: *req.ElbaContractorID, Valid: *req.ElbaContractorID != ""}
+	}
+	if fieldNull("elba_bank_account_id") {
+		params.ElbaBankAccountID = pgtype.Text{}
+	} else if req.ElbaBankAccountID != nil {
+		params.ElbaBankAccountID = pgtype.Text{String: *req.ElbaBankAccountID, Valid: *req.ElbaBankAccountID != ""}
+	}
+
+	cfg, err := h.Queries.UpsertClientBillingConfig(r.Context(), params)
+	if err != nil {
+		slog.Error("billing: config upsert failed", "project_id", uuidToString(project.ID), "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to save billing config")
+		return
+	}
+	slog.Info("billing: config saved", "project_id", uuidToString(project.ID), "mode", cfg.Mode)
+	writeJSON(w, http.StatusOK, h.billingConfigJSON(r.Context(), db.GetClientBillingConfigRow(cfg), project.WorkspaceID))
+}
+
+// --- Workspace billing defaults ---
+
+type clientBillingWorkspaceConfigRequest struct {
+	Markup            *float64 `json:"markup"`
+	MinPriceRub       *float64 `json:"min_price_rub"`
+	RoundingRub       *float64 `json:"rounding_rub"`
+	FxMarkupPercent   *float64 `json:"fx_markup_percent"`
+	ElbaOrgID         *string  `json:"elba_org_id"`
+	ElbaBankAccountID *string  `json:"elba_bank_account_id"`
+}
+
+type clientBillingWorkspaceConfigJSON struct {
+	WorkspaceID       string   `json:"workspace_id"`
+	Markup            float64  `json:"markup"`
+	MinPriceRub       float64  `json:"min_price_rub"`
+	RoundingRub       float64  `json:"rounding_rub"`
+	FxMarkupPercent   float64  `json:"fx_markup_percent"`
+	ElbaOrgID         *string  `json:"elba_org_id"`
+	ElbaBankAccountID *string  `json:"elba_bank_account_id"`
+	// Exists is false when the workspace has never saved defaults and the
+	// values above are the hardcoded fallbacks.
+	Exists bool `json:"exists"`
+}
+
+// requireBillingAdmin gates workspace-level billing settings to owner/admin.
+func (h *Handler) requireBillingAdmin(w http.ResponseWriter, r *http.Request, workspaceID string) bool {
+	member, err := h.getWorkspaceMember(r.Context(), requestUserID(r), workspaceID)
+	if err != nil || (member.Role != "owner" && member.Role != "admin") {
+		writeError(w, http.StatusForbidden, "workspace billing settings require owner or admin role")
+		return false
+	}
+	return true
+}
+
+// GetWorkspaceBillingConfig returns the workspace pricing defaults (the
+// hardcoded fallbacks when never saved — see `exists`).
+func (h *Handler) GetWorkspaceBillingConfig(w http.ResponseWriter, r *http.Request) {
+	wsID := h.resolveWorkspaceID(r)
+	wsUUID, ok := parseUUIDOrBadRequest(w, wsID, "workspace id")
+	if !ok {
+		return
+	}
+	if _, err := h.getWorkspaceMember(r.Context(), requestUserID(r), wsID); err != nil {
+		writeError(w, http.StatusForbidden, "workspace membership required")
+		return
+	}
+	out := clientBillingWorkspaceConfigJSON{
+		WorkspaceID:     wsID,
+		Markup:          defaultBillingPricing.Markup,
+		MinPriceRub:     defaultBillingPricing.MinPriceRub,
+		RoundingRub:     defaultBillingPricing.RoundingRub,
+		FxMarkupPercent: defaultBillingPricing.FxMarkupPercent,
+	}
+	if cfg, err := h.Queries.GetClientBillingWorkspaceConfig(r.Context(), wsUUID); err == nil {
+		out.Markup = cfg.Markup
+		out.MinPriceRub = cfg.MinPriceRub
+		out.RoundingRub = cfg.RoundingRub
+		out.FxMarkupPercent = cfg.FxMarkupPercent
+		out.ElbaOrgID = textToPtr(cfg.ElbaOrgID)
+		out.ElbaBankAccountID = textToPtr(cfg.ElbaBankAccountID)
+		out.Exists = true
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// PutWorkspaceBillingConfig saves the workspace pricing defaults + Elba
+// organization wiring. Owner/admin only.
+func (h *Handler) PutWorkspaceBillingConfig(w http.ResponseWriter, r *http.Request) {
+	wsID := h.resolveWorkspaceID(r)
+	wsUUID, ok := parseUUIDOrBadRequest(w, wsID, "workspace id")
+	if !ok {
+		return
+	}
+	if !h.requireBillingAdmin(w, r, wsID) {
+		return
+	}
+	var req clientBillingWorkspaceConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	params := db.UpsertClientBillingWorkspaceConfigParams{
+		WorkspaceID:     wsUUID,
+		Markup:          defaultBillingPricing.Markup,
+		MinPriceRub:     defaultBillingPricing.MinPriceRub,
+		RoundingRub:     defaultBillingPricing.RoundingRub,
+		FxMarkupPercent: defaultBillingPricing.FxMarkupPercent,
+	}
+	if cur, err := h.Queries.GetClientBillingWorkspaceConfig(r.Context(), wsUUID); err == nil {
+		params.Markup = cur.Markup
+		params.MinPriceRub = cur.MinPriceRub
+		params.RoundingRub = cur.RoundingRub
+		params.FxMarkupPercent = cur.FxMarkupPercent
+		params.ElbaOrgID = cur.ElbaOrgID
+		params.ElbaBankAccountID = cur.ElbaBankAccountID
 	}
 	if req.Markup != nil {
 		if *req.Markup <= 0 {
@@ -359,38 +644,29 @@ func (h *Handler) PutProjectBillingConfig(w http.ResponseWriter, r *http.Request
 	if req.FxMarkupPercent != nil {
 		params.FxMarkupPercent = *req.FxMarkupPercent
 	}
-	if req.BudgetRub != nil {
-		params.BudgetRub = pgtype.Float8{Float64: *req.BudgetRub, Valid: *req.BudgetRub > 0}
+	if req.ElbaOrgID != nil {
+		params.ElbaOrgID = pgtype.Text{String: *req.ElbaOrgID, Valid: *req.ElbaOrgID != ""}
 	}
-	if req.SubscriptionFeeRub != nil {
-		params.SubscriptionFeeRub = pgtype.Float8{Float64: *req.SubscriptionFeeRub, Valid: *req.SubscriptionFeeRub > 0}
-	}
-	if req.FairUseRub != nil {
-		params.FairUseRub = pgtype.Float8{Float64: *req.FairUseRub, Valid: *req.FairUseRub > 0}
-	}
-	if req.PeriodMonths != nil {
-		if *req.PeriodMonths < 1 || *req.PeriodMonths > 12 {
-			writeError(w, http.StatusBadRequest, "period_months must be between 1 and 12")
-			return
-		}
-		params.PeriodMonths = *req.PeriodMonths
-	}
-	if req.AnchorDay != nil {
-		if *req.AnchorDay < 1 || *req.AnchorDay > 28 {
-			writeError(w, http.StatusBadRequest, "anchor_day must be between 1 and 28")
-			return
-		}
-		params.AnchorDay = *req.AnchorDay
+	if req.ElbaBankAccountID != nil {
+		params.ElbaBankAccountID = pgtype.Text{String: *req.ElbaBankAccountID, Valid: *req.ElbaBankAccountID != ""}
 	}
 
-	cfg, err := h.Queries.UpsertClientBillingConfig(r.Context(), params)
+	cfg, err := h.Queries.UpsertClientBillingWorkspaceConfig(r.Context(), params)
 	if err != nil {
-		slog.Error("billing: config upsert failed", "project_id", uuidToString(project.ID), "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to save billing config")
+		slog.Error("billing: workspace config upsert failed", "workspace_id", wsID, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to save workspace billing config")
 		return
 	}
-	slog.Info("billing: config saved", "project_id", uuidToString(project.ID), "mode", cfg.Mode, "markup", cfg.Markup)
-	writeJSON(w, http.StatusOK, cfg)
+	writeJSON(w, http.StatusOK, clientBillingWorkspaceConfigJSON{
+		WorkspaceID:       wsID,
+		Markup:            cfg.Markup,
+		MinPriceRub:       cfg.MinPriceRub,
+		RoundingRub:       cfg.RoundingRub,
+		FxMarkupPercent:   cfg.FxMarkupPercent,
+		ElbaOrgID:         textToPtr(cfg.ElbaOrgID),
+		ElbaBankAccountID: textToPtr(cfg.ElbaBankAccountID),
+		Exists:            true,
+	})
 }
 
 // ListProjectBillingCharges returns the project's charges, optionally

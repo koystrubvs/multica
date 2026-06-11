@@ -13,7 +13,8 @@
     "run_time_label": "実行時間 · {{days}}日",
     "run_time_hint": "{{tasks}} 件のタスク全体",
     "tasks_label": "タスク · {{days}}日",
-    "tasks_hint": "{{failed}} 件失敗"
+    "tasks_hint": "{{failed}} 件失敗",
+    "cost_nocache_hint": "no-cache (client base): {{value}}"
   },
   "dim": {
     "label": "単位",
@@ -46,7 +47,8 @@
     "header_cost": "コスト",
     "header_time": "時間",
     "header_tasks": "タスク",
-    "no_data": "この期間にエージェントの活動はありません。"
+    "no_data": "この期間にエージェントの活動はありません。",
+    "total_label": "Total"
   },
   "empty": {
     "title": "まだ使用量はありません",

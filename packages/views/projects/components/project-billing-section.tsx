@@ -2,10 +2,12 @@
 
 // Agency billing config section on the project detail page (fork feature).
 //
-// Lets staff enable client billing for a project and tune the pricing knobs
-// (markup, floor, rounding, fx markup, mode-specific budgets). When enabled,
-// every issue of this project that reaches `done` with agent usage gets a
-// draft price snapshot — see issue-billing-section.tsx for the issue surface.
+// Pricing knobs inherit from the workspace defaults (Settings -> Billing):
+// an empty input means "inherit" and shows the effective value as its
+// placeholder. Elba wiring: the workspace picks the organization; here the
+// project links a contractor (invoice target) and may override the bank
+// account. Closing a period auto-creates the счёт + акт when the contractor
+// is linked; a failed push can be retried per period from the history list.
 
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,10 +30,17 @@ export const clientBillingKeys = {
   charges: (projectId: string) => ["client-billing", "charges", projectId] as const,
   currentPeriod: (projectId: string) => ["client-billing", "current-period", projectId] as const,
   periods: (projectId: string) => ["client-billing", "periods", projectId] as const,
+  wsConfig: () => ["client-billing", "workspace-config"] as const,
+  elbaContractors: (orgId: string) => ["client-billing", "elba-contractors", orgId] as const,
+  elbaBankAccounts: (orgId: string) => ["client-billing", "elba-bank-accounts", orgId] as const,
 };
 
 function formatRub(value: number): string {
   return `${value.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
+}
+
+function fmtDate(iso: string): string {
+  return iso.slice(0, 10);
 }
 
 export function ProjectBillingSection({ projectId }: { projectId: string }) {
@@ -102,10 +111,6 @@ export function ProjectBillingSection({ projectId }: { projectId: string }) {
   );
 }
 
-function fmtDate(iso: string): string {
-  return iso.slice(0, 10);
-}
-
 function PeriodStatusBadge({ status }: { status: ClientBillingPeriod["status"] }) {
   const { t } = useT("projects");
   const styles: Record<ClientBillingPeriod["status"], string> = {
@@ -121,7 +126,7 @@ function PeriodStatusBadge({ status }: { status: ClientBillingPeriod["status"] }
     paid: t(($) => $.billing.period_status_paid),
   };
   return (
-    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${styles[status]}`}>
+    <span className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap ${styles[status]}`}>
       {labels[status]}
     </span>
   );
@@ -144,8 +149,14 @@ function CurrentPeriodCard({ projectId }: { projectId: string }) {
 
   const closeMut = useMutation({
     mutationFn: (periodId: string) => api.closeBillingPeriod(projectId, periodId),
-    onSuccess: () => {
-      toast.success(t(($) => $.billing.period_closed_toast));
+    onSuccess: (res) => {
+      if (res.elba_error) {
+        toast.error(t(($) => $.billing.elba_push_failed_toast, { error: res.elba_error }));
+      } else if (res.period.status === "invoiced") {
+        toast.success(t(($) => $.billing.period_invoiced_toast));
+      } else {
+        toast.success(t(($) => $.billing.period_closed_toast));
+      }
       invalidatePeriods();
     },
     onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
@@ -205,7 +216,9 @@ function CurrentPeriodCard({ projectId }: { projectId: string }) {
   );
 }
 
-// Past cycles with their frozen totals and the payment lifecycle actions.
+// Past cycles with their frozen totals and the invoice / payment lifecycle.
+// Each period renders as a two-line card: dates + status on top, total +
+// actions below — the sidebar column is too narrow for a single row.
 function PeriodHistory({ projectId }: { projectId: string }) {
   const { t } = useT("projects");
   const qc = useQueryClient();
@@ -234,47 +247,79 @@ function PeriodHistory({ projectId }: { projectId: string }) {
     onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
   });
 
+  const invoiceMut = useMutation({
+    mutationFn: (periodId: string) => api.invoiceBillingPeriod(projectId, periodId),
+    onSuccess: () => {
+      toast.success(t(($) => $.billing.period_invoiced_toast));
+      invalidatePeriods();
+    },
+    onError: (e) =>
+      toast.error(
+        t(($) => $.billing.elba_push_failed_toast, {
+          error: e instanceof Error ? e.message : "",
+        }),
+      ),
+  });
+
   const past = periods.filter((p) => p.status !== "open");
   if (past.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {t(($) => $.billing.period_history)}
       </span>
       {past.map((p) => (
-        <div key={p.id} className="flex items-center justify-between gap-2 rounded-md border border-border/40 px-2 py-1.5">
-          <div className="flex items-center gap-2 min-w-0">
+        <div key={p.id} className="flex flex-col gap-1 rounded-md border border-border/40 px-2 py-1.5">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground whitespace-nowrap">
               {fmtDate(p.starts_on)} — {fmtDate(p.ends_on)}
             </span>
             <PeriodStatusBadge status={p.status} />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium whitespace-nowrap">{formatRub(p.total_rub)}</span>
-            {(p.status === "closed" || p.status === "invoiced") && (
-              <>
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <span className="text-xs font-semibold whitespace-nowrap">{formatRub(p.total_rub)}</span>
+            <div className="flex flex-wrap items-center gap-1">
+              {p.status === "closed" && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-5 px-1.5 text-[11px]"
-                  disabled={paidMut.isPending}
-                  onClick={() => paidMut.mutate(p.id)}
+                  disabled={invoiceMut.isPending}
+                  onClick={() => invoiceMut.mutate(p.id)}
                 >
-                  {t(($) => $.billing.mark_paid)}
+                  {t(($) => $.billing.create_invoice)}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-5 px-1.5 text-[11px] text-muted-foreground"
-                  disabled={reopenMut.isPending}
-                  onClick={() => reopenMut.mutate(p.id)}
-                >
-                  {t(($) => $.billing.reopen_period)}
-                </Button>
-              </>
-            )}
+              )}
+              {(p.status === "closed" || p.status === "invoiced") && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-5 px-1.5 text-[11px]"
+                    disabled={paidMut.isPending}
+                    onClick={() => paidMut.mutate(p.id)}
+                  >
+                    {t(($) => $.billing.mark_paid)}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-5 px-1.5 text-[11px] text-muted-foreground"
+                    disabled={reopenMut.isPending}
+                    onClick={() => reopenMut.mutate(p.id)}
+                  >
+                    {t(($) => $.billing.reopen_period)}
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
+          {p.elba_invoice_id && (
+            <span className="text-[11px] text-muted-foreground">
+              {t(($) => $.billing.elba_invoice_ref, { id: p.elba_invoice_id })}
+            </span>
+          )}
         </div>
       ))}
     </div>
@@ -285,11 +330,13 @@ function NumberField({
   label,
   value,
   onChange,
+  placeholder,
   step = "any",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
   step?: string;
 }) {
   return (
@@ -299,6 +346,7 @@ function NumberField({
         type="number"
         step={step}
         value={value}
+        placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         className="h-7 text-xs"
       />
@@ -318,47 +366,57 @@ function ConfigForm({
   const { t } = useT("projects");
   const [enabled, setEnabled] = useState(config.enabled);
   const [mode, setMode] = useState<ClientBillingMode>(config.mode);
-  const [markup, setMarkup] = useState(String(config.markup));
-  const [minPrice, setMinPrice] = useState(String(config.min_price_rub));
-  const [rounding, setRounding] = useState(String(config.rounding_rub));
-  const [fxMarkup, setFxMarkup] = useState(String(config.fx_markup_percent));
+  // Pricing overrides: "" = inherit (placeholder shows the effective value).
+  const [markup, setMarkup] = useState(config.markup === null ? "" : String(config.markup));
+  const [minPrice, setMinPrice] = useState(config.min_price_rub === null ? "" : String(config.min_price_rub));
+  const [rounding, setRounding] = useState(config.rounding_rub === null ? "" : String(config.rounding_rub));
+  const [fxMarkup, setFxMarkup] = useState(config.fx_markup_percent === null ? "" : String(config.fx_markup_percent));
   const [budget, setBudget] = useState(String(config.budget_rub || ""));
   const [subscriptionFee, setSubscriptionFee] = useState(String(config.subscription_fee_rub || ""));
   const [fairUse, setFairUse] = useState(String(config.fair_use_rub || ""));
+  const [contractor, setContractor] = useState(config.elba_contractor_id ?? "");
+  const [bankAccount, setBankAccount] = useState(config.elba_bank_account_id ?? "");
 
   // Re-sync local state when a save round-trips new server values.
   useEffect(() => {
     setEnabled(config.enabled);
     setMode(config.mode);
-    setMarkup(String(config.markup));
-    setMinPrice(String(config.min_price_rub));
-    setRounding(String(config.rounding_rub));
-    setFxMarkup(String(config.fx_markup_percent));
+    setMarkup(config.markup === null ? "" : String(config.markup));
+    setMinPrice(config.min_price_rub === null ? "" : String(config.min_price_rub));
+    setRounding(config.rounding_rub === null ? "" : String(config.rounding_rub));
+    setFxMarkup(config.fx_markup_percent === null ? "" : String(config.fx_markup_percent));
     setBudget(String(config.budget_rub || ""));
     setSubscriptionFee(String(config.subscription_fee_rub || ""));
     setFairUse(String(config.fair_use_rub || ""));
+    setContractor(config.elba_contractor_id ?? "");
+    setBankAccount(config.elba_bank_account_id ?? "");
   }, [config]);
 
-  const num = (s: string): number | undefined => {
-    if (s.trim() === "") return undefined;
+  // "" -> null (inherit); invalid -> null too (backend keeps inherit).
+  const overrideOrNull = (s: string): number | null => {
+    if (s.trim() === "") return null;
     const n = Number(s);
-    return Number.isFinite(n) ? n : undefined;
+    return Number.isFinite(n) ? n : null;
+  };
+  const num = (s: string): number => {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
   };
 
   const handleSave = () => {
-    const update: ClientBillingConfigUpdate = { enabled, mode };
-    const m = num(markup);
-    if (m !== undefined) update.markup = m;
-    const mp = num(minPrice);
-    if (mp !== undefined) update.min_price_rub = mp;
-    const r = num(rounding);
-    if (r !== undefined) update.rounding_rub = r;
-    const fx = num(fxMarkup);
-    if (fx !== undefined) update.fx_markup_percent = fx;
-    update.budget_rub = num(budget) ?? 0;
-    update.subscription_fee_rub = num(subscriptionFee) ?? 0;
-    update.fair_use_rub = num(fairUse) ?? 0;
-    onSave(update);
+    onSave({
+      enabled,
+      mode,
+      markup: overrideOrNull(markup),
+      min_price_rub: overrideOrNull(minPrice),
+      rounding_rub: overrideOrNull(rounding),
+      fx_markup_percent: overrideOrNull(fxMarkup),
+      budget_rub: num(budget),
+      subscription_fee_rub: num(subscriptionFee),
+      fair_use_rub: num(fairUse),
+      elba_contractor_id: contractor || null,
+      elba_bank_account_id: bankAccount || null,
+    });
   };
 
   return (
@@ -383,11 +441,38 @@ function ConfigForm({
         </select>
       </label>
 
+      <p className="text-[11px] text-muted-foreground">
+        {t(($) => $.billing.inherit_hint)}
+      </p>
       <div className="grid grid-cols-2 gap-2">
-        <NumberField label={t(($) => $.billing.markup)} value={markup} onChange={setMarkup} step="0.1" />
-        <NumberField label={t(($) => $.billing.fx_markup)} value={fxMarkup} onChange={setFxMarkup} step="0.5" />
-        <NumberField label={t(($) => $.billing.min_price)} value={minPrice} onChange={setMinPrice} step="50" />
-        <NumberField label={t(($) => $.billing.rounding)} value={rounding} onChange={setRounding} step="10" />
+        <NumberField
+          label={t(($) => $.billing.markup)}
+          value={markup}
+          onChange={setMarkup}
+          placeholder={String(config.effective.markup)}
+          step="0.1"
+        />
+        <NumberField
+          label={t(($) => $.billing.fx_markup)}
+          value={fxMarkup}
+          onChange={setFxMarkup}
+          placeholder={String(config.effective.fx_markup_percent)}
+          step="0.5"
+        />
+        <NumberField
+          label={t(($) => $.billing.min_price)}
+          value={minPrice}
+          onChange={setMinPrice}
+          placeholder={String(config.effective.min_price_rub)}
+          step="50"
+        />
+        <NumberField
+          label={t(($) => $.billing.rounding)}
+          value={rounding}
+          onChange={setRounding}
+          placeholder={String(config.effective.rounding_rub)}
+          step="10"
+        />
       </div>
 
       {mode === "budget" && (
@@ -405,11 +490,95 @@ function ConfigForm({
         </div>
       )}
 
+      <ElbaProjectFields
+        contractor={contractor}
+        bankAccount={bankAccount}
+        onContractor={setContractor}
+        onBankAccount={setBankAccount}
+      />
+
       <div>
         <Button size="sm" className="h-7 px-3 text-xs" disabled={saving} onClick={handleSave}>
           {t(($) => $.billing.save)}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// Contractor (invoice target) + optional bank-account override. Requires the
+// workspace to have its Elba organization picked in Settings -> Billing.
+function ElbaProjectFields({
+  contractor,
+  bankAccount,
+  onContractor,
+  onBankAccount,
+}: {
+  contractor: string;
+  bankAccount: string;
+  onContractor: (v: string) => void;
+  onBankAccount: (v: string) => void;
+}) {
+  const { t } = useT("projects");
+  const { data: wsConfig } = useQuery({
+    queryKey: clientBillingKeys.wsConfig(),
+    queryFn: () => api.getWorkspaceBillingConfig(),
+  });
+  const orgId = wsConfig?.elba_org_id ?? "";
+
+  const { data: contractors = [] } = useQuery({
+    queryKey: clientBillingKeys.elbaContractors(orgId),
+    queryFn: () => api.getElbaContractors(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const { data: accounts = [] } = useQuery({
+    queryKey: clientBillingKeys.elbaBankAccounts(orgId),
+    queryFn: () => api.getElbaBankAccounts(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (!orgId) {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        {t(($) => $.billing.elba_org_missing_hint)}
+      </p>
+    );
+  }
+
+  const selectClass =
+    "h-7 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1 text-xs">
+        <span className="text-muted-foreground">{t(($) => $.billing.elba_contractor)}</span>
+        <select value={contractor} onChange={(e) => onContractor(e.target.value)} className={selectClass}>
+          <option value="">{t(($) => $.billing.elba_contractor_none)}</option>
+          {contractors.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name ?? c.id}
+            </option>
+          ))}
+        </select>
+        <span className="text-[10px] text-muted-foreground">
+          {t(($) => $.billing.elba_contractor_hint)}
+        </span>
+      </label>
+      <label className="flex flex-col gap-1 text-xs">
+        <span className="text-muted-foreground">{t(($) => $.billing.elba_bank_account)}</span>
+        <select value={bankAccount} onChange={(e) => onBankAccount(e.target.value)} className={selectClass}>
+          <option value="">{t(($) => $.billing.elba_bank_account_default)}</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name ?? a.id}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

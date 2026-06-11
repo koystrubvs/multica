@@ -230,6 +230,17 @@
     "period_status_open": "Open",
     "period_status_closed": "Closed",
     "period_status_invoiced": "Invoiced",
-    "period_status_paid": "Paid"
+    "period_status_paid": "Paid",
+    "inherit_hint": "Empty field = inherit the workspace default (shown as placeholder).",
+    "elba_contractor": "Elba contractor",
+    "elba_contractor_none": "Not linked (no auto-invoice)",
+    "elba_contractor_hint": "Closing a period auto-creates the invoice and act for this contractor.",
+    "elba_bank_account": "Bank account for this project",
+    "elba_bank_account_default": "Workspace default",
+    "elba_org_missing_hint": "To auto-invoice, pick the Elba organization in Settings -> Billing.",
+    "create_invoice": "Create invoice",
+    "period_invoiced_toast": "Period closed; invoice and act created in Elba",
+    "elba_push_failed_toast": "Elba push failed: {{error}}",
+    "elba_invoice_ref": "Elba invoice: {{id}}"
   }
 }

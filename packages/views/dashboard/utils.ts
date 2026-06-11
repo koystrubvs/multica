@@ -7,6 +7,7 @@ import type {
 import {
   addDaysIso,
   estimateCost,
+  estimateNocacheCost,
   estimateCostBreakdown,
   formatShortDate,
   todayIso,
@@ -128,6 +129,8 @@ export interface DashboardTokenTotals {
   cacheRead: number;
   cacheWrite: number;
   cost: number;
+  /** Client-facing base: no-cache pricing (cache discount not passed on). */
+  nocacheCost: number;
   taskCount: number;
 }
 
@@ -147,9 +150,10 @@ export function computeDailyTotals(
       cacheRead: acc.cacheRead + u.cache_read_tokens,
       cacheWrite: acc.cacheWrite + u.cache_write_tokens,
       cost: acc.cost + estimateCost(u) * fx(u.date),
+      nocacheCost: acc.nocacheCost + estimateNocacheCost(u) * fx(u.date),
       taskCount: acc.taskCount + u.task_count,
     }),
-    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, taskCount: 0 },
+    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, nocacheCost: 0, taskCount: 0 },
   );
 }
 

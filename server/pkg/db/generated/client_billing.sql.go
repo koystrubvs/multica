@@ -274,14 +274,20 @@ const getClientBillingConfig = `-- name: GetClientBillingConfig :one
 
 SELECT
     project_id, enabled, mode,
-    markup::float8            AS markup,
-    min_price_rub::float8     AS min_price_rub,
-    rounding_rub::float8      AS rounding_rub,
-    fx_markup_percent::float8 AS fx_markup_percent,
+    (markup IS NOT NULL)::bool            AS markup_set,
+    COALESCE(markup, 0)::float8           AS markup,
+    (min_price_rub IS NOT NULL)::bool     AS min_price_rub_set,
+    COALESCE(min_price_rub, 0)::float8    AS min_price_rub,
+    (rounding_rub IS NOT NULL)::bool      AS rounding_rub_set,
+    COALESCE(rounding_rub, 0)::float8     AS rounding_rub,
+    (fx_markup_percent IS NOT NULL)::bool AS fx_markup_percent_set,
+    COALESCE(fx_markup_percent, 0)::float8 AS fx_markup_percent,
     COALESCE(budget_rub, 0)::float8 AS budget_rub,
     COALESCE(subscription_fee_rub, 0)::float8 AS subscription_fee_rub,
     COALESCE(fair_use_rub, 0)::float8 AS fair_use_rub,
-    period_months, anchor_day, created_at, updated_at
+    period_months, anchor_day,
+    elba_contractor_id, elba_bank_account_id,
+    created_at, updated_at
 FROM client_billing_config
 WHERE project_id = $1
 `
@@ -290,23 +296,35 @@ type GetClientBillingConfigRow struct {
 	ProjectID          pgtype.UUID        `json:"project_id"`
 	Enabled            bool               `json:"enabled"`
 	Mode               string             `json:"mode"`
+	MarkupSet          bool               `json:"markup_set"`
 	Markup             float64            `json:"markup"`
+	MinPriceRubSet     bool               `json:"min_price_rub_set"`
 	MinPriceRub        float64            `json:"min_price_rub"`
+	RoundingRubSet     bool               `json:"rounding_rub_set"`
 	RoundingRub        float64            `json:"rounding_rub"`
+	FxMarkupPercentSet bool               `json:"fx_markup_percent_set"`
 	FxMarkupPercent    float64            `json:"fx_markup_percent"`
 	BudgetRub          float64            `json:"budget_rub"`
 	SubscriptionFeeRub float64            `json:"subscription_fee_rub"`
 	FairUseRub         float64            `json:"fair_use_rub"`
 	PeriodMonths       int32              `json:"period_months"`
 	AnchorDay          int32              `json:"anchor_day"`
+	ElbaContractorID   pgtype.Text        `json:"elba_contractor_id"`
+	ElbaBankAccountID  pgtype.Text        `json:"elba_bank_account_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
-// client_billing.sql — agency-side client billing (see migration 120).
+// client_billing.sql — agency-side client billing (see migrations 120/122).
 // All NUMERIC columns are cast to/from float8 at the query boundary so the
 // generated Go code works in float64 instead of pgtype.Numeric. Precision is
-// fine for this domain: prices are rubles rounded to a 50₽ step.
+// fine for this domain: prices are rubles rounded to a 50-RUB step.
+//
+// Since migration 122 the four pricing knobs (markup, min_price_rub,
+// rounding_rub, fx_markup_percent) are NULLable on the project config — NULL
+// means "inherit the workspace default". sqlc can't express nullable float8
+// outputs cleanly, so each knob crosses the boundary as a (value, *_set)
+// pair: COALESCE(x, 0) + (x IS NOT NULL).
 func (q *Queries) GetClientBillingConfig(ctx context.Context, projectID pgtype.UUID) (GetClientBillingConfigRow, error) {
 	row := q.db.QueryRow(ctx, getClientBillingConfig, projectID)
 	var i GetClientBillingConfigRow
@@ -314,15 +332,62 @@ func (q *Queries) GetClientBillingConfig(ctx context.Context, projectID pgtype.U
 		&i.ProjectID,
 		&i.Enabled,
 		&i.Mode,
+		&i.MarkupSet,
 		&i.Markup,
+		&i.MinPriceRubSet,
 		&i.MinPriceRub,
+		&i.RoundingRubSet,
 		&i.RoundingRub,
+		&i.FxMarkupPercentSet,
 		&i.FxMarkupPercent,
 		&i.BudgetRub,
 		&i.SubscriptionFeeRub,
 		&i.FairUseRub,
 		&i.PeriodMonths,
 		&i.AnchorDay,
+		&i.ElbaContractorID,
+		&i.ElbaBankAccountID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getClientBillingWorkspaceConfig = `-- name: GetClientBillingWorkspaceConfig :one
+SELECT workspace_id,
+    markup::float8            AS markup,
+    min_price_rub::float8     AS min_price_rub,
+    rounding_rub::float8      AS rounding_rub,
+    fx_markup_percent::float8 AS fx_markup_percent,
+    elba_org_id, elba_bank_account_id,
+    created_at, updated_at
+FROM client_billing_workspace_config
+WHERE workspace_id = $1
+`
+
+type GetClientBillingWorkspaceConfigRow struct {
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	Markup            float64            `json:"markup"`
+	MinPriceRub       float64            `json:"min_price_rub"`
+	RoundingRub       float64            `json:"rounding_rub"`
+	FxMarkupPercent   float64            `json:"fx_markup_percent"`
+	ElbaOrgID         pgtype.Text        `json:"elba_org_id"`
+	ElbaBankAccountID pgtype.Text        `json:"elba_bank_account_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetClientBillingWorkspaceConfig(ctx context.Context, workspaceID pgtype.UUID) (GetClientBillingWorkspaceConfigRow, error) {
+	row := q.db.QueryRow(ctx, getClientBillingWorkspaceConfig, workspaceID)
+	var i GetClientBillingWorkspaceConfigRow
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Markup,
+		&i.MinPriceRub,
+		&i.RoundingRub,
+		&i.FxMarkupPercent,
+		&i.ElbaOrgID,
+		&i.ElbaBankAccountID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -467,15 +532,21 @@ const upsertClientBillingConfig = `-- name: UpsertClientBillingConfig :one
 INSERT INTO client_billing_config (
     project_id, enabled, mode, markup, min_price_rub, rounding_rub,
     fx_markup_percent, budget_rub, subscription_fee_rub, fair_use_rub,
-    period_months, anchor_day, updated_at
+    period_months, anchor_day, elba_contractor_id, elba_bank_account_id,
+    updated_at
 ) VALUES (
     $1, $2, $3,
-    $4::float8, $5::float8, $6::float8,
+    $4::float8,
+    $5::float8,
+    $6::float8,
     $7::float8,
     $8::float8,
     $9::float8,
     $10::float8,
-    $11, $12, now()
+    $11, $12,
+    $13,
+    $14,
+    now()
 )
 ON CONFLICT (project_id) DO UPDATE SET
     enabled = EXCLUDED.enabled,
@@ -489,47 +560,63 @@ ON CONFLICT (project_id) DO UPDATE SET
     fair_use_rub = EXCLUDED.fair_use_rub,
     period_months = EXCLUDED.period_months,
     anchor_day = EXCLUDED.anchor_day,
+    elba_contractor_id = EXCLUDED.elba_contractor_id,
+    elba_bank_account_id = EXCLUDED.elba_bank_account_id,
     updated_at = now()
 RETURNING
     project_id, enabled, mode,
-    markup::float8            AS markup,
-    min_price_rub::float8     AS min_price_rub,
-    rounding_rub::float8      AS rounding_rub,
-    fx_markup_percent::float8 AS fx_markup_percent,
+    (markup IS NOT NULL)::bool            AS markup_set,
+    COALESCE(markup, 0)::float8           AS markup,
+    (min_price_rub IS NOT NULL)::bool     AS min_price_rub_set,
+    COALESCE(min_price_rub, 0)::float8    AS min_price_rub,
+    (rounding_rub IS NOT NULL)::bool      AS rounding_rub_set,
+    COALESCE(rounding_rub, 0)::float8     AS rounding_rub,
+    (fx_markup_percent IS NOT NULL)::bool AS fx_markup_percent_set,
+    COALESCE(fx_markup_percent, 0)::float8 AS fx_markup_percent,
     COALESCE(budget_rub, 0)::float8 AS budget_rub,
     COALESCE(subscription_fee_rub, 0)::float8 AS subscription_fee_rub,
     COALESCE(fair_use_rub, 0)::float8 AS fair_use_rub,
-    period_months, anchor_day, created_at, updated_at
+    period_months, anchor_day,
+    elba_contractor_id, elba_bank_account_id,
+    created_at, updated_at
 `
 
 type UpsertClientBillingConfigParams struct {
 	ProjectID          pgtype.UUID   `json:"project_id"`
 	Enabled            bool          `json:"enabled"`
 	Mode               string        `json:"mode"`
-	Markup             float64       `json:"markup"`
-	MinPriceRub        float64       `json:"min_price_rub"`
-	RoundingRub        float64       `json:"rounding_rub"`
-	FxMarkupPercent    float64       `json:"fx_markup_percent"`
+	Markup             pgtype.Float8 `json:"markup"`
+	MinPriceRub        pgtype.Float8 `json:"min_price_rub"`
+	RoundingRub        pgtype.Float8 `json:"rounding_rub"`
+	FxMarkupPercent    pgtype.Float8 `json:"fx_markup_percent"`
 	BudgetRub          pgtype.Float8 `json:"budget_rub"`
 	SubscriptionFeeRub pgtype.Float8 `json:"subscription_fee_rub"`
 	FairUseRub         pgtype.Float8 `json:"fair_use_rub"`
 	PeriodMonths       int32         `json:"period_months"`
 	AnchorDay          int32         `json:"anchor_day"`
+	ElbaContractorID   pgtype.Text   `json:"elba_contractor_id"`
+	ElbaBankAccountID  pgtype.Text   `json:"elba_bank_account_id"`
 }
 
 type UpsertClientBillingConfigRow struct {
 	ProjectID          pgtype.UUID        `json:"project_id"`
 	Enabled            bool               `json:"enabled"`
 	Mode               string             `json:"mode"`
+	MarkupSet          bool               `json:"markup_set"`
 	Markup             float64            `json:"markup"`
+	MinPriceRubSet     bool               `json:"min_price_rub_set"`
 	MinPriceRub        float64            `json:"min_price_rub"`
+	RoundingRubSet     bool               `json:"rounding_rub_set"`
 	RoundingRub        float64            `json:"rounding_rub"`
+	FxMarkupPercentSet bool               `json:"fx_markup_percent_set"`
 	FxMarkupPercent    float64            `json:"fx_markup_percent"`
 	BudgetRub          float64            `json:"budget_rub"`
 	SubscriptionFeeRub float64            `json:"subscription_fee_rub"`
 	FairUseRub         float64            `json:"fair_use_rub"`
 	PeriodMonths       int32              `json:"period_months"`
 	AnchorDay          int32              `json:"anchor_day"`
+	ElbaContractorID   pgtype.Text        `json:"elba_contractor_id"`
+	ElbaBankAccountID  pgtype.Text        `json:"elba_bank_account_id"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
@@ -548,21 +635,104 @@ func (q *Queries) UpsertClientBillingConfig(ctx context.Context, arg UpsertClien
 		arg.FairUseRub,
 		arg.PeriodMonths,
 		arg.AnchorDay,
+		arg.ElbaContractorID,
+		arg.ElbaBankAccountID,
 	)
 	var i UpsertClientBillingConfigRow
 	err := row.Scan(
 		&i.ProjectID,
 		&i.Enabled,
 		&i.Mode,
+		&i.MarkupSet,
 		&i.Markup,
+		&i.MinPriceRubSet,
 		&i.MinPriceRub,
+		&i.RoundingRubSet,
 		&i.RoundingRub,
+		&i.FxMarkupPercentSet,
 		&i.FxMarkupPercent,
 		&i.BudgetRub,
 		&i.SubscriptionFeeRub,
 		&i.FairUseRub,
 		&i.PeriodMonths,
 		&i.AnchorDay,
+		&i.ElbaContractorID,
+		&i.ElbaBankAccountID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertClientBillingWorkspaceConfig = `-- name: UpsertClientBillingWorkspaceConfig :one
+INSERT INTO client_billing_workspace_config (
+    workspace_id, markup, min_price_rub, rounding_rub, fx_markup_percent,
+    elba_org_id, elba_bank_account_id, updated_at
+) VALUES (
+    $1,
+    $2::float8, $3::float8, $4::float8,
+    $5::float8,
+    $6, $7,
+    now()
+)
+ON CONFLICT (workspace_id) DO UPDATE SET
+    markup = EXCLUDED.markup,
+    min_price_rub = EXCLUDED.min_price_rub,
+    rounding_rub = EXCLUDED.rounding_rub,
+    fx_markup_percent = EXCLUDED.fx_markup_percent,
+    elba_org_id = EXCLUDED.elba_org_id,
+    elba_bank_account_id = EXCLUDED.elba_bank_account_id,
+    updated_at = now()
+RETURNING workspace_id,
+    markup::float8            AS markup,
+    min_price_rub::float8     AS min_price_rub,
+    rounding_rub::float8      AS rounding_rub,
+    fx_markup_percent::float8 AS fx_markup_percent,
+    elba_org_id, elba_bank_account_id,
+    created_at, updated_at
+`
+
+type UpsertClientBillingWorkspaceConfigParams struct {
+	WorkspaceID       pgtype.UUID `json:"workspace_id"`
+	Markup            float64     `json:"markup"`
+	MinPriceRub       float64     `json:"min_price_rub"`
+	RoundingRub       float64     `json:"rounding_rub"`
+	FxMarkupPercent   float64     `json:"fx_markup_percent"`
+	ElbaOrgID         pgtype.Text `json:"elba_org_id"`
+	ElbaBankAccountID pgtype.Text `json:"elba_bank_account_id"`
+}
+
+type UpsertClientBillingWorkspaceConfigRow struct {
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	Markup            float64            `json:"markup"`
+	MinPriceRub       float64            `json:"min_price_rub"`
+	RoundingRub       float64            `json:"rounding_rub"`
+	FxMarkupPercent   float64            `json:"fx_markup_percent"`
+	ElbaOrgID         pgtype.Text        `json:"elba_org_id"`
+	ElbaBankAccountID pgtype.Text        `json:"elba_bank_account_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpsertClientBillingWorkspaceConfig(ctx context.Context, arg UpsertClientBillingWorkspaceConfigParams) (UpsertClientBillingWorkspaceConfigRow, error) {
+	row := q.db.QueryRow(ctx, upsertClientBillingWorkspaceConfig,
+		arg.WorkspaceID,
+		arg.Markup,
+		arg.MinPriceRub,
+		arg.RoundingRub,
+		arg.FxMarkupPercent,
+		arg.ElbaOrgID,
+		arg.ElbaBankAccountID,
+	)
+	var i UpsertClientBillingWorkspaceConfigRow
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Markup,
+		&i.MinPriceRub,
+		&i.RoundingRub,
+		&i.FxMarkupPercent,
+		&i.ElbaOrgID,
+		&i.ElbaBankAccountID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

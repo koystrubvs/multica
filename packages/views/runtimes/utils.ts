@@ -349,6 +349,18 @@ export function estimateCost(usage: Priceable): number {
   );
 }
 
+// Client-facing price base: every input-class token (input + cache read +
+// cache write) at the FULL input list price — the cache discount is the
+// agency's margin and is not passed through. Mirrors the server-side snapshot
+// math in client_billing.go.
+export function estimateNocacheCost(usage: Priceable): number {
+  const pricing = resolvePricing(usage.model);
+  if (!pricing) return 0;
+  const inputClass =
+    usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens;
+  return (inputClass * pricing.input + usage.output_tokens * pricing.output) / 1_000_000;
+}
+
 export interface CostBreakdown {
   input: number;
   output: number;

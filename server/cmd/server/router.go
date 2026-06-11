@@ -755,6 +755,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			})
 
 			// Projects
+			// Agency billing: workspace defaults + Elba picker proxies (fork)
+			r.Get("/api/billing/workspace-config", h.GetWorkspaceBillingConfig)
+			r.Put("/api/billing/workspace-config", h.PutWorkspaceBillingConfig)
+			r.Get("/api/billing/elba/organizations", h.GetElbaOrganizations)
+			r.Get("/api/billing/elba/contractors", h.GetElbaContractors)
+			r.Get("/api/billing/elba/bank-accounts", h.GetElbaBankAccounts)
+
 			r.Route("/api/projects", func(r chi.Router) {
 				r.Get("/search", h.SearchProjects)
 				r.Get("/", h.ListProjects)
@@ -776,6 +783,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/billing/periods/{periodId}/close", h.CloseBillingPeriod)
 					r.Post("/billing/periods/{periodId}/reopen", h.ReopenBillingPeriod)
 					r.Post("/billing/periods/{periodId}/mark-paid", h.MarkBillingPeriodPaid)
+					r.Post("/billing/periods/{periodId}/invoice", h.InvoiceBillingPeriod)
 				})
 			})
 

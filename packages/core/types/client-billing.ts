@@ -8,18 +8,24 @@ export type ClientBillingMode = "postpaid" | "budget" | "subscription";
 
 export type ClientBillingChargeStatus = "draft" | "confirmed" | "void";
 
+/** The four pricing knobs as actually applied to a snapshot, after the
+ *  project-override -> workspace-default -> fallback inheritance chain. */
+export interface ClientBillingEffectivePricing {
+  markup: number;
+  min_price_rub: number;
+  rounding_rub: number;
+  fx_markup_percent: number;
+}
+
 export interface ClientBillingConfig {
   project_id: string;
   enabled: boolean;
   mode: ClientBillingMode;
-  /** Agency markup K applied on top of the no-cache token cost. */
-  markup: number;
-  /** Per-task price floor, rubles. */
-  min_price_rub: number;
-  /** Ceil-rounding step, rubles. 0 disables rounding. */
-  rounding_rub: number;
-  /** Percent added to the CBR USD->RUB rate (internal fixed rate policy). */
-  fx_markup_percent: number;
+  /** Project override; null = inherited from the workspace defaults. */
+  markup: number | null;
+  min_price_rub: number | null;
+  rounding_rub: number | null;
+  fx_markup_percent: number | null;
   /** mode=budget: soft cap for threshold alerts. 0 = unset. */
   budget_rub: number;
   /** mode=subscription: fixed fee per period. 0 = unset. */
@@ -28,23 +34,61 @@ export interface ClientBillingConfig {
   fair_use_rub: number;
   period_months: number;
   anchor_day: number;
+  /** Kontur Elba contractor linked to this project (invoicing target). */
+  elba_contractor_id: string | null;
+  /** Project-level bank account override (else workspace default). */
+  elba_bank_account_id: string | null;
+  /** Resolved pricing the next snapshot will use. */
+  effective: ClientBillingEffectivePricing;
   created_at: string;
   updated_at: string;
 }
 
-/** Partial update; omitted fields keep their current/default values. */
+/** Partial update. Pricing knobs are tri-state: omitted = keep, explicit
+ *  null = reset to "inherit from workspace", number = project override. */
 export interface ClientBillingConfigUpdate {
   enabled?: boolean;
   mode?: ClientBillingMode;
-  markup?: number;
-  min_price_rub?: number;
-  rounding_rub?: number;
-  fx_markup_percent?: number;
+  markup?: number | null;
+  min_price_rub?: number | null;
+  rounding_rub?: number | null;
+  fx_markup_percent?: number | null;
   budget_rub?: number;
   subscription_fee_rub?: number;
   fair_use_rub?: number;
   period_months?: number;
   anchor_day?: number;
+  elba_contractor_id?: string | null;
+  elba_bank_account_id?: string | null;
+}
+
+/** Workspace-level pricing defaults + Elba organization wiring. */
+export interface ClientBillingWorkspaceConfig {
+  workspace_id: string;
+  markup: number;
+  min_price_rub: number;
+  rounding_rub: number;
+  fx_markup_percent: number;
+  elba_org_id: string | null;
+  elba_bank_account_id: string | null;
+  /** false = never saved; values are the hardcoded fallbacks. */
+  exists: boolean;
+}
+
+export interface ClientBillingWorkspaceConfigUpdate {
+  markup?: number;
+  min_price_rub?: number;
+  rounding_rub?: number;
+  fx_markup_percent?: number;
+  elba_org_id?: string;
+  elba_bank_account_id?: string;
+}
+
+/** Loosely-typed Kontur Elba directory entries (proxied via the backend). */
+export interface ElbaEntity {
+  id: string;
+  name?: string;
+  [key: string]: unknown;
 }
 
 /** One (provider, model) slice of an issue's usage, priced no-cache. */

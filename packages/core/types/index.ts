@@ -171,4 +171,8 @@ export type {
   ClientBillingPeriodStatus,
   ClientBillingPeriod,
   ClientBillingCurrentPeriod,
+  ClientBillingEffectivePricing,
+  ClientBillingWorkspaceConfig,
+  ClientBillingWorkspaceConfigUpdate,
+  ElbaEntity,
 } from "./client-billing";

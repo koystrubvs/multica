@@ -13,7 +13,8 @@
     "run_time_label": "Run time · {{days}}D",
     "run_time_hint": "Across {{tasks}} tasks",
     "tasks_label": "Tasks · {{days}}D",
-    "tasks_hint": "{{failed}} failed"
+    "tasks_hint": "{{failed}} failed",
+    "cost_nocache_hint": "no-cache (client base): {{value}}"
   },
   "dim": {
     "label": "Dimension",
@@ -46,7 +47,8 @@
     "header_cost": "Cost",
     "header_time": "Time",
     "header_tasks": "Tasks",
-    "no_data": "No agent activity in this window."
+    "no_data": "No agent activity in this window.",
+    "total_label": "Total"
   },
   "empty": {
     "title": "No usage yet",
