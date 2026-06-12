@@ -13,7 +13,8 @@
     "placeholder_named": "Написать {{name}}…",
     "placeholder_default": "Начните сообщение…",
     "send_tooltip": "Отправить",
-    "stop_tooltip": "Остановить"
+    "stop_tooltip": "Остановить",
+    "send_failed_toast": "Не удалось отправить сообщение"
   },
   "message_list": {
     "show_details": "Показать детали",
