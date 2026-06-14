@@ -1,18 +1,22 @@
 package handler
 
 // elba.go — Kontur Elba REST client + picker endpoints (phase 3 of the
-// agency billing plan). Ported from the battle-tested Python client in the
-// Plane fork (plane/utils/elba_client.py): same base URL, auth header and
-// payload shapes.
+// agency billing plan). Ported from the Plane fork's working client
+// (plane/utils/elba.py): same host, auth header and payload shapes.
+//
+// Host note: the real Elba API is `elba-api.kontur.ru/v1` — NOT the generic
+// `api.kontur.ru` gateway (that host's edge resets every non-allowlisted
+// client; an earlier wrong URL there sent us down a multi-hour "WAF/IP-ban"
+// rabbit hole — see AGENCY_BILLING_SPEC.md). Plane talks to elba-api directly
+// with a plain client; so do we (no proxy/sidecar needed).
 //
 // Configuration is environment-only: ELBA_API_KEY (required to enable the
-// integration) and ELBA_BASE_URL (defaults to the public API). The key never
-// reaches the frontend — the UI talks to these proxy endpoints.
+// integration) and ELBA_BASE_URL (defaults to the correct Elba host). The key
+// never reaches the frontend — the UI talks to these proxy endpoints.
 
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +26,7 @@ import (
 	"time"
 )
 
-const elbaDefaultBaseURL = "https://api.kontur.ru/elba/public/v1"
+const elbaDefaultBaseURL = "https://elba-api.kontur.ru/v1"
 
 type elbaClient struct {
 	baseURL string
@@ -41,18 +45,10 @@ func newElbaClient() (*elbaClient, error) {
 	if base == "" {
 		base = elbaDefaultBaseURL
 	}
-	// api.kontur.ru sits behind a WAF that (empirically, 2026-06-11) RSTs
-	// h2 streams (curl: PROTOCOL_ERROR; Go: hang awaiting headers) and drops
-	// requests from non-allowlisted clients, while python-requests — what the
-	// proven Plane integration uses — passes. Force HTTP/1.1 and present the
-	// same client identity.
-	transport := &http.Transport{
-		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
-	}
 	return &elbaClient{
 		baseURL: base,
 		apiKey:  key,
-		http:    &http.Client{Timeout: 15 * time.Second, Transport: transport},
+		http:    &http.Client{Timeout: 15 * time.Second},
 	}, nil
 }
 
@@ -72,9 +68,6 @@ func (c *elbaClient) do(ctx context.Context, method, path string, payload any) (
 	req.Header.Set("X-Kontur-Apikey", c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	// Mirror the client identity of the working Plane integration; the
-	// default Go-http-client UA is a common WAF block target.
-	req.Header.Set("User-Agent", "python-requests/2.32.3")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
