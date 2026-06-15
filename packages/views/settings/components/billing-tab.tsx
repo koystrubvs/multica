@@ -21,6 +21,26 @@ const wsBillingKeys = {
   accounts: (orgId: string) => ["client-billing", "elba-bank-accounts", orgId] as const,
 };
 
+// Elba list entities carry their human label in type-specific fields, not a
+// uniform `name` — organizations expose only `inn`, bank accounts expose
+// `accountNumber` + nested `bank.name`. Fall back to the id only as a last
+// resort so the picker never shows a bare UUID.
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+function elbaOrgLabel(o: { id: string; [k: string]: unknown }): string {
+  const inn = str(o.inn);
+  return str(o.name) || (inn ? `ИНН ${inn}` : o.id);
+}
+function elbaBankAccountLabel(a: { id: string; [k: string]: unknown }): string {
+  const acc = str(a.accountNumber);
+  if (acc) {
+    const bank = a.bank as { name?: string } | undefined;
+    return bank?.name ? `${acc} · ${bank.name}` : acc;
+  }
+  return str(a.name) || a.id;
+}
+
 function Field({
   label,
   hint,
@@ -176,7 +196,7 @@ export function BillingTab() {
                 <option value="">{t(($) => $.billing.elba_org_none)}</option>
                 {(orgsQuery.data ?? []).map((o) => (
                   <option key={o.id} value={o.id}>
-                    {o.name ?? o.id}
+                    {elbaOrgLabel(o)}
                   </option>
                 ))}
               </select>
@@ -192,7 +212,7 @@ export function BillingTab() {
                 <option value="">{t(($) => $.billing.elba_bank_account_none)}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name ?? a.id}
+                    {elbaBankAccountLabel(a)}
                   </option>
                 ))}
               </select>

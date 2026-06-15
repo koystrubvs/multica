@@ -43,6 +43,27 @@ function fmtDate(iso: string): string {
   return iso.slice(0, 10);
 }
 
+// Elba contractors carry `name` (+ `inn` for disambiguation — several share a
+// name with different KPP); bank accounts label by `accountNumber` + bank.
+// Never fall back to a bare UUID unless nothing else is present.
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+function elbaContractorLabel(c: { id: string; [k: string]: unknown }): string {
+  const name = str(c.name);
+  const inn = str(c.inn);
+  if (name) return inn ? `${name} (ИНН ${inn})` : name;
+  return inn ? `ИНН ${inn}` : c.id;
+}
+function elbaBankAccountLabel(a: { id: string; [k: string]: unknown }): string {
+  const acc = str(a.accountNumber);
+  if (acc) {
+    const bank = a.bank as { name?: string } | undefined;
+    return bank?.name ? `${acc} · ${bank.name}` : acc;
+  }
+  return str(a.name) || a.id;
+}
+
 export function ProjectBillingSection({ projectId }: { projectId: string }) {
   const { t } = useT("projects");
   const [open, setOpen] = useState(false);
@@ -560,7 +581,7 @@ function ElbaProjectFields({
           <option value="">{t(($) => $.billing.elba_contractor_none)}</option>
           {contractors.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name ?? c.id}
+              {elbaContractorLabel(c)}
             </option>
           ))}
         </select>
@@ -574,7 +595,7 @@ function ElbaProjectFields({
           <option value="">{t(($) => $.billing.elba_bank_account_default)}</option>
           {accounts.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.name ?? a.id}
+              {elbaBankAccountLabel(a)}
             </option>
           ))}
         </select>
