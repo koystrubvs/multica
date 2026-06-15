@@ -64,3 +64,37 @@ describe("canEditSkill", () => {
     ).toBe(false);
   });
 });
+
+describe("canEditSkill — global skills", () => {
+  function makeGlobalSkill(createdBy: string | null): Skill {
+    // Global skills carry no workspace_id and advertise is_global.
+    return { ...makeSkill(createdBy), workspace_id: "", is_global: true };
+  }
+
+  it("allows the owner to edit their global skill", () => {
+    expect(
+      canEditSkill(makeGlobalSkill("user-alice"), {
+        userId: "user-alice",
+        role: "member",
+      }),
+    ).toBe(true);
+  });
+
+  it("denies workspace admins who are not the owner", () => {
+    expect(
+      canEditSkill(makeGlobalSkill("user-alice"), {
+        userId: "user-bob",
+        role: "admin",
+      }),
+    ).toBe(false);
+  });
+
+  it("denies workspace owners who are not the owner", () => {
+    expect(
+      canEditSkill(makeGlobalSkill("user-alice"), {
+        userId: "user-bob",
+        role: "owner",
+      }),
+    ).toBe(false);
+  });
+});

@@ -61,7 +61,9 @@
     "source_runtime_unknown": "来自某个运行时",
     "source_clawhub": "来自 ClawHub",
     "source_skills_sh": "来自 Skills.sh",
-    "source_github": "来自 GitHub"
+    "source_github": "来自 GitHub",
+    "global_badge": "全局",
+    "global_tooltip": "在你加入的所有工作区里都能使用"
   },
   "detail": {
     "all_skills": "全部 skill",
@@ -85,6 +87,7 @@
       "origin_skills_sh": "导入自 · Skills.sh",
       "origin_github": "导入自 · GitHub",
       "origin_workspace": "工作区",
+      "origin_global": "全局 · 你的所有工作区",
       "updated_label": "{{when}}更新",
       "by_creator": "由 {{name}}"
     },
@@ -112,6 +115,7 @@
       "permissions_owner": "你可以编辑和删除这个 skill。修改在智能体下次运行时生效。",
       "permissions_locked_creator": "只有创建者（{{name}}）或工作区管理员能编辑这个 skill。",
       "permissions_locked": "只有创建者或工作区管理员能编辑这个 skill。",
+      "permissions_global_locked": "这是全局 skill，只有它的所有者能编辑或删除。",
       "used_by_empty": "还未分配给任何智能体。打开某个智能体的 Skills 标签页进行分配。"
     },
     "origin_card": {
@@ -190,6 +194,8 @@
       "name_hint": "工作区内必须唯一。",
       "description_label": "描述",
       "description_placeholder": "用一句话说什么时候应该把这个 skill 分配给智能体。",
+      "global_label": "设为全局 skill",
+      "global_hint": "在你加入的所有工作区里都能使用，且只有你能编辑。",
       "name_conflict_hint": "请换一个名字再提交。",
       "fallback_error": "创建 skill 失败",
       "cancel": "取消",

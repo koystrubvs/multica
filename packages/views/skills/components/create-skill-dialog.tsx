@@ -33,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@multica/ui/components/ui/tooltip";
 import { Button } from "@multica/ui/components/ui/button";
+import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import { Input } from "@multica/ui/components/ui/input";
 import { Label } from "@multica/ui/components/ui/label";
 import { Textarea } from "@multica/ui/components/ui/textarea";
@@ -113,6 +114,7 @@ function ManualForm({
   const wsId = useWorkspaceId();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [global, setGlobal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -127,6 +129,7 @@ function ManualForm({
       const skill = await api.createSkill({
         name: trimmed,
         description: description.trim(),
+        global,
       });
       seedAfterCreate(qc, wsId, skill);
       toast.success(t(($) => $.create.manual.toast_created));
@@ -187,6 +190,26 @@ function ManualForm({
             className="resize-none"
           />
         </div>
+
+        <label
+          htmlFor="create-skill-global"
+          className="flex cursor-pointer items-start gap-2.5 rounded-md border bg-muted/30 px-3 py-2.5"
+        >
+          <Checkbox
+            id="create-skill-global"
+            checked={global}
+            onCheckedChange={(v) => setGlobal(v === true)}
+            className="mt-0.5"
+          />
+          <div className="min-w-0">
+            <div className="text-sm font-medium">
+              {t(($) => $.create.manual.global_label)}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t(($) => $.create.manual.global_hint)}
+            </p>
+          </div>
+        </label>
 
         {error && (
           <div

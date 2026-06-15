@@ -10,10 +10,16 @@ ORDER BY name ASC;
 -- by list endpoints (CLI table, web list page) where the body is never read;
 -- shipping it everywhere blew up payload size on workspaces with many skills
 -- and caused 15s CLI timeouts from high-latency regions (GH multica-ai/multica#2174).
-SELECT id, workspace_id, name, description, config, created_by, created_at, updated_at
-FROM skill
-WHERE workspace_id = $1
-ORDER BY name ASC;
+--
+-- Returns the workspace's own skills PLUS global skills (workspace_id IS NULL)
+-- owned by any member of the workspace, so a user's global skills surface in
+-- every workspace they belong to (visible to teammates there too).
+SELECT s.id, s.workspace_id, s.name, s.description, s.config, s.created_by, s.created_at, s.updated_at
+FROM skill s
+WHERE s.workspace_id = $1
+   OR (s.workspace_id IS NULL
+       AND s.created_by IN (SELECT m.user_id FROM member m WHERE m.workspace_id = $1))
+ORDER BY s.name ASC;
 
 -- name: GetSkill :one
 SELECT * FROM skill
@@ -22,6 +28,17 @@ WHERE id = $1;
 -- name: GetSkillInWorkspace :one
 SELECT * FROM skill
 WHERE id = $1 AND workspace_id = $2;
+
+-- name: GetSkillVisibleInWorkspace :one
+-- Resolves a skill usable in a workspace: either a skill owned by the workspace,
+-- or a global skill (workspace_id IS NULL) owned by one of the workspace's
+-- members. Used by the skill loader and agent-skill attachment validation so
+-- global skills can be viewed and attached anywhere their owner has access.
+SELECT s.* FROM skill s
+WHERE s.id = $1
+  AND (s.workspace_id = $2
+       OR (s.workspace_id IS NULL
+           AND s.created_by IN (SELECT m.user_id FROM member m WHERE m.workspace_id = $2)));
 
 -- name: GetSkillByWorkspaceAndName :one
 -- Used by agent-template materialization to implement find-or-create: when a
@@ -49,6 +66,12 @@ RETURNING *;
 -- name: DeleteSkill :exec
 -- Defense-in-depth: workspace_id is a SQL-layer tenant guard. See DeleteIssue.
 DELETE FROM skill WHERE id = $1 AND workspace_id = $2;
+
+-- name: DeleteGlobalSkill :exec
+-- Owner-scoped delete for a global skill (workspace_id IS NULL). The ownership
+-- match is the tenant guard here, analogous to the workspace_id guard on
+-- DeleteSkill — a global skill has no workspace to scope by.
+DELETE FROM skill WHERE id = $1 AND workspace_id IS NULL AND created_by = $2;
 
 -- Skill File CRUD
 
@@ -105,8 +128,14 @@ WHERE agent_id = $1 AND skill_id = $2;
 DELETE FROM agent_skill WHERE agent_id = $1;
 
 -- name: ListAgentSkillsByWorkspace :many
+-- Batch-loads the skills attached to every agent in a workspace. Filters by the
+-- AGENT's workspace, not the skill's — a global skill (workspace_id IS NULL)
+-- attached to one of the workspace's agents must still appear here, otherwise it
+-- would silently drop out of the agent-list payload and the skills "used by"
+-- column.
 SELECT ask.agent_id, s.id, s.name, s.description
 FROM agent_skill ask
 JOIN skill s ON s.id = ask.skill_id
-WHERE s.workspace_id = $1
+JOIN agent a ON a.id = ask.agent_id
+WHERE a.workspace_id = $1
 ORDER BY s.name ASC;
