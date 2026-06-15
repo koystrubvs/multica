@@ -55,6 +55,10 @@ type SkillResponse struct {
 	CreatedBy       *string `json:"created_by"`
 	CreatedAt       string  `json:"created_at"`
 	UpdatedAt       string  `json:"updated_at"`
+	// IsGlobal is true when the skill is not scoped to a single workspace
+	// (workspace_id IS NULL). A global skill is owned by created_by and surfaces
+	// in every workspace its owner belongs to.
+	IsGlobal bool `json:"is_global"`
 }
 
 // SkillSummaryResponse is the list-endpoint shape: everything SkillResponse
@@ -71,6 +75,8 @@ type SkillSummaryResponse struct {
 	CreatedBy   *string `json:"created_by"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
+	// IsGlobal — see SkillResponse.IsGlobal.
+	IsGlobal bool `json:"is_global"`
 }
 
 // AgentSkillSummary is the still-narrower shape used for skills embedded in
@@ -140,6 +146,7 @@ func skillToResponse(s db.Skill) SkillResponse {
 		CreatedBy:   uuidToPtr(s.CreatedBy),
 		CreatedAt:   timestampToString(s.CreatedAt),
 		UpdatedAt:   timestampToString(s.UpdatedAt),
+		IsGlobal:    !s.WorkspaceID.Valid,
 	}
 }
 
@@ -198,6 +205,7 @@ func skillSummaryToResponse(
 		CreatedBy:   uuidToPtr(createdBy),
 		CreatedAt:   timestampToString(createdAt),
 		UpdatedAt:   timestampToString(updatedAt),
+		IsGlobal:    !workspaceID.Valid,
 	}
 }
 
@@ -220,6 +228,10 @@ type CreateSkillRequest struct {
 	Content     string                   `json:"content"`
 	Config      any                      `json:"config"`
 	Files       []CreateSkillFileRequest `json:"files,omitempty"`
+	// Global, when true, creates a global skill (workspace_id IS NULL) owned by
+	// the caller and available across every workspace they belong to, instead of
+	// a skill scoped to the current workspace.
+	Global bool `json:"global,omitempty"`
 }
 
 type CreateSkillFileRequest struct {
@@ -272,7 +284,10 @@ func (h *Handler) loadSkillForUser(w http.ResponseWriter, r *http.Request, id st
 		return db.Skill{}, false
 	}
 
-	skill, err := h.Queries.GetSkillInWorkspace(r.Context(), db.GetSkillInWorkspaceParams{
+	// Resolve against workspace skills AND global skills visible in this
+	// workspace (owned by a member), so global skills can be opened/edited from
+	// any workspace their owner has access to.
+	skill, err := h.Queries.GetSkillVisibleInWorkspace(r.Context(), db.GetSkillVisibleInWorkspaceParams{
 		ID:          skillUUID,
 		WorkspaceID: parseUUID(workspaceID),
 	})
@@ -383,10 +398,6 @@ func (h *Handler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	workspaceUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
-	if !ok {
-		return
-	}
 	creatorUUID := parseUUID(creatorID)
 
 	var req CreateSkillRequest
@@ -398,6 +409,17 @@ func (h *Handler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
+	}
+
+	// A global skill is owned by the creator and not scoped to a workspace, so
+	// its workspace_id stays NULL (zero-value pgtype.UUID, Valid=false). A
+	// workspace skill requires a valid workspace context.
+	var workspaceUUID pgtype.UUID
+	if !req.Global {
+		workspaceUUID, ok = parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
+		if !ok {
+			return
+		}
 	}
 
 	for _, f := range req.Files {
@@ -430,8 +452,20 @@ func (h *Handler) CreateSkill(w http.ResponseWriter, r *http.Request) {
 }
 
 // canManageSkill checks whether the current user can update or delete a skill.
-// The skill creator or workspace owner/admin can manage any skill.
+// For a workspace skill, the skill creator or workspace owner/admin can manage
+// it. For a global skill (workspace_id IS NULL) only the owner (created_by) can
+// manage it — a workspace admin cannot, because the skill spans every workspace
+// its owner belongs to and is not governed by any single workspace's roles.
 func (h *Handler) canManageSkill(w http.ResponseWriter, r *http.Request, skill db.Skill) bool {
+	if !skill.WorkspaceID.Valid {
+		isOwner := skill.CreatedBy.Valid && uuidToString(skill.CreatedBy) == requestUserID(r)
+		if !isOwner {
+			writeError(w, http.StatusForbidden, "only the skill owner can manage this global skill")
+			return false
+		}
+		return true
+	}
+
 	wsID := uuidToString(skill.WorkspaceID)
 	member, ok := h.requireWorkspaceRole(w, r, wsID, "skill not found", "owner", "admin", "member")
 	if !ok {
@@ -571,15 +605,32 @@ func (h *Handler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.DeleteSkill(r.Context(), db.DeleteSkillParams{
-		ID:          skill.ID,
-		WorkspaceID: skill.WorkspaceID,
-	}); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to delete skill")
-		return
+	if skill.WorkspaceID.Valid {
+		if err := h.Queries.DeleteSkill(r.Context(), db.DeleteSkillParams{
+			ID:          skill.ID,
+			WorkspaceID: skill.WorkspaceID,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to delete skill")
+			return
+		}
+	} else {
+		// Global skill: scope the delete by owner (canManageSkill already
+		// verified the caller is the owner).
+		if err := h.Queries.DeleteGlobalSkill(r.Context(), db.DeleteGlobalSkillParams{
+			ID:        skill.ID,
+			CreatedBy: skill.CreatedBy,
+		}); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to delete skill")
+			return
+		}
 	}
-	actorType, actorID := h.resolveActor(r, requestUserID(r), uuidToString(skill.WorkspaceID))
-	h.publish(protocol.EventSkillDeleted, uuidToString(skill.WorkspaceID), actorType, actorID, map[string]any{"skill_id": uuidToString(skill.ID)})
+
+	// Broadcast on the current workspace's channel. For a global skill this is
+	// the workspace the user is acting from; clients in the owner's other
+	// workspaces refresh their skill list on next focus/navigation.
+	eventWsID := h.resolveWorkspaceID(r)
+	actorType, actorID := h.resolveActor(r, requestUserID(r), eventWsID)
+	h.publish(protocol.EventSkillDeleted, eventWsID, actorType, actorID, map[string]any{"skill_id": uuidToString(skill.ID)})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2244,19 +2295,31 @@ func (h *Handler) AddAgentSkills(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) validateAgentSkillIDsInWorkspace(w http.ResponseWriter, r *http.Request, agent db.Agent, skillUUIDs []pgtype.UUID) bool {
 	seen := map[string]struct{}{}
+	names := map[string]struct{}{}
 	for _, skillID := range skillUUIDs {
 		key := uuidToString(skillID)
 		if _, ok := seen[key]; ok {
 			continue
 		}
 		seen[key] = struct{}{}
-		if _, err := h.Queries.GetSkillInWorkspace(r.Context(), db.GetSkillInWorkspaceParams{
+		// A skill is attachable if it belongs to the agent's workspace OR is a
+		// global skill owned by a member of that workspace (visible there).
+		sk, err := h.Queries.GetSkillVisibleInWorkspace(r.Context(), db.GetSkillVisibleInWorkspaceParams{
 			ID:          skillID,
 			WorkspaceID: agent.WorkspaceID,
-		}); err != nil {
+		})
+		if err != nil {
 			writeError(w, http.StatusNotFound, "skill not found")
 			return false
 		}
+		// The daemon materialises skills to disk by name, so two attached skills
+		// sharing a name (e.g. a workspace skill and a same-named global skill)
+		// would collide. Reject the set rather than silently clobber one.
+		if _, dup := names[sk.Name]; dup {
+			writeError(w, http.StatusConflict, "two attached skills share the name \""+sk.Name+"\"; rename one before attaching both")
+			return false
+		}
+		names[sk.Name] = struct{}{}
 	}
 	return true
 }
