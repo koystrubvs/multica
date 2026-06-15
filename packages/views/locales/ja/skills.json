@@ -49,7 +49,9 @@
     "source_runtime_unknown": "ランタイムから",
     "source_clawhub": "ClawHub から",
     "source_skills_sh": "Skills.sh から",
-    "source_github": "GitHub から"
+    "source_github": "GitHub から",
+    "global_badge": "グローバル",
+    "global_tooltip": "参加しているすべてのワークスペースで利用できます"
   },
   "detail": {
     "all_skills": "すべてのスキル",
@@ -73,6 +75,7 @@
       "origin_skills_sh": "インポート済み · Skills.sh",
       "origin_github": "インポート済み · GitHub",
       "origin_workspace": "ワークスペース",
+      "origin_global": "グローバル · すべてのワークスペース",
       "updated_label": "{{when}} に更新",
       "by_creator": "{{name}}"
     },
@@ -99,6 +102,7 @@
       "permissions_owner": "このスキルを編集および削除できます。変更は次回のエージェント実行から有効になります。",
       "permissions_locked_creator": "このスキルを編集できるのは作成者（{{name}}）またはワークスペース管理者のみです。",
       "permissions_locked": "このスキルを編集できるのは作成者またはワークスペース管理者のみです。",
+      "permissions_global_locked": "これはグローバルスキルです。編集・削除できるのは所有者のみです。",
       "used_by_empty": "まだどのエージェントにも割り当てられていません。エージェントのスキルタブを開いて割り当ててください。"
     },
     "origin_card": {
@@ -176,6 +180,8 @@
       "name_hint": "ワークスペース内で一意である必要があります。",
       "description_label": "説明",
       "description_placeholder": "このスキルをエージェントにいつ割り当てるべきかを 1 文で書いてください。",
+      "global_label": "このスキルをグローバルにする",
+      "global_hint": "参加しているすべてのワークスペースで利用できます。編集できるのはあなただけです。",
       "name_conflict_hint": " 別の名前で再度送信してください。",
       "fallback_error": "スキルを作成できませんでした",
       "cancel": "キャンセル",

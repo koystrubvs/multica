@@ -74,6 +74,17 @@ export function canEditSkill(skill: Skill, ctx: PermissionContext): Decision {
   if (ctx.userId === null) {
     return deny("not_authenticated", "Sign in to edit this skill.");
   }
+  // Global skills are owner-only: they span every workspace their owner belongs
+  // to, so workspace admin privileges do not apply.
+  if (skill.is_global === true) {
+    if (skill.created_by !== null && skill.created_by === ctx.userId) {
+      return ALLOW;
+    }
+    return deny(
+      "not_resource_owner",
+      "Only the owner can edit this global skill.",
+    );
+  }
   if (isAdminLike(ctx.role)) return ALLOW;
   if (skill.created_by !== null && skill.created_by === ctx.userId) {
     return ALLOW;

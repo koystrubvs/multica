@@ -205,6 +205,22 @@ describe("canEditSkill / canDeleteSkill", () => {
     expect(canDeleteSkill(skill, { userId: BOB, role: "member" }).allowed)
       .toBe(false);
   });
+
+  describe("global skills are owner-only", () => {
+    const globalSkill: Skill = { ...makeSkill(ALICE), workspace_id: "", is_global: true };
+    it("allows the owner", () => {
+      expect(canEditSkill(globalSkill, { userId: ALICE, role: "member" }).allowed)
+        .toBe(true);
+    });
+    it("denies a non-owner admin (workspace roles do not apply)", () => {
+      expect(canEditSkill(globalSkill, { userId: BOB, role: "admin" }).allowed)
+        .toBe(false);
+    });
+    it("canDeleteSkill mirrors it for global skills", () => {
+      expect(canDeleteSkill(globalSkill, { userId: BOB, role: "owner" }).allowed)
+        .toBe(false);
+    });
+  });
 });
 
 describe("canEditComment / canDeleteComment", () => {

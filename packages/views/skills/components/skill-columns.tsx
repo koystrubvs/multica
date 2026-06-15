@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Download,
   FileText,
+  Globe,
   HardDrive,
   Lock,
   Pencil,
@@ -17,6 +18,7 @@ import type {
 } from "@multica/core/types";
 import { useTimeAgo } from "../../i18n";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
+import { Badge } from "@multica/ui/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -114,6 +116,19 @@ function SkillNameCell({ row }: { row: SkillRow }) {
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
         <span className="block min-w-0 truncate font-medium">{skill.name}</span>
+        {skill.is_global === true && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Badge variant="secondary" className="shrink-0 gap-1">
+                  <Globe className="h-3 w-3" />
+                  {t(($) => $.table.global_badge)}
+                </Badge>
+              }
+            />
+            <TooltipContent>{t(($) => $.table.global_tooltip)}</TooltipContent>
+          </Tooltip>
+        )}
         {!canEdit && (
           <Tooltip>
             <TooltipTrigger

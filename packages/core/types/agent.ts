@@ -398,6 +398,13 @@ export interface SkillSummary {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * True when the skill is not scoped to a single workspace: it is owned by
+   * `created_by` and surfaces in every workspace its owner belongs to. Optional
+   * because older backends omit it — treat a missing value as `false` and
+   * always compare with `=== true`. `workspace_id` is `""` for global skills.
+   */
+  is_global?: boolean;
 }
 
 export interface Skill extends SkillSummary {
@@ -420,6 +427,12 @@ export interface CreateSkillRequest {
   content?: string;
   config?: Record<string, unknown>;
   files?: { path: string; content: string }[];
+  /**
+   * When true, create a global skill owned by the caller and available across
+   * every workspace they belong to, instead of a skill scoped to the current
+   * workspace. Defaults to a workspace-scoped skill when omitted.
+   */
+  global?: boolean;
 }
 
 export interface UpdateSkillRequest {
