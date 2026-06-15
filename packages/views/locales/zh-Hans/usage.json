@@ -55,6 +55,10 @@
     "body": "当智能体在这里开始执行任务后，它们的 token 消耗和运行时长将出现在此处。"
   },
   "duration": {
-    "less_than_minute": "<1分钟"
+    "less_than_minute": "<1分钟",
+    "unit_second": "s",
+    "unit_minute": "m",
+    "unit_hour": "h",
+    "unit_day": "d"
   }
 }

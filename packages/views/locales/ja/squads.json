@@ -3,7 +3,10 @@
     "title": "スクワッド",
     "new_button": "新規スクワッド",
     "empty_no_squads": "スクワッドはまだありません。作成して始めましょう。",
-    "empty_no_match": "フィルターに一致するスクワッドはありません。"
+    "empty_no_match": "フィルターに一致するスクワッドはありません。",
+    "search_placeholder": "スクワッドを検索…",
+    "scope_mine": "自分のもの",
+    "scope_all": "すべて"
   },
   "inspector": {
     "details_section": "詳細",

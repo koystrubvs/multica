@@ -372,23 +372,31 @@ export function aggregateDailyTasks(rows: DashboardRunTimeDaily[]): DailyTasksDa
 // the dashboard run-time KPI and the per-agent run-time column. Keeps two
 // segments max — three segments adds visual noise without precision the
 // dashboard actually needs.
-export function formatDuration(seconds: number, lessThanMinuteLabel: string): string {
-  if (seconds < 0 || !Number.isFinite(seconds)) return lessThanMinuteLabel;
+export interface DurationUnits {
+  lessThanMinute: string;
+  second: string;
+  minute: string;
+  hour: string;
+  day: string;
+}
+
+export function formatDuration(seconds: number, units: DurationUnits): string {
+  if (seconds < 0 || !Number.isFinite(seconds)) return units.lessThanMinute;
   if (seconds < 60) {
-    if (seconds < 1) return lessThanMinuteLabel;
-    return `${Math.round(seconds)}s`;
+    if (seconds < 1) return units.lessThanMinute;
+    return `${Math.round(seconds)}${units.second}`;
   }
   const totalMinutes = Math.floor(seconds / 60);
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
   if (hours === 0) {
     const secs = Math.floor(seconds) % 60;
-    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+    return secs > 0 ? `${mins}${units.minute} ${secs}${units.second}` : `${mins}${units.minute}`;
   }
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
     const h = hours % 24;
-    return h > 0 ? `${days}d ${h}h` : `${days}d`;
+    return h > 0 ? `${days}${units.day} ${h}${units.hour}` : `${days}${units.day}`;
   }
-  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  return mins > 0 ? `${hours}${units.hour} ${mins}${units.minute}` : `${hours}${units.hour}`;
 }

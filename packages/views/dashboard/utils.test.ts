@@ -194,23 +194,24 @@ describe("mergeAgentDashboardRows", () => {
 });
 
 describe("formatDuration", () => {
+  const EN_UNITS = { lessThanMinute: "<1m", second: "s", minute: "m", hour: "h", day: "d" };
   it("formats seconds-only durations", () => {
-    expect(formatDuration(45, "<1m")).toBe("45s");
+    expect(formatDuration(45, EN_UNITS)).toBe("45s");
   });
   it("formats minutes and seconds when under one hour", () => {
-    expect(formatDuration(150, "<1m")).toBe("2m 30s");
-    expect(formatDuration(60, "<1m")).toBe("1m");
+    expect(formatDuration(150, EN_UNITS)).toBe("2m 30s");
+    expect(formatDuration(60, EN_UNITS)).toBe("1m");
   });
   it("formats hours and minutes when under one day", () => {
-    expect(formatDuration(3 * 3600 + 17 * 60, "<1m")).toBe("3h 17m");
-    expect(formatDuration(3600, "<1m")).toBe("1h");
+    expect(formatDuration(3 * 3600 + 17 * 60, EN_UNITS)).toBe("3h 17m");
+    expect(formatDuration(3600, EN_UNITS)).toBe("1h");
   });
   it("formats days and hours when more than 24 hours", () => {
-    expect(formatDuration(2 * 86400 + 5 * 3600, "<1m")).toBe("2d 5h");
+    expect(formatDuration(2 * 86400 + 5 * 3600, EN_UNITS)).toBe("2d 5h");
   });
   it("falls back to the supplied label for sub-second durations", () => {
-    expect(formatDuration(0, "<1m")).toBe("<1m");
-    expect(formatDuration(0.4, "<1m")).toBe("<1m");
+    expect(formatDuration(0, EN_UNITS)).toBe("<1m");
+    expect(formatDuration(0.4, EN_UNITS)).toBe("<1m");
   });
 });
 

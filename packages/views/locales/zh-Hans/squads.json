@@ -3,7 +3,10 @@
     "title": "小队",
     "new_button": "新建小队",
     "empty_no_squads": "还没有小队，创建一个开始吧。",
-    "empty_no_match": "没有匹配筛选条件的小队。"
+    "empty_no_match": "没有匹配筛选条件的小队。",
+    "search_placeholder": "搜索小队…",
+    "scope_mine": "我的",
+    "scope_all": "全部"
   },
   "inspector": {
     "details_section": "详情",

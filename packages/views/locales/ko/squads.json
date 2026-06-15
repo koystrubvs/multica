@@ -3,7 +3,10 @@
     "title": "스쿼드",
     "new_button": "새 스쿼드",
     "empty_no_squads": "아직 스쿼드가 없습니다. 하나 만들어 시작하세요.",
-    "empty_no_match": "필터와 일치하는 스쿼드가 없습니다."
+    "empty_no_match": "필터와 일치하는 스쿼드가 없습니다.",
+    "search_placeholder": "스쿼드 검색…",
+    "scope_mine": "내 것",
+    "scope_all": "전체"
   },
   "inspector": {
     "details_section": "세부 정보",

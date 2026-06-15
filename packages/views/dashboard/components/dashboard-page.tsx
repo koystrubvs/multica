@@ -56,6 +56,7 @@ import {
   aggregateWeeklyTime,
   computeDailyTotals,
   formatDuration,
+  type DurationUnits,
   mergeAgentDashboardRows,
   type AgentDashboardRow,
 } from "../utils";
@@ -147,6 +148,13 @@ function Segmented<T extends string | number>({
  */
 export function DashboardPage() {
   const { t } = useT("usage");
+  const durationUnits: DurationUnits = {
+    lessThanMinute: t(($) => $.duration.less_than_minute),
+    second: t(($) => $.duration.unit_second),
+    minute: t(($) => $.duration.unit_minute),
+    hour: t(($) => $.duration.unit_hour),
+    day: t(($) => $.duration.unit_day),
+  };
   const wsId = useWorkspaceId();
   const viewTZ = useViewingTimezone();
   const [dim, setDim] = useState<Dim>("daily");
@@ -386,10 +394,7 @@ export function DashboardPage() {
                 />
                 <KpiCard
                   label={t(($) => $.kpi.run_time_label, { days })}
-                  value={formatDuration(
-                    runTimeTotals.totalSeconds,
-                    t(($) => $.duration.less_than_minute),
-                  )}
+                  value={formatDuration(runTimeTotals.totalSeconds, durationUnits)}
                   hint={t(($) => $.kpi.run_time_hint, {
                     tasks: runTimeTotals.taskCount,
                   })}
@@ -419,7 +424,7 @@ export function DashboardPage() {
                 weeklyTokens={weeklyTokens}
                 weeklyTime={weeklyTime}
                 weeklyTasks={weeklyTasks}
-                lessThanMinuteLabel={t(($) => $.duration.less_than_minute)}
+                durationUnits={durationUnits}
               />
 
               {/* Per-agent leaderboard — user picks the ranking metric;
@@ -427,7 +432,7 @@ export function DashboardPage() {
               <Leaderboard
                 rows={agentRows}
                 agents={agents}
-                lessThanMinuteLabel={t(($) => $.duration.less_than_minute)}
+                durationUnits={durationUnits}
               />
             </>
           )}
@@ -506,7 +511,7 @@ function TrendBlock({
   weeklyTokens,
   weeklyTime,
   weeklyTasks,
-  lessThanMinuteLabel,
+  durationUnits,
 }: {
   dim: Dim;
   dailyCost: ReturnType<typeof aggregateDailyCost>;
@@ -517,7 +522,7 @@ function TrendBlock({
   weeklyTokens: ReturnType<typeof aggregateByWeek>["weeklyTokens"];
   weeklyTime: ReturnType<typeof aggregateWeeklyTime>;
   weeklyTasks: ReturnType<typeof aggregateWeeklyTasks>;
-  lessThanMinuteLabel: string;
+  durationUnits: DurationUnits;
 }) {
   const { t } = useT("usage");
   const [metric, setMetric] = useState<DailyMetric>("tokens");
@@ -597,8 +602,8 @@ function TrendBlock({
           ) : metric === "time" ? (
             <WeeklyTimeChart
               data={weeklyTime}
-              formatY={(s) => formatDuration(s, lessThanMinuteLabel)}
-              formatTooltip={(s) => formatDuration(s, lessThanMinuteLabel)}
+              formatY={(s) => formatDuration(s, durationUnits)}
+              formatTooltip={(s) => formatDuration(s, durationUnits)}
             />
           ) : (
             <WeeklyTasksChart data={weeklyTasks} />
@@ -610,8 +615,8 @@ function TrendBlock({
         ) : metric === "time" ? (
           <DailyTimeChart
             data={dailyTime}
-            formatY={(s) => formatDuration(s, lessThanMinuteLabel)}
-            formatTooltip={(s) => formatDuration(s, lessThanMinuteLabel)}
+            formatY={(s) => formatDuration(s, durationUnits)}
+            formatTooltip={(s) => formatDuration(s, durationUnits)}
           />
         ) : (
           <DailyTasksChart data={dailyTasks} />
@@ -636,11 +641,11 @@ const SORT_METRIC: Record<LeaderboardSort, (r: AgentDashboardRow) => number> = {
 function Leaderboard({
   rows,
   agents,
-  lessThanMinuteLabel,
+  durationUnits,
 }: {
   rows: AgentDashboardRow[];
   agents: { id: string; name: string }[];
-  lessThanMinuteLabel: string;
+  durationUnits: DurationUnits;
 }) {
   const { t } = useT("usage");
   const [sortBy, setSortBy] = useState<LeaderboardSort>("tokens");
@@ -753,7 +758,7 @@ function Leaderboard({
                   <div
                     className={`text-right text-xs tabular-nums ${sortBy === "time" ? "font-medium text-foreground" : "text-muted-foreground"}`}
                   >
-                    {formatDuration(row.seconds, lessThanMinuteLabel)}
+                    {formatDuration(row.seconds, durationUnits)}
                   </div>
                   <div
                     className={`text-right text-xs tabular-nums ${sortBy === "tasks" ? "font-medium text-foreground" : "text-muted-foreground"}`}
@@ -771,7 +776,7 @@ function Leaderboard({
             <span />
             <span className="text-right text-xs font-semibold tabular-nums">{formatTokens(columnTotals.tokens)}</span>
             <span className="text-right text-xs font-semibold tabular-nums">{formatRub(columnTotals.cost)}</span>
-            <span className="text-right text-xs font-semibold tabular-nums">{formatDuration(columnTotals.seconds, lessThanMinuteLabel)}</span>
+            <span className="text-right text-xs font-semibold tabular-nums">{formatDuration(columnTotals.seconds, durationUnits)}</span>
             <span className="text-right text-xs font-semibold tabular-nums">{columnTotals.taskCount}</span>
           </div>
         </>

@@ -55,6 +55,10 @@
     "body": "ここでエージェントがタスクを実行し始めると、トークンの消費と実行時間がこの画面に表示されます。"
   },
   "duration": {
-    "less_than_minute": "1分未満"
+    "less_than_minute": "1分未満",
+    "unit_second": "s",
+    "unit_minute": "m",
+    "unit_hour": "h",
+    "unit_day": "d"
   }
 }

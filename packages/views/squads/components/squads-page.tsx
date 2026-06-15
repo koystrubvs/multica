@@ -99,7 +99,7 @@ export function SquadsPage() {
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search squads..."
+                  placeholder={t(($) => $.page.search_placeholder)}
                   className="h-8 w-full pl-8 text-sm"
                 />
               </div>
@@ -161,10 +161,11 @@ function SquadCard({ squad, leader, creator, href }: { squad: Squad; leader?: Ag
 }
 
 function ScopeSegment({ scope, setScope, counts }: { scope: Scope; setScope: (v: Scope) => void; counts: { all: number; mine: number } }) {
+  const { t } = useT("squads");
   return (
     <div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-      <ScopeButton active={scope === "mine"} label="Mine" count={counts.mine} onClick={() => setScope("mine")} />
-      <ScopeButton active={scope === "all"} label="All" count={counts.all} onClick={() => setScope("all")} />
+      <ScopeButton active={scope === "mine"} label={t(($) => $.page.scope_mine)} count={counts.mine} onClick={() => setScope("mine")} />
+      <ScopeButton active={scope === "all"} label={t(($) => $.page.scope_all)} count={counts.all} onClick={() => setScope("all")} />
     </div>
   );
 }

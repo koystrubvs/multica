@@ -3,7 +3,10 @@
     "title": "Squads",
     "new_button": "New Squad",
     "empty_no_squads": "No squads yet. Create one to get started.",
-    "empty_no_match": "No squads match your filters."
+    "empty_no_match": "No squads match your filters.",
+    "search_placeholder": "Search squads…",
+    "scope_mine": "Mine",
+    "scope_all": "All"
   },
   "inspector": {
     "details_section": "Details",
