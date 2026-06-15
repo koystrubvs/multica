@@ -5,6 +5,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  Globe,
   HardDrive,
   Loader2,
   Lock,
@@ -548,6 +549,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     if (origin.type === "clawhub") return t(($) => $.detail.subline.origin_clawhub);
     if (origin.type === "skills_sh") return t(($) => $.detail.subline.origin_skills_sh);
     if (origin.type === "github") return t(($) => $.detail.subline.origin_github);
+    if (skill.is_global === true) return t(($) => $.detail.subline.origin_global);
     return t(($) => $.detail.subline.origin_workspace);
   })();
 
@@ -703,6 +705,8 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
                 <span className="inline-flex items-center gap-1">
                   {origin?.type === "runtime_local" ? (
                     <HardDrive className="h-3 w-3" />
+                  ) : skill.is_global === true ? (
+                    <Globe className="h-3 w-3" />
                   ) : (
                     <Sparkles className="h-3 w-3" />
                   )}
@@ -880,9 +884,11 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
             <p className="text-xs leading-relaxed text-muted-foreground">
               {canEdit
                 ? t(($) => $.detail.sidebar.permissions_owner)
-                : creator
-                  ? t(($) => $.detail.sidebar.permissions_locked_creator, { name: creator.name })
-                  : t(($) => $.detail.sidebar.permissions_locked)}
+                : skill.is_global === true
+                  ? t(($) => $.detail.sidebar.permissions_global_locked)
+                  : creator
+                    ? t(($) => $.detail.sidebar.permissions_locked_creator, { name: creator.name })
+                    : t(($) => $.detail.sidebar.permissions_locked)}
             </p>
           </div>
         </aside>

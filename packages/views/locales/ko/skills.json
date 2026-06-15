@@ -50,7 +50,9 @@
     "source_runtime_unknown": "런타임에서 가져옴",
     "source_clawhub": "ClawHub에서 가져옴",
     "source_skills_sh": "Skills.sh에서 가져옴",
-    "source_github": "GitHub에서 가져옴"
+    "source_github": "GitHub에서 가져옴",
+    "global_badge": "전역",
+    "global_tooltip": "참여 중인 모든 워크스페이스에서 사용할 수 있습니다"
   },
   "actions": {
     "row_menu": "작업",
@@ -114,6 +116,7 @@
       "origin_skills_sh": "가져옴 · Skills.sh",
       "origin_github": "가져옴 · GitHub",
       "origin_workspace": "워크스페이스",
+      "origin_global": "전역 · 모든 워크스페이스",
       "updated_label": "{{when}} 수정됨",
       "by_creator": "{{name}}님"
     },
@@ -141,6 +144,7 @@
       "permissions_owner": "이 스킬을 수정하고 삭제할 수 있습니다. 변경사항은 다음 에이전트 실행부터 적용됩니다.",
       "permissions_locked_creator": "생성자({{name}}) 또는 워크스페이스 관리자만 이 스킬을 수정할 수 있습니다.",
       "permissions_locked": "생성자 또는 워크스페이스 관리자만 이 스킬을 수정할 수 있습니다.",
+      "permissions_global_locked": "전역 스킬입니다. 소유자만 수정하거나 삭제할 수 있습니다.",
       "used_by_empty": "아직 어떤 에이전트에도 할당되지 않았습니다. 에이전트의 스킬 탭에서 할당하세요."
     },
     "origin_card": {
@@ -219,6 +223,8 @@
       "name_hint": "워크스페이스 안에서 고유해야 합니다.",
       "description_label": "설명",
       "description_placeholder": "이 스킬을 에이전트에 언제 할당해야 하는지 한 문장으로 적어 주세요.",
+      "global_label": "이 스킬을 전역으로 설정",
+      "global_hint": "참여 중인 모든 워크스페이스에서 사용할 수 있습니다. 본인만 수정할 수 있습니다.",
       "name_conflict_hint": " 다른 이름으로 다시 제출하세요.",
       "fallback_error": "스킬을 만들지 못했습니다",
       "cancel": "취소",

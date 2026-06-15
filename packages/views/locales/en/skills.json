@@ -50,7 +50,9 @@
     "source_runtime_unknown": "From a runtime",
     "source_clawhub": "From ClawHub",
     "source_skills_sh": "From Skills.sh",
-    "source_github": "From GitHub"
+    "source_github": "From GitHub",
+    "global_badge": "Global",
+    "global_tooltip": "Available in every workspace you belong to"
   },
   "actions": {
     "row_menu": "Actions",
@@ -114,6 +116,7 @@
       "origin_skills_sh": "Imported · Skills.sh",
       "origin_github": "Imported · GitHub",
       "origin_workspace": "Workspace",
+      "origin_global": "Global · all your workspaces",
       "updated_label": "Updated {{when}}",
       "by_creator": "by {{name}}"
     },
@@ -141,6 +144,7 @@
       "permissions_owner": "You can edit and delete this skill. Changes take effect on the next agent run.",
       "permissions_locked_creator": "Only the creator ({{name}}) or a workspace admin can edit this skill.",
       "permissions_locked": "Only the creator or a workspace admin can edit this skill.",
+      "permissions_global_locked": "This is a global skill. Only its owner can edit or delete it.",
       "used_by_empty": "Not assigned to any agent yet. Open an agent's Skills tab to assign."
     },
     "origin_card": {
@@ -219,6 +223,8 @@
       "name_hint": "Must be unique within the workspace.",
       "description_label": "Description",
       "description_placeholder": "One sentence on when to assign this skill to an agent.",
+      "global_label": "Make this skill global",
+      "global_hint": "Available in every workspace you belong to. Only you can edit it.",
       "name_conflict_hint": " Try a different name and submit again.",
       "fallback_error": "Failed to create skill",
       "cancel": "Cancel",

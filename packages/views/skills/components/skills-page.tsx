@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   BookOpen,
   Download,
+  Globe,
   HardDrive,
   Lock,
   Pencil,
@@ -31,6 +32,7 @@ import {
 } from "@multica/core/workspace/queries";
 import { runtimeListOptions } from "@multica/core/runtimes";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
+import { Badge } from "@multica/ui/components/ui/badge";
 import { Button } from "@multica/ui/components/ui/button";
 import { Checkbox } from "@multica/ui/components/ui/checkbox";
 import {
@@ -254,6 +256,19 @@ function NameCell({ row }: { row: SkillRow }) {
       <span className="min-w-0 truncate text-sm font-medium">
         {skill.name}
       </span>
+      {skill.is_global === true && (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Badge variant="secondary" className="shrink-0 gap-1">
+                <Globe className="h-3 w-3" />
+                {t(($) => $.table.global_badge)}
+              </Badge>
+            }
+          />
+          <TooltipContent>{t(($) => $.table.global_tooltip)}</TooltipContent>
+        </Tooltip>
+      )}
       {!canEdit && (
         <Tooltip>
           <TooltipTrigger
