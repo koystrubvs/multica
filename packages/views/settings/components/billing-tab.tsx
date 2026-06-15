@@ -131,7 +131,7 @@ export function BillingTab() {
   };
 
   const selectClass =
-    "h-8 max-w-72 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+    "h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -182,7 +182,7 @@ export function BillingTab() {
                 })}
           </p>
         ) : (
-          <div className="mt-4 flex flex-col gap-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium">{t(($) => $.billing.elba_org)}</span>
               <select

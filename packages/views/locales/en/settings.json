@@ -392,9 +392,9 @@
   },
   "billing": {
     "pricing_title": "Pricing defaults",
-    "pricing_description": "Every project inherits these unless it sets its own override on the project page.",
+    "pricing_description": "Defaults every project inherits unless it sets its own override. Client price = AI token cost × ₽ rate × coefficient K.",
     "markup": "Markup (K)",
-    "markup_hint": "Multiplier on top of the no-cache token cost; covers team shares, review and margin.",
+    "markup_hint": "How many times the client price exceeds the AI token cost. K=3 → a task that burns 1000 ₽ of tokens is billed at 3000 ₽. Covers team shares (PM/dev), review and margin.",
     "fx_markup": "FX markup, %",
     "fx_markup_hint": "Added to the CBR USD-RUB rate; frozen into each task snapshot.",
     "min_price": "Min price per task, RUB",
