@@ -65,7 +65,7 @@ grep -n "func IsReservedContentPath"    server/internal/skill/reserved.go
 | Behavior | File:line |
 |---|---|
 | `SkillWithFilesResponse` = embedded `SkillResponse` + `Files []SkillFileResponse` | `server/internal/handler/skill.go:99-102` |
-| `SkillResponse` fields (`id, workspace_id, name, description, content, config, created_by, created_at, updated_at`) | `server/internal/handler/skill.go:41-51` |
+| `SkillResponse` fields (`id, workspace_id, name, description, content, config, created_by, created_at, updated_at, is_global`) | `server/internal/handler/skill.go:41-55` |
 | `SkillFileResponse` fields | `server/internal/handler/skill.go:80-87` |
 | `createSkillWithFilesInTx` returns `SkillWithFilesResponse{SkillResponse, Files}` | `server/internal/handler/skill_create.go:66-69` |
 | `config.origin` set on import | `server/internal/handler/skill.go:1947` |

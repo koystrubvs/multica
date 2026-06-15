@@ -66,6 +66,23 @@ func (q *Queries) CreateSkill(ctx context.Context, arg CreateSkillParams) (Skill
 	return i, err
 }
 
+const deleteGlobalSkill = `-- name: DeleteGlobalSkill :exec
+DELETE FROM skill WHERE id = $1 AND workspace_id IS NULL AND created_by = $2
+`
+
+type DeleteGlobalSkillParams struct {
+	ID        pgtype.UUID `json:"id"`
+	CreatedBy pgtype.UUID `json:"created_by"`
+}
+
+// Owner-scoped delete for a global skill (workspace_id IS NULL). The ownership
+// match is the tenant guard here, analogous to the workspace_id guard on
+// DeleteSkill — a global skill has no workspace to scope by.
+func (q *Queries) DeleteGlobalSkill(ctx context.Context, arg DeleteGlobalSkillParams) error {
+	_, err := q.db.Exec(ctx, deleteGlobalSkill, arg.ID, arg.CreatedBy)
+	return err
+}
+
 const deleteSkill = `-- name: DeleteSkill :exec
 DELETE FROM skill WHERE id = $1 AND workspace_id = $2
 `
@@ -198,6 +215,40 @@ func (q *Queries) GetSkillInWorkspace(ctx context.Context, arg GetSkillInWorkspa
 	return i, err
 }
 
+const getSkillVisibleInWorkspace = `-- name: GetSkillVisibleInWorkspace :one
+SELECT s.id, s.workspace_id, s.name, s.description, s.content, s.config, s.created_by, s.created_at, s.updated_at FROM skill s
+WHERE s.id = $1
+  AND (s.workspace_id = $2
+       OR (s.workspace_id IS NULL
+           AND s.created_by IN (SELECT m.user_id FROM member m WHERE m.workspace_id = $2)))
+`
+
+type GetSkillVisibleInWorkspaceParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+// Resolves a skill usable in a workspace: either a skill owned by the workspace,
+// or a global skill (workspace_id IS NULL) owned by one of the workspace's
+// members. Used by the skill loader and agent-skill attachment validation so
+// global skills can be viewed and attached anywhere their owner has access.
+func (q *Queries) GetSkillVisibleInWorkspace(ctx context.Context, arg GetSkillVisibleInWorkspaceParams) (Skill, error) {
+	row := q.db.QueryRow(ctx, getSkillVisibleInWorkspace, arg.ID, arg.WorkspaceID)
+	var i Skill
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.Content,
+		&i.Config,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAgentSkillSummaries = `-- name: ListAgentSkillSummaries :many
 SELECT s.id, s.workspace_id, s.name, s.description, s.config, s.created_by, s.created_at, s.updated_at
 FROM skill s
@@ -291,7 +342,8 @@ const listAgentSkillsByWorkspace = `-- name: ListAgentSkillsByWorkspace :many
 SELECT ask.agent_id, s.id, s.name, s.description
 FROM agent_skill ask
 JOIN skill s ON s.id = ask.skill_id
-WHERE s.workspace_id = $1
+JOIN agent a ON a.id = ask.agent_id
+WHERE a.workspace_id = $1
 ORDER BY s.name ASC
 `
 
@@ -302,6 +354,11 @@ type ListAgentSkillsByWorkspaceRow struct {
 	Description string      `json:"description"`
 }
 
+// Batch-loads the skills attached to every agent in a workspace. Filters by the
+// AGENT's workspace, not the skill's — a global skill (workspace_id IS NULL)
+// attached to one of the workspace's agents must still appear here, otherwise it
+// would silently drop out of the agent-list payload and the skills "used by"
+// column.
 func (q *Queries) ListAgentSkillsByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]ListAgentSkillsByWorkspaceRow, error) {
 	rows, err := q.db.Query(ctx, listAgentSkillsByWorkspace, workspaceID)
 	if err != nil {
@@ -363,10 +420,12 @@ func (q *Queries) ListSkillFiles(ctx context.Context, skillID pgtype.UUID) ([]Sk
 }
 
 const listSkillSummariesByWorkspace = `-- name: ListSkillSummariesByWorkspace :many
-SELECT id, workspace_id, name, description, config, created_by, created_at, updated_at
-FROM skill
-WHERE workspace_id = $1
-ORDER BY name ASC
+SELECT s.id, s.workspace_id, s.name, s.description, s.config, s.created_by, s.created_at, s.updated_at
+FROM skill s
+WHERE s.workspace_id = $1
+   OR (s.workspace_id IS NULL
+       AND s.created_by IN (SELECT m.user_id FROM member m WHERE m.workspace_id = $1))
+ORDER BY s.name ASC
 `
 
 type ListSkillSummariesByWorkspaceRow struct {
@@ -384,6 +443,10 @@ type ListSkillSummariesByWorkspaceRow struct {
 // by list endpoints (CLI table, web list page) where the body is never read;
 // shipping it everywhere blew up payload size on workspaces with many skills
 // and caused 15s CLI timeouts from high-latency regions (GH multica-ai/multica#2174).
+//
+// Returns the workspace's own skills PLUS global skills (workspace_id IS NULL)
+// owned by any member of the workspace, so a user's global skills surface in
+// every workspace they belong to (visible to teammates there too).
 func (q *Queries) ListSkillSummariesByWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]ListSkillSummariesByWorkspaceRow, error) {
 	rows, err := q.db.Query(ctx, listSkillSummariesByWorkspace, workspaceID)
 	if err != nil {
