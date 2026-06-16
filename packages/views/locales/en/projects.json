@@ -9,7 +9,17 @@
     "search_placeholder": "Search projects...",
     "no_search_results": "No results match your search",
     "filter_status": "Status",
-    "filter_all": "All statuses"
+    "filter_all": "All statuses",
+    "view_table": "Table",
+    "view_cards": "Cards",
+    "row_menu": "Project actions",
+    "pin": "Pin to sidebar",
+    "unpin": "Unpin",
+    "delete": "Delete",
+    "no_matches": "No projects match",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "clear_selection": "Clear selection"
   },
   "table": {
     "name": "Name",
@@ -20,7 +30,8 @@
     "created": "Created",
     "siteping": "SitePing",
     "siteping_connected": "Connected",
-    "siteping_not_installed": "No widget"
+    "siteping_not_installed": "No widget",
+    "issues": "Issues"
   },
   "status": {
     "planned": "Planned",
@@ -246,5 +257,21 @@
     "period_invoiced_toast": "Period closed; invoice and act created in Elba",
     "elba_push_failed_toast": "Elba push failed: {{error}}",
     "elba_invoice_ref": "Elba invoice: {{id}}"
+  },
+  "toolbar": {
+    "result_count_title": "Matching projects / all projects",
+    "filter_label": "Filter",
+    "filter_active_count_one": "{{count}} filter",
+    "filter_active_count_other": "{{count}} filters",
+    "clear_filters": "Clear filters",
+    "section_status": "Status",
+    "section_priority": "Priority",
+    "section_lead": "Lead",
+    "display": "Display",
+    "sort_by": "Sort by",
+    "direction_asc": "Ascending",
+    "direction_desc": "Descending",
+    "section_columns": "Columns",
+    "view": "View"
   }
 }
