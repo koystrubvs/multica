@@ -8,9 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/go-chi/chi/v5"
@@ -766,6 +768,10 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	dateFilter, ok := parseIssueDateFilter(w, r.URL.Query())
+	if !ok {
+		return
+	}
 
 	// open_only=true returns all non-done/cancelled issues (no limit).
 	if r.URL.Query().Get("open_only") == "true" {
@@ -899,6 +905,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	if metadataFilter != nil {
 		where = append(where, fmt.Sprintf("i.metadata @> %s::jsonb", addArg(string(metadataFilter))))
 	}
+	where = appendIssueDateFilter(where, addArg, dateFilter)
 	if involvesUserFilter.Valid {
 		ref := addArg(involvesUserFilter)
 		where = append(where, fmt.Sprintf(`(
@@ -1036,6 +1043,68 @@ LIMIT %s OFFSET %s`, whereSql, orderBy, limitRef, offsetRef)
 type issueActorFilter struct {
 	actorType string
 	actorID   pgtype.UUID
+}
+
+type issueDateFilter struct {
+	column string
+	start  time.Time
+	end    time.Time
+}
+
+func parseIssueDateFilter(w http.ResponseWriter, values url.Values) (*issueDateFilter, bool) {
+	field := strings.TrimSpace(values.Get("date_field"))
+	startRaw := strings.TrimSpace(values.Get("date_start"))
+	endRaw := strings.TrimSpace(values.Get("date_end"))
+	if field == "" && startRaw == "" && endRaw == "" {
+		return nil, true
+	}
+	if field == "" || startRaw == "" || endRaw == "" {
+		writeError(w, http.StatusBadRequest, "date_field, date_start, and date_end are required together")
+		return nil, false
+	}
+
+	column := ""
+	switch field {
+	case "created_at":
+		column = "created_at"
+	case "updated_at":
+		column = "updated_at"
+	default:
+		writeError(w, http.StatusBadRequest, "invalid date_field")
+		return nil, false
+	}
+
+	start, err := time.Parse(time.RFC3339Nano, startRaw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid date_start")
+		return nil, false
+	}
+	end, err := time.Parse(time.RFC3339Nano, endRaw)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid date_end")
+		return nil, false
+	}
+	if !start.Before(end) {
+		writeError(w, http.StatusBadRequest, "date_start must be before date_end")
+		return nil, false
+	}
+
+	return &issueDateFilter{column: column, start: start, end: end}, true
+}
+
+func appendIssueDateFilter(where []string, addArg func(any) string, filter *issueDateFilter) []string {
+	if filter == nil {
+		return where
+	}
+	startRef := addArg(filter.start)
+	endRef := addArg(filter.end)
+	return append(where, fmt.Sprintf(
+		"i.%s >= %s AND i.%s < %s",
+		filter.column,
+		startRef,
+		filter.column,
+		endRef,
+	))
 }
 
 func splitCommaParam(raw string) []string {
@@ -1310,6 +1379,12 @@ func (h *Handler) ListGroupedIssues(w http.ResponseWriter, r *http.Request) {
 			addArg(labelIDs),
 		))
 	}
+
+	dateFilter, ok := parseIssueDateFilter(w, r.URL.Query())
+	if !ok {
+		return
+	}
+	where = appendIssueDateFilter(where, addArg, dateFilter)
 
 	if groupAssigneeType := r.URL.Query().Get("group_assignee_type"); groupAssigneeType != "" {
 		if groupAssigneeType == "none" {
@@ -2573,7 +2648,7 @@ func (h *Handler) shouldEnqueueAgentTask(ctx context.Context, issue db.Issue) bo
 // agent's UUID is "welded" onto the issue and remains visible to every member
 // who can view it. Without this check any of those members could dispatch a new
 // task to the private agent simply by commenting (#3300).
-func (h *Handler) shouldEnqueueOnComment(ctx context.Context, issue db.Issue, actorType, actorID string) bool {
+func (h *Handler) shouldEnqueueOnComment(ctx context.Context, issue db.Issue, actorType, actorID string, opts commentTriggerComputeOptions) bool {
 	if !issue.AssigneeType.Valid || issue.AssigneeType.String != "agent" || !issue.AssigneeID.Valid {
 		return false
 	}
@@ -2587,10 +2662,7 @@ func (h *Handler) shouldEnqueueOnComment(ctx context.Context, issue db.Issue, ac
 	// Coalescing queue: allow enqueue when a task is running (so the agent
 	// picks up new comments on the next cycle) but skip if this agent already
 	// has a pending task (natural dedup for rapid-fire comments).
-	hasPending, err := h.Queries.HasPendingTaskForIssueAndAgent(ctx, db.HasPendingTaskForIssueAndAgentParams{
-		IssueID: issue.ID,
-		AgentID: issue.AssigneeID,
-	})
+	hasPending, err := h.hasPendingTaskForIssueAndAgent(ctx, issue.ID, issue.AssigneeID, opts)
 	if err != nil || hasPending {
 		return false
 	}
