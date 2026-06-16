@@ -52,7 +52,17 @@
     "issue_count_other": "{{count}} задача",
     "reset": "Сбросить все фильтры",
     "active_count_one": "Активных: {{count}}",
-    "active_count_other": "Активных: {{count}}"
+    "active_count_other": "Активных: {{count}}",
+    "date_apply": "Применить",
+    "date_clear": "Сбросить",
+    "date_custom_range": "Произвольный диапазон",
+    "date_field": "Поле даты",
+    "date_field_created": "Дата создания",
+    "date_field_updated": "Дата обновления",
+    "date_last_3_days": "Последние 3 дня",
+    "date_last_7_days": "Последние 7 дней",
+    "date_today": "Сегодня",
+    "section_date": "Дата"
   },
   "display": {
     "tooltip": "Настройки отображения",

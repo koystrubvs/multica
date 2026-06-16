@@ -9,13 +9,20 @@
       "created_by": "Создал",
       "mode": "Режим",
       "status": "Статус",
-      "last_run": "Последний запуск"
+      "last_run": "Последний запуск",
+      "assignee": "Исполнитель",
+      "created": "Создан",
+      "next_run": "Следующий запуск",
+      "trigger": "Триггер"
     },
     "last_run_empty": "--",
     "empty": {
       "title": "Пока нет автопилотов",
       "hint": "Запланируйте регулярные tasks для AI-агентов. Выберите шаблон или начните с нуля."
-    }
+    },
+    "no_matches": "Нет совпадений",
+    "retry": "Повторить",
+    "scope_all": "Все"
   },
   "status": {
     "active": "Активен",
@@ -354,5 +361,39 @@
   },
   "timezone_picker": {
     "search_placeholder": "Поиск часового пояса..."
+  },
+  "actions": {
+    "clear_selection": "Снять выделение",
+    "delete": "Удалить",
+    "delete_dialog": {
+      "cancel": "Отмена",
+      "confirm": "Удалить",
+      "deleting": "Удаление…",
+      "description_one": "Будет удалён {{count}} автопилот. Это действие необратимо.",
+      "description_other": "Будет удалено {{count}} автопилота. Это действие необратимо.",
+      "title": "Удалить автопилоты?",
+      "warning": "Это удалит выбранные автопилоты."
+    },
+    "pause": "Поставить на паузу",
+    "resume": "Возобновить",
+    "row_menu": "Действия с автопилотом",
+    "selected_one": "{{count}} выбран",
+    "selected_other": "{{count}} выбрано"
+  },
+  "toolbar": {
+    "clear_filters": "Сбросить фильтры",
+    "direction_asc": "По возрастанию",
+    "direction_desc": "По убыванию",
+    "display": "Отображение",
+    "filter_active_count_one": "{{count}} фильтр",
+    "filter_active_count_other": "{{count}} фильтра",
+    "filter_label": "Фильтр",
+    "result_count_title": "Найдено / всего",
+    "section_columns": "Столбцы",
+    "sort_by": "Сортировка",
+    "section_assignee": "Исполнитель",
+    "section_creator": "Создатель",
+    "section_mode": "Режим",
+    "section_trigger": "Триггер"
   }
 }

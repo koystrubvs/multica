@@ -13,7 +13,8 @@
   },
   "scope": {
     "mine": "Мои",
-    "all": "Все"
+    "all": "Все",
+    "archived": "Архив"
   },
   "sort": {
     "label_recent": "Недавняя активность",
@@ -57,7 +58,11 @@
     "workload": "Загрузка",
     "runtime": "Среда выполнения",
     "activity_7d": "Активность (7д)",
-    "runs": "Запуски"
+    "runs": "Запуски",
+    "created": "Создан",
+    "last_active": "Последняя активность",
+    "model": "Модель",
+    "owner": "Владелец"
   },
   "row": {
     "you": "Вы",
@@ -65,7 +70,9 @@
     "no_description": "Без описания",
     "fallback_runtime_cloud": "Облако",
     "fallback_runtime_local": "Локально",
-    "actions_aria": "Действия строки"
+    "actions_aria": "Действия строки",
+    "task_count_one": "{{count}} задача",
+    "task_count_other": "{{count}} задач"
   },
   "activity_tooltip": {
     "created_today": "Создан сегодня",
@@ -492,5 +499,32 @@
     "agent_count_one": "{{count}} агент",
     "agent_count_other": "{{count}} агентов",
     "empty": "Пока нет машин"
+  },
+  "actions": {
+    "clear_selection": "Снять выделение",
+    "selected_one": "{{count}} выбран",
+    "selected_other": "{{count}} выбрано"
+  },
+  "last_active": {
+    "days_ago_one": "{{count}} день назад",
+    "days_ago_other": "{{count}} дн. назад",
+    "none": "Нет активности",
+    "today": "Сегодня"
+  },
+  "toolbar": {
+    "clear_filters": "Сбросить фильтры",
+    "direction_asc": "По возрастанию",
+    "direction_desc": "По убыванию",
+    "display": "Отображение",
+    "filter_active_count_one": "{{count}} фильтр",
+    "filter_active_count_other": "{{count}} фильтра",
+    "filter_label": "Фильтр",
+    "result_count_title": "Найдено / всего",
+    "section_columns": "Столбцы",
+    "sort_by": "Сортировка",
+    "section_availability": "Доступность",
+    "section_model": "Модель",
+    "section_owner": "Владелец",
+    "section_runtime": "Среда выполнения"
   }
 }

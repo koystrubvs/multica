@@ -9,7 +9,17 @@
     "search_placeholder": "Поиск проектов...",
     "no_search_results": "Ничего не соответствует поиску",
     "filter_status": "Статус",
-    "filter_all": "Все статусы"
+    "filter_all": "Все статусы",
+    "clear_selection": "Снять выделение",
+    "delete": "Удалить",
+    "no_matches": "Нет совпадений",
+    "pin": "Закрепить в боковой панели",
+    "row_menu": "Действия с проектом",
+    "selected_one": "{{count}} выбран",
+    "selected_other": "{{count}} выбрано",
+    "unpin": "Открепить",
+    "view_cards": "Карточки",
+    "view_table": "Таблица"
   },
   "table": {
     "name": "Название",
@@ -20,7 +30,8 @@
     "created": "Создан",
     "siteping": "SitePing",
     "siteping_connected": "Подключён",
-    "siteping_not_installed": "Нет виджета"
+    "siteping_not_installed": "Нет виджета",
+    "issues": "Задачи"
   },
   "status": {
     "planned": "Запланирован",
@@ -246,5 +257,21 @@
     "period_invoiced_toast": "Период закрыт, счёт и акт созданы в Эльбе",
     "elba_push_failed_toast": "Не удалось выставить счёт в Эльбе: {{error}}",
     "elba_invoice_ref": "Счёт в Эльбе: {{id}}"
+  },
+  "toolbar": {
+    "clear_filters": "Сбросить фильтры",
+    "direction_asc": "По возрастанию",
+    "direction_desc": "По убыванию",
+    "display": "Отображение",
+    "filter_active_count_one": "{{count}} фильтр",
+    "filter_active_count_other": "{{count}} фильтра",
+    "filter_label": "Фильтр",
+    "result_count_title": "Найдено / всего",
+    "section_columns": "Столбцы",
+    "sort_by": "Сортировка",
+    "section_lead": "Ответственный",
+    "section_priority": "Приоритет",
+    "section_status": "Статус",
+    "view": "Вид"
   }
 }
