@@ -867,7 +867,7 @@ export default function SkillsPage() {
           />
           <div
             ref={listScrollRef}
-            className="min-h-0 flex-1 overflow-auto @container"
+            className="min-h-0 flex-1 overflow-auto overscroll-contain @container"
           >
           <ListGrid
             className={`${GRID_COLS} @2xl:min-w-[var(--lgc-minw)]`}
