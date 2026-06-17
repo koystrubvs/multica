@@ -149,26 +149,25 @@
   animation: nav-progress-sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
-/* Border beam: a brand-tinted light streak runs continuously around the
- * element's rounded border, drawing the eye to a live/CTA affordance that
- * would otherwise blend into the chrome (the "agent is working" header chip,
- * the "switch to agent" affordance in manual create).
- *
- * Driven by CSS Motion Path: a small streak travels the host's border-box via
- * `offset-path: border-box` while `offset-distance` animates 0 -> 100%.
- * offset-distance is arc length, so the streak moves at constant *perimeter*
- * speed and sweeps every edge — rounded corners included — at an even pace.
- *
- * This replaces an earlier rotating conic-gradient, which spun at constant
- * *angular* speed about the centre. On these chips — wide and short — the long
- * top/bottom edges subtend ~160 deg each at the centre while the short sides
- * subtend only ~18 deg, so the comet floods a short side and stalls there for
- * ~1s before sweeping on, reading as the beam "freezing" on the left/right.
- * Arc length removes the dependence on shape, so a 16:1 chip sweeps as
- * smoothly as a square. It also animates a plain length rather than a
- * registered @property angle, so the motion can't degrade to a discrete jump
- * on engines that don't interpolate custom properties. Pair with a subtle
- * background tint on the host so the streak has something to ride on. */
+/* Border beam: a brand-tinted highlight sweeps continuously around the
+ * element's rounded border, drawing the eye to a CTA that would otherwise
+ * blend into the chrome (e.g. the "switch to agent" affordance in manual
+ * create). Built with a conic-gradient on a ::before whose mask carves out a
+ * 1px ring; an animated @property angle drives the rotation so only the
+ * gradient repaints, not layout. The ring respects `border-radius: inherit`,
+ * so any rounded host picks up the right curvature for free. Pair with a
+ * subtle background tint on the host so the highlight has something to ride
+ * on at low contrast. */
+@property --border-beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes border-beam-rotate {
+  to { --border-beam-angle: 360deg; }
+}
+
 .border-beam {
   position: relative;
 }
@@ -176,38 +175,40 @@
 .border-beam::before {
   content: "";
   position: absolute;
-  width: 48px;
-  height: 3px;
-  border-radius: 9999px;
-  /* Fades to transparent at both ends so it reads as a comet, not a bar. */
-  background: linear-gradient(
-    90deg,
-    transparent,
-    #ffbe7b,
-    #ff777f,
-    #ff8ab4,
-    #a07cfe,
-    #5b9dff,
-    transparent
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--border-beam-angle),
+    transparent 0deg,
+    transparent 220deg,
+    #ffbe7b 245deg,
+    #ff777f 270deg,
+    #ff8ab4 295deg,
+    #a07cfe 320deg,
+    #5b9dff 345deg,
+    transparent 360deg
   );
-  offset-path: border-box;
-  offset-distance: 0%;
-  /* Keep the streak tangent to the path so it tilts through the corners. */
-  offset-rotate: auto;
-  animation: border-beam-travel 3.2s linear infinite;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: border-beam-rotate 3.2s linear infinite;
   pointer-events: none;
-  will-change: offset-distance;
-}
-
-@keyframes border-beam-travel {
-  to { offset-distance: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .border-beam::before {
-    /* Park the streak on the top edge as a static brand accent. */
     animation: none;
-    offset-distance: 0%;
+    background: linear-gradient(
+      90deg,
+      #ffbe7b,
+      #ff777f,
+      #ff8ab4,
+      #a07cfe,
+      #5b9dff
+    );
   }
 }
 
