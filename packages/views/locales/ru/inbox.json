@@ -29,6 +29,7 @@
   },
   "types": {
     "issue_assigned": "Назначено",
+    "issue_subscribed": "Подписка",
     "unassigned": "Снято назначение",
     "assignee_changed": "Изменён назначенный",
     "status_changed": "Изменён статус",
