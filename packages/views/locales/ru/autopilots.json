@@ -78,6 +78,8 @@
     "no_project": "Без проекта",
     "project_unavailable": "Проект недоступен",
     "field_prompt": "Промпт",
+    "field_subscribers": "Подписчики",
+    "field_subscribers_none": "Нет",
     "add_trigger": "Добавить триггер",
     "no_triggers": "Триггеры не настроены. Добавьте расписание для автоматического запуска.",
     "no_runs": "Запусков пока нет. Нажмите «Запустить сейчас», чтобы вызвать вручную.",
@@ -248,6 +250,13 @@
     "section_project": "Проект",
     "no_project": "Без проекта",
     "section_output_mode": "Режим вывода",
+    "section_subscribers": "Подписчики",
+    "subscribers_hint": "Автоподписка на каждую задачу, создаваемую этим автопилотом",
+    "subscribers_empty": "Нет подписчиков — добавьте участника, чтобы уведомлять его при каждом запуске",
+    "subscribers_add": "Добавить подписчика",
+    "subscribers_search_placeholder": "Поиск участников по имени…",
+    "subscribers_no_results": "Нет подходящих участников",
+    "subscribers_remove_tooltip": "Удалить",
     "section_schedule": "Расписание",
     "section_trigger_kind": "Триггер",
     "trigger_kind_schedule": "Расписание",
@@ -259,6 +268,11 @@
     "webhook_created_description": "Отправьте POST с любым JSON на URL ниже — автопилот запустится. Скопируйте сейчас — URL также можно найти и перевыпустить на странице автопилота.",
     "webhook_created_warning": "Относитесь к этому URL как к паролю. Любой, у кого он есть, может запустить автопилот.",
     "webhook_created_done": "Готово",
+    "event_filter_label": "Фильтры событий",
+    "event_filter_docs_link_label": "Как работают фильтры событий",
+    "event_filter_event_placeholder": "напр. workflow_run",
+    "event_filter_actions_placeholder": "completed, failed",
+    "event_filter_hint": "Обрабатывать только webhook-и с этими событиями. Оставьте пустым, чтобы принимать все.",
     "schedule_disabled_reason": "У этого автопилота несколько расписаний — редактируйте их на странице автопилота.",
     "next_run_label": "Следующий запуск:",
     "output_modes": {
@@ -286,12 +300,7 @@
       "thursday": "Четверг",
       "friday": "Пятница",
       "saturday": "Суббота"
-    },
-    "event_filter_label": "Фильтры событий",
-    "event_filter_docs_link_label": "Как работают фильтры событий",
-    "event_filter_event_placeholder": "напр. workflow_run",
-    "event_filter_actions_placeholder": "completed, failed",
-    "event_filter_hint": "Обрабатывать только webhook-и с этими событиями. Оставьте пустым, чтобы принимать все."
+    }
   },
   "trigger_config": {
     "frequencies": {
