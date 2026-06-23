@@ -74,6 +74,7 @@
     "section_progress": "Прогресс",
     "section_description": "Описание",
     "description_placeholder": "Добавьте описание...",
+    "description_hint": "Доступно агентам как контекст для каждой задачи в этом проекте.",
     "empty_issues_title": "Задачи не привязаны",
     "empty_issues_hint": "Создайте новая задача или привяжите существующие к этому проекту.",
     "empty_issues_new_button": "Новая задача",

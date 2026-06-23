@@ -44,10 +44,14 @@ type IssueResponse struct {
 	ParentIssueID *string `json:"parent_issue_id"`
 	ProjectID     *string `json:"project_id"`
 	Position      float64 `json:"position"`
-	StartDate     *string `json:"start_date"`
-	DueDate       *string `json:"due_date"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
+	// Stage groups sub-issues under the same parent into ordered barrier
+	// groups (null = unstaged). See issue_child_done.go for how a closed
+	// stage gates the child-done -> parent wake.
+	Stage     *int32  `json:"stage"`
+	StartDate *string `json:"start_date"`
+	DueDate   *string `json:"due_date"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
 	// Metadata is the per-issue KV map (see issue_metadata.go). Always emitted
 	// (empty object when unset) so frontend code can `issue.metadata[key]`
 	// without nil-guarding the parent field.
@@ -98,6 +102,7 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		ParentIssueID: uuidToPtr(i.ParentIssueID),
 		ProjectID:     uuidToPtr(i.ProjectID),
 		Position:      i.Position,
+		Stage:         int4ToPtr(i.Stage),
 		StartDate:     dateToPtr(i.StartDate),
 		DueDate:       dateToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
@@ -125,6 +130,7 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		ParentIssueID: uuidToPtr(i.ParentIssueID),
 		ProjectID:     uuidToPtr(i.ProjectID),
 		Position:      i.Position,
+		Stage:         int4ToPtr(i.Stage),
 		StartDate:     dateToPtr(i.StartDate),
 		DueDate:       dateToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
@@ -182,6 +188,7 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		ParentIssueID: uuidToPtr(i.ParentIssueID),
 		ProjectID:     uuidToPtr(i.ProjectID),
 		Position:      i.Position,
+		Stage:         int4ToPtr(i.Stage),
 		StartDate:     dateToPtr(i.StartDate),
 		DueDate:       dateToPtr(i.DueDate),
 		CreatedAt:     timestampToString(i.CreatedAt),
@@ -2049,6 +2056,7 @@ type CreateIssueRequest struct {
 	AssigneeID    *string  `json:"assignee_id"`
 	ParentIssueID *string  `json:"parent_issue_id"`
 	ProjectID     *string  `json:"project_id"`
+	Stage         *int32   `json:"stage,omitempty"`
 	StartDate     *string  `json:"start_date"`
 	DueDate       *string  `json:"due_date"`
 	AttachmentIDs []string `json:"attachment_ids,omitempty"`
@@ -2103,6 +2111,10 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !validateIssueEnum(w, "priority", priority, validIssuePriorities) {
+		return
+	}
+	if req.Stage != nil && *req.Stage < 1 {
+		writeError(w, http.StatusBadRequest, "stage must be >= 1")
 		return
 	}
 
@@ -2246,6 +2258,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		DueDate:        dueDate,
 		OriginType:     originType,
 		OriginID:       originID,
+		Stage:          ptrToInt4(req.Stage),
 		AttachmentIDs:  attachmentIDs,
 		AllowDuplicate: req.AllowDuplicate,
 	}, service.IssueCreateOpts{
@@ -2303,6 +2316,7 @@ type UpdateIssueRequest struct {
 	DueDate       *string  `json:"due_date"`
 	ParentIssueID *string  `json:"parent_issue_id"`
 	ProjectID     *string  `json:"project_id"`
+	Stage         *int32   `json:"stage"`
 	// AttachmentIDs lets the description editor bind newly uploaded files to
 	// this issue so they surface in `GET /api/issues/:id/attachments` and the
 	// editor's preview Eye keeps working past a refresh. Existing bindings
@@ -2345,6 +2359,7 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		DueDate:       prevIssue.DueDate,
 		ParentIssueID: prevIssue.ParentIssueID,
 		ProjectID:     prevIssue.ProjectID,
+		Stage:         prevIssue.Stage,
 	}
 
 	// COALESCE fields — only set when explicitly provided
@@ -2460,6 +2475,17 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 			params.ProjectID = projectUUID
 		} else {
 			params.ProjectID = pgtype.UUID{Valid: false}
+		}
+	}
+	if _, ok := rawFields["stage"]; ok {
+		if req.Stage != nil {
+			if *req.Stage < 1 {
+				writeError(w, http.StatusBadRequest, "stage must be >= 1")
+				return
+			}
+			params.Stage = pgtype.Int4{Int32: *req.Stage, Valid: true}
+		} else {
+			params.Stage = pgtype.Int4{Valid: false} // explicit null = unstage
 		}
 	}
 
@@ -2898,7 +2924,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 		req.Updates.Priority != nil ||
 		req.Updates.Position != nil
 	if !hasMutation {
-		for _, k := range []string{"assignee_type", "assignee_id", "start_date", "due_date", "parent_issue_id", "project_id"} {
+		for _, k := range []string{"assignee_type", "assignee_id", "start_date", "due_date", "parent_issue_id", "project_id", "stage"} {
 			if _, ok := rawUpdates[k]; ok {
 				hasMutation = true
 				break
@@ -2947,6 +2973,7 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 			DueDate:       prevIssue.DueDate,
 			ParentIssueID: prevIssue.ParentIssueID,
 			ProjectID:     prevIssue.ProjectID,
+			Stage:         prevIssue.Stage,
 		}
 
 		if req.Updates.Title != nil {
@@ -3053,6 +3080,16 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 				params.ProjectID = projectUUID
 			} else {
 				params.ProjectID = pgtype.UUID{Valid: false}
+			}
+		}
+		if _, ok := rawUpdates["stage"]; ok {
+			if req.Updates.Stage != nil {
+				if *req.Updates.Stage < 1 {
+					continue
+				}
+				params.Stage = pgtype.Int4{Int32: *req.Updates.Stage, Valid: true}
+			} else {
+				params.Stage = pgtype.Int4{Valid: false} // explicit null = unstage
 			}
 		}
 

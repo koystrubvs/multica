@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -28,18 +29,39 @@ import (
 // the workspace prefix).
 //
 // Guards on whether the comment fires at all:
-//   - prev.Status must not already be a completed state (idempotent — once
-//     the parent has been told the child is in_review, moving it to done
-//     does not re-fire, and vice versa)
-//   - issue.Status must be a completed state (`in_review` or `done`)
+//   - the child must ENTER a completion state it was not already in. A
+//     completion state is `in_review` (MUL-2766 — the child agent finished and
+//     is waiting for the leader's review) or a terminal status, `done` or
+//     `cancelled`. Entering `in_review` fires a per-child review ping (no stage
+//     barrier); entering a terminal status runs the stage barrier below.
+//     Because `in_review` already counts as a completion state, a later
+//     `in_review` → `done` (the leader accepting the work) is a no-op — the
+//     parent was already woken. Repeat saves of an already-completed child are
+//     likewise no-ops; only the entering transition fires. Cancelled counts as
+//     terminal because a cancelled sibling never finishes and so closes its
+//     stage (see isChildCompletedStatus, isTerminalChildStatus, the entry guard).
 //   - issue.ParentIssueID must be set
 //   - parent must not be "done" or "cancelled" — the parent is already
 //     closed and a notification has no follow-up to drive
+//   - parent must not be "backlog" — a parent parked in backlog is being
+//     deliberately held for later; waking its assignee (which can then
+//     promote sibling backlog sub-issues into todo) is exactly the
+//     unwanted auto-activation reported in #4320 / MUL-3497. A parked
+//     parent stays inert until the user explicitly moves it out of backlog.
 //   - parent assignee must not be a member (human). Humans read their
 //     issues manually; an automated system comment is pure noise for them
 //     and there is nothing to "trigger" on a human assignee. Skipping the
 //     comment entirely (Bohan's call on MUL-2538) also sidesteps the
 //     mention question — no comment, no mention, no inbox row.
+//   - the completion must close a STAGE barrier (MUL-3508). Sub-issues under
+//     a parent can be grouped into ordered stages via issue.stage; the
+//     notification + wake fire only when every sibling in the lowest
+//     unfinished stage is terminal (stageBarrierClosed). An unstaged sibling
+//     set is one implicit stage, so this fires once when the last sub-issue
+//     finishes instead of on every child — the default fix for the
+//     fire-on-every-child cascade reported in #4320. The woken assignee
+//     decides whether to promote the next stage (agent-driven advancement);
+//     the server only detects the barrier and wakes.
 //
 // The comment is inserted directly via db.Queries (not through the
 // CreateComment HTTP handler) so it bypasses the generic on_comment trigger
@@ -61,6 +83,11 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 	if !issue.ParentIssueID.Valid {
 		return
 	}
+	// Fire when the child ENTERS a completion state (in_review, done or
+	// cancelled) it was not already in. in_review is MUL-2766 (wake the parent
+	// for leader review); done/cancelled drive the stage barrier below. Treating
+	// in_review as a completion state makes the later in_review → done edit a
+	// no-op (completed → completed), so the parent is woken exactly once.
 	if isChildCompletedStatus(prev.Status) || !isChildCompletedStatus(issue.Status) {
 		return
 	}
@@ -73,6 +100,14 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 		return
 	}
 	if parent.Status == "done" || parent.Status == "cancelled" {
+		return
+	}
+	// A parent parked in backlog is deliberately held for later. Posting the
+	// system comment would wake its assignee, and the woken agent can then
+	// promote sibling backlog sub-issues into todo — the surprise auto-
+	// activation reported in #4320 / MUL-3497. Skip the whole notification so
+	// a backlog parent stays inert until the user explicitly promotes it.
+	if parent.Status == "backlog" {
 		return
 	}
 	// Human-assigned parents read their own timeline; an automated system
@@ -92,10 +127,62 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 	// agent the workspace lost track of, etc.).
 	mentionPrefix := h.buildParentAssigneeMention(ctx, parent)
 
-	content := childCompletedSystemCommentContent(issue.Status, mentionPrefix, identifier, childID, title)
-	if content == "" {
-		// Defensive: isChildCompletedStatus already filtered the status above.
-		return
+	var content string
+	if issue.Status == "in_review" {
+		// MUL-2766: reaching in_review is a per-child review signal, not a stage
+		// completion. Wake the parent's leader immediately regardless of sibling
+		// progress, with review-action wording (no promote-backlog clause). The
+		// stage barrier below is intentionally skipped — a review ping should not
+		// wait for siblings, and the eventual in_review → done is a no-op so the
+		// stage advance does not double-fire for review-workflow children.
+		content = childInReviewSystemCommentContent(mentionPrefix, identifier, childID, title)
+	} else {
+		// Terminal completion (done/cancelled): apply the stage barrier (MUL-3508
+		// / discussion #4320). The notification + assignee wake fire only when
+		// this completion *closes a stage* — i.e. every sibling in the lowest
+		// unfinished stage is now terminal. An unstaged sibling set is one
+		// implicit stage, so this collapses to "wake once when the last sub-issue
+		// finishes" instead of the old fire-on-every-child cascade. A completion
+		// that does not close a stage is silent: no comment, no wake.
+		// ListChildIssues already reflects this child's committed terminal status
+		// (the status update commits before this runs).
+		children, err := h.Queries.ListChildIssues(ctx, parent.ID)
+		if err != nil {
+			slog.Warn("child done: failed to list siblings for stage barrier",
+				"error", err,
+				"child_id", uuidToString(issue.ID),
+				"parent_id", uuidToString(parent.ID))
+			return
+		}
+		if !stageBarrierClosed(children, issue) {
+			return
+		}
+		parentID := uuidToString(parent.ID)
+		// When the set is staged and the barrier closed, the completed child is
+		// guaranteed to carry a stage (stageBarrierClosed returns false for an
+		// unstaged completed child in a staged set), so issue.Stage.Int32 is safe.
+		if siblingsAreStaged(children) {
+			closedStage := issue.Stage.Int32
+			summary, nextStage := stageProgressSummary(children, closedStage)
+			var advance string
+			if nextStage > 0 {
+				advance = fmt.Sprintf(
+					" Stage %d is next. Review the full layout with `multica issue children %s`, and if Stage %d's dependencies are satisfied promote its `backlog` sub-issues to `todo` to continue. Read each sub-issue's description first and only promote items whose stated dependencies are already met — do not rely on this parent's higher-level breakdown alone. If a description conflicts with that breakdown, leave it `backlog` and post a comment to confirm first.",
+					nextStage, parentID, nextStage,
+				)
+			} else {
+				advance = " This was the final stage. Wrap up the parent — synthesize the results and move it forward, or close it out if nothing remains."
+			}
+			content = fmt.Sprintf(
+				"%sStage %d of this issue is complete — its last sub-issue [%s](mention://issue/%s) — \"%s\" — just finished. Stage progress — %s.%s",
+				mentionPrefix, closedStage, identifier, childID, title, summary, advance,
+			)
+		} else {
+			content = fmt.Sprintf(
+				"%sAll sub-issues are complete — the last one, [%s](mention://issue/%s) — \"%s\", just finished. Continue the parent: synthesize the children's results and move it forward, or close it out if nothing remains.",
+				mentionPrefix, identifier, childID, title,
+			)
+		}
 	}
 
 	// author_type='system', author_id=zero UUID. The zero UUID is a valid 16
@@ -135,46 +222,131 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 	h.dispatchParentAssigneeTrigger(ctx, parent, issue, comment, actorType, actorID)
 }
 
-// isChildCompletedStatus reports whether a child issue status represents
-// "work handed back to the parent". Both `in_review` (waiting for leader
-// review) and `done` (accepted) count: the parent's assignee should be
-// woken on the transition INTO either, and transitions between them
-// (in_review → done, done → in_review) are no-ops. See MUL-2766 for the
-// in_review case; autopilot already treats these two statuses as a single
-// completion signal (see service/autopilot.go), and this helper aligns the
-// child-done notification with that convention.
+// isChildCompletedStatus reports whether a child issue status counts as a
+// "completion signal" for the child-done notification entry guard — the set of
+// statuses that, when ENTERED, wake the parent. It is deliberately broader than
+// isTerminalChildStatus (which gates the stage barrier): it adds `in_review`
+// (MUL-2766 — the child agent finished its work and is waiting for the leader's
+// review) on top of the terminal `done`/`cancelled`. Counting in_review as a
+// completion signal here makes a later in_review → done a no-op (completed →
+// completed), so the parent is woken exactly once; autopilot already collapses
+// these statuses the same way (see service/autopilot.go).
 func isChildCompletedStatus(status string) bool {
-	return status == "in_review" || status == "done"
+	return status == "in_review" || isTerminalChildStatus(status)
 }
 
-// childCompletedSystemCommentContent renders the system-comment body for a
-// child-completed notification. The wording differs by status because the
-// follow-up the parent assignee should take is different:
-//
-//   - `in_review` is a coordination signal — the leader must inspect the
-//     work and either accept it (move child to `done`) or send it back
-//     (move child to `in_progress` with comment-described changes).
-//     Promoting backlog siblings is premature until the review lands.
-//   - `done` is a completion signal — the work is accepted, so the
-//     follow-up shifts to advancing the plan: promoting the next ready
-//     backlog sibling. The MUL-2538 promotion guardrails apply.
-//
-// Returns "" when the status is not a recognised completed state; callers
-// should treat that as "do not post".
-func childCompletedSystemCommentContent(status, mentionPrefix, identifier, childID, title string) string {
-	switch status {
-	case "in_review":
-		return fmt.Sprintf(
-			"%sSub-issue [%s](mention://issue/%s) — \"%s\" — is ready for review. Inspect the work the child reported, then either accept it by moving the child to `done`, or send it back by moving the child to `in_progress` with a comment describing the requested changes. Do NOT promote any waiting `backlog` sub-issue until the review lands.",
-			mentionPrefix, identifier, childID, title,
-		)
-	case "done":
-		return fmt.Sprintf(
-			"%sSub-issue [%s](mention://issue/%s) — \"%s\" — is done. Before promoting any waiting `backlog` sub-issue, read each sibling's description and only promote items whose stated dependencies are already satisfied — do not rely on this parent's higher-level breakdown alone. If a sibling's description conflicts with that breakdown (e.g. it lists a prerequisite the parent treats as parallel), do NOT change its status — leave it `backlog` and post a comment to confirm first.",
-			mentionPrefix, identifier, childID, title,
-		)
+// childInReviewSystemCommentContent renders the system-comment body for the
+// MUL-2766 in_review notification. in_review is a coordination signal — the
+// leader must inspect the work and either accept it (move child to `done`) or
+// send it back (move child to `in_progress` with comment-described changes);
+// promoting backlog siblings is premature until the review lands, so this
+// wording deliberately omits the done-flavoured promote-backlog clause. The
+// terminal (done/cancelled) wording is built inline in notifyParentOfChildDone
+// from the stage-barrier result.
+func childInReviewSystemCommentContent(mentionPrefix, identifier, childID, title string) string {
+	return fmt.Sprintf(
+		"%sSub-issue [%s](mention://issue/%s) — \"%s\" — is ready for review. Inspect the work the child reported, then either accept it by moving the child to `done`, or send it back by moving the child to `in_progress` with a comment describing the requested changes. Do NOT promote any waiting `backlog` sub-issue until the review lands.",
+		mentionPrefix, identifier, childID, title,
+	)
+}
+
+// isTerminalChildStatus reports whether a child issue status counts as
+// "finished" for stage-barrier purposes. Cancelled counts as terminal: a
+// cancelled sibling will never complete, so it must not hold a stage open.
+func isTerminalChildStatus(status string) bool {
+	return status == "done" || status == "cancelled"
+}
+
+// siblingsAreStaged reports whether any child in the set carries an explicit
+// stage. A set with no stages is treated as a single implicit stage.
+func siblingsAreStaged(children []db.Issue) bool {
+	for _, c := range children {
+		if c.Stage.Valid {
+			return true
+		}
 	}
-	return ""
+	return false
+}
+
+// stageBarrierClosed reports whether the completion of `completed` closed a
+// stage barrier among `children` — the full sibling set under one parent,
+// already reflecting completed's terminal status.
+//
+//   - Unstaged sibling set (no child carries a stage): a single implicit
+//     stage. The barrier closes only when every child is terminal — the "wake
+//     once when the last sub-issue finishes" default.
+//   - Staged sibling set: only children that carry a stage form stages.
+//     Unstaged children do NOT participate (matches migration 123: a NULL
+//     stage does not take part in staged grouping) — completing one closes
+//     nothing, and a non-terminal unstaged child never holds a stage open.
+//     The completed child's stage S closes when every *staged* child with
+//     stage <= S is terminal (frontier closure). Later stages are normally
+//     parked in `backlog`, so they cannot fire out of order; the caller's
+//     idempotency guard collapses any duplicate wake.
+func stageBarrierClosed(children []db.Issue, completed db.Issue) bool {
+	if !siblingsAreStaged(children) {
+		for _, c := range children {
+			if !isTerminalChildStatus(c.Status) {
+				return false
+			}
+		}
+		return true
+	}
+	// Staged set: an unstaged completed child belongs to no stage, so it closes
+	// nothing.
+	if !completed.Stage.Valid {
+		return false
+	}
+	s := completed.Stage.Int32
+	for _, c := range children {
+		if !c.Stage.Valid {
+			continue // unstaged children are ignored by the frontier
+		}
+		if c.Stage.Int32 <= s && !isTerminalChildStatus(c.Status) {
+			return false
+		}
+	}
+	return true
+}
+
+// stageProgressSummary renders a compact per-stage breakdown for the
+// child-done system comment (e.g. "Stage 1: 3/3 done; Stage 2: 0/4 done") and
+// returns the lowest stage above closedStage that still has non-terminal
+// children — the next group to promote — or 0 when none remain. Unstaged
+// children are skipped (they are not part of any stage), so the breakdown
+// never renders a "Stage 0".
+func stageProgressSummary(children []db.Issue, closedStage int32) (summary string, nextStage int32) {
+	type agg struct{ total, done int }
+	byStage := map[int32]*agg{}
+	order := []int32{}
+	for _, c := range children {
+		if !c.Stage.Valid {
+			continue // unstaged children do not belong to any stage
+		}
+		s := c.Stage.Int32
+		a, ok := byStage[s]
+		if !ok {
+			a = &agg{}
+			byStage[s] = a
+			order = append(order, s)
+		}
+		a.total++
+		if isTerminalChildStatus(c.Status) {
+			a.done++
+		}
+	}
+	sort.Slice(order, func(i, j int) bool { return order[i] < order[j] })
+	parts := make([]string, 0, len(order))
+	for _, s := range order {
+		a := byStage[s]
+		label := fmt.Sprintf("Stage %d: %d/%d done", s, a.done, a.total)
+		if nextStage == 0 && s > closedStage && a.done < a.total {
+			nextStage = s
+			label += " (next)"
+		}
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, "; "), nextStage
 }
 
 // sanitizeChildTitleForSystemComment removes mention-style markdown from a
