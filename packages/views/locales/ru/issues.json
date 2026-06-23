@@ -22,6 +22,10 @@
     "low": "Низкий",
     "none": "Без приоритета"
   },
+  "stage": {
+    "none": "Без этапа",
+    "value": "Этап {{n}}"
+  },
   "scope": {
     "all_label": "Все",
     "all_description": "Все задачи в этом рабочем пространстве",
@@ -192,6 +196,7 @@
     "pull_request_card_show_less": "Показать меньше",
     "prop_status": "Статус",
     "prop_priority": "Приоритет",
+    "prop_stage": "Этап",
     "prop_assignee": "Назначенный",
     "prop_start_date": "Дата начала",
     "prop_due_date": "Срок",

@@ -16,6 +16,7 @@
     "trigger": "Помощь",
     "docs": "Документация",
     "changelog": "Список изменений",
+    "discord": "Discord",
     "feedback": "Обратная связь"
   },
   "workspace_loader": {
@@ -36,6 +37,11 @@
     "pinned_label": "Закреплённые",
     "workspace_group": "Рабочее пространство",
     "configure_group": "Настройка",
-    "unread_overflow": "99+"
+    "unread_overflow": "99+",
+    "discord_card": {
+      "title": "Присоединяйтесь к нашему Discord",
+      "description": "Общайтесь с командой и другими разработчиками.",
+      "dismiss": "Скрыть"
+    }
   }
 }
