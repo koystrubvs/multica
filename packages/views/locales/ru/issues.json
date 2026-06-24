@@ -391,6 +391,7 @@
     "trigger_autopilot": "Запуск автопилота",
     "trigger_comment": "Триггер из комментария",
     "trigger_initial": "Первый запуск",
+    "trigger_handoff_prefix": "Передача: ",
     "status_queued": "В очереди",
     "status_dispatched": "Запускается",
     "status_running": "Работает",
@@ -518,10 +519,7 @@
     "row_backlog_label": "Бэклог",
     "row_backlog_hint": "держит агента на паузе",
     "row_todo_label": "К выполнению",
-    "row_todo_hint": "запускает агента",
-    "dont_show_again": "Больше не показывать",
-    "keep_in_backlog": "Оставить в бэклоге",
-    "move_to_todo": "Переместить в «К выполнению»"
+    "row_todo_hint": "запускает агента"
   },
   "swimlane": {
     "no_parent": "Без родителя",
