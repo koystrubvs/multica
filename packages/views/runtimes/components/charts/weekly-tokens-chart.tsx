@@ -26,6 +26,23 @@ export const weeklyTokenStackConfig = {
 
 export function WeeklyTokensChart({ data }: { data: WeeklyTokenData[] }) {
   const { t } = useT("runtimes");
+  // Localize the tooltip series labels: recharts passes the raw dataKey as
+  // `name`, not the config label, so without this the tooltip showed English
+  // while the legend was translated.
+  const seriesLabel = (name: unknown): string => {
+    switch (name) {
+      case "input":
+        return t(($) => $.usage.legend_input);
+      case "output":
+        return t(($) => $.usage.legend_output);
+      case "cacheRead":
+        return t(($) => $.usage.legend_cache_read);
+      case "cacheWrite":
+        return t(($) => $.usage.legend_cache_write);
+      default:
+        return String(name);
+    }
+  };
   return (
     <ChartContainer config={weeklyTokenStackConfig} className="aspect-[3/1] w-full">
       <BarChart data={data} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
@@ -60,8 +77,8 @@ export function WeeklyTokensChart({ data }: { data: WeeklyTokenData[] }) {
               }}
               formatter={(value, name) =>
                 typeof value === "number"
-                  ? `${formatTokens(value)} ${name}`
-                  : `${value} ${name}`
+                  ? `${formatTokens(value)} ${seriesLabel(name)}`
+                  : `${value} ${seriesLabel(name)}`
               }
               footer={(payload) => {
                 const total = payload.reduce(

@@ -34,6 +34,24 @@ export const tokenStackConfig = {
 
 export function DailyTokensChart({ data }: { data: DailyTokenData[] }) {
   const { t } = useT("runtimes");
+  // Localize the tooltip series labels: recharts passes the raw dataKey
+  // ("input"/"output"/"cacheRead"/"cacheWrite") as `name`, not the config
+  // label, so without this the tooltip showed English while the legend was
+  // translated.
+  const seriesLabel = (name: unknown): string => {
+    switch (name) {
+      case "input":
+        return t(($) => $.usage.legend_input);
+      case "output":
+        return t(($) => $.usage.legend_output);
+      case "cacheRead":
+        return t(($) => $.usage.legend_cache_read);
+      case "cacheWrite":
+        return t(($) => $.usage.legend_cache_write);
+      default:
+        return String(name);
+    }
+  };
   // No internal empty-state — same convention as DailyCostChart: the parent
   // decides what to render when there's nothing to show.
   return (
@@ -59,8 +77,8 @@ export function DailyTokensChart({ data }: { data: DailyTokenData[] }) {
             <ChartTooltipContent
               formatter={(value, name) =>
                 typeof value === "number"
-                  ? `${formatTokens(value)} ${name}`
-                  : `${value} ${name}`
+                  ? `${formatTokens(value)} ${seriesLabel(name)}`
+                  : `${value} ${seriesLabel(name)}`
               }
               footer={(payload) => {
                 const total = payload.reduce(

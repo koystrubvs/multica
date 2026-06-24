@@ -35,6 +35,23 @@ export const costStackConfig = {
 
 export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
   const { t } = useT("runtimes");
+  // Localize the tooltip series labels: recharts passes the raw dataKey
+  // ("input"/"output"/"cacheWrite") as `name`, not the config label, so
+  // without this the tooltip showed English while the legend was translated.
+  const seriesLabel = (name: unknown): string => {
+    switch (name) {
+      case "input":
+        return t(($) => $.usage.legend_input);
+      case "output":
+        return t(($) => $.usage.legend_output);
+      case "cacheRead":
+        return t(($) => $.usage.legend_cache_read);
+      case "cacheWrite":
+        return t(($) => $.usage.legend_cache_write);
+      default:
+        return String(name);
+    }
+  };
   // No internal empty-state — the parent decides what to show in place of
   // the chart (often a diagnostic explaining *why* there's no cost). Letting
   // recharts render an empty axis would be both ugly and uninformative.
@@ -61,8 +78,8 @@ export function DailyCostChart({ data }: { data: DailyCostStackData[] }) {
             <ChartTooltipContent
               formatter={(value, name) =>
                 typeof value === "number"
-                  ? `${formatRub(value)} ${name}`
-                  : `${value} ${name}`
+                  ? `${formatRub(value)} ${seriesLabel(name)}`
+                  : `${value} ${seriesLabel(name)}`
               }
               footer={(payload) => {
                 const total = payload.reduce(
