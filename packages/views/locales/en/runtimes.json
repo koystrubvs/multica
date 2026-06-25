@@ -96,15 +96,6 @@
     "read_only": "Read-only",
     "delete_button": "Delete runtime",
     "last_seen": "last seen {{when}}",
-    "relative_time": {
-      "never": "Never",
-      "just_now": "Just now",
-      "ago": "ago",
-      "unit_second": "s",
-      "unit_minute": "m",
-      "unit_hour": "h",
-      "unit_day": "d"
-    },
     "fact_owner": "Owner",
     "fact_device": "Device",
     "fact_runtime": "Runtime",
