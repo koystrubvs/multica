@@ -361,20 +361,20 @@ export function AgentTranscriptDialog({
         <div className="border-b px-4 py-3 shrink-0 space-y-2">
           {/* Top row: agent name, status, actions */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {task.agent_id ? (
                 <ActorAvatar actorType="agent" actorId={task.agent_id} size={24} />
               ) : (
-                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-info/10 text-info">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-info/10 text-info shrink-0">
                   <Bot className="h-3.5 w-3.5" />
                 </div>
               )}
-              <span className="font-medium text-sm">{agentName}</span>
+              <span className="truncate font-medium text-sm">{agentName}</span>
             </div>
 
             {statusBadge}
 
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               {items.length > 1 && (
                 <SortDirectionToggle
                   value={sortDirection}
@@ -396,8 +396,8 @@ export function AgentTranscriptDialog({
                         : "text-muted-foreground hover:text-foreground hover:bg-accent",
                     )}
                   >
-                    <Filter className="h-3 w-3" />
-                    {t(($) => $.transcript.filter)}
+                    <Filter className="h-3 w-3 shrink-0" />
+                    <span className="hidden sm:inline">{t(($) => $.transcript.filter)}</span>
                     {selectedTools.size > 0 && (
                       <span className="ml-0.5 rounded-full bg-blue-500/20 px-1.5 py-0 text-[10px] font-medium">
                         {selectedTools.size}
@@ -428,10 +428,10 @@ export function AgentTranscriptDialog({
               <button
                 type="button"
                 onClick={handleCopyAll}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                {copied ? t(($) => $.transcript.copied) : selectedTools.size > 0 ? t(($) => $.transcript.copy_filtered) : t(($) => $.transcript.copy_all)}
+                {copied ? <Check className="h-3 w-3 shrink-0" /> : <Copy className="h-3 w-3 shrink-0" />}
+                <span className="hidden sm:inline">{copied ? t(($) => $.transcript.copied) : selectedTools.size > 0 ? t(($) => $.transcript.copy_filtered) : t(($) => $.transcript.copy_all)}</span>
               </button>
               <button
                 type="button"
