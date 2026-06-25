@@ -17,30 +17,60 @@ export function isSelfHealingRuntime(runtime: AgentRuntime): boolean {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
+// Localizable labels for the compound relative timestamp. The unit letters
+// suffix a number with no space ("2m"), and `ago` is appended as a trailing
+// word, so the same builder produces "2m 14s ago" (en) and "2м 14с назад"
+// (ru) — both languages put the unit after the number and the "ago" word
+// last. Defaults are English so non-localized callers and the cost-math
+// tests keep their current output.
+export interface RelativeTimeLabels {
+  never: string;
+  justNow: string;
+  ago: string;
+  unitSecond: string;
+  unitMinute: string;
+  unitHour: string;
+  unitDay: string;
+}
+
+const EN_RELATIVE_TIME: RelativeTimeLabels = {
+  never: "Never",
+  justNow: "Just now",
+  ago: "ago",
+  unitSecond: "s",
+  unitMinute: "m",
+  unitHour: "h",
+  unitDay: "d",
+};
+
 // Compound-unit relative timestamp ("2m 14s ago", "1d 4h ago", "6d 19h ago")
 // — gives the user enough precision to tell "just lost" from "long lost"
 // at a glance without forcing them to mouse-over for a full timestamp.
-export function formatLastSeen(lastSeenAt: string | null): string {
-  if (!lastSeenAt) return "Never";
+export function formatLastSeen(
+  lastSeenAt: string | null,
+  labels: RelativeTimeLabels = EN_RELATIVE_TIME,
+): string {
+  if (!lastSeenAt) return labels.never;
   const diffMs = Date.now() - new Date(lastSeenAt).getTime();
-  if (diffMs < 5_000) return "Just now";
+  if (diffMs < 5_000) return labels.justNow;
 
   const seconds = Math.floor(diffMs / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
+  const { unitSecond: ss, unitMinute: mm, unitHour: hh, unitDay: dd, ago } = labels;
 
-  if (minutes < 1) return `${seconds}s ago`;
+  if (minutes < 1) return `${seconds}${ss} ${ago}`;
   if (hours < 1) {
     const s = seconds % 60;
-    return s > 0 ? `${minutes}m ${s}s ago` : `${minutes}m ago`;
+    return s > 0 ? `${minutes}${mm} ${s}${ss} ${ago}` : `${minutes}${mm} ${ago}`;
   }
   if (days < 1) {
     const m = minutes % 60;
-    return m > 0 ? `${hours}h ${m}m ago` : `${hours}h ago`;
+    return m > 0 ? `${hours}${hh} ${m}${mm} ${ago}` : `${hours}${hh} ${ago}`;
   }
   const h = hours % 24;
-  return h > 0 ? `${days}d ${h}h ago` : `${days}d ago`;
+  return h > 0 ? `${days}${dd} ${h}${hh} ${ago}` : `${days}${dd} ${ago}`;
 }
 
 // Turns the back-end's `device_info` string ("MacBook-Pro · darwin-amd64",

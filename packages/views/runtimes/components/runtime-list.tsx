@@ -55,11 +55,8 @@ import { ProviderLogo } from "./provider-logo";
 import { HealthIcon, useHealthLabel } from "./shared";
 import { DeleteRuntimeDialog } from "./delete-runtime-dialog";
 import { DeleteRuntimeProfileDialog } from "./delete-runtime-profile-dialog";
-import {
-  computeCostInWindow,
-  formatLastSeen,
-  pctChange,
-} from "../utils";
+import { computeCostInWindow, pctChange } from "../utils";
+import { useFormatLastSeen } from "../use-format-last-seen";
 import { splitRuntimeName } from "./runtime-machines";
 import {
   customRuntimeRegistrationFailure,
@@ -274,6 +271,7 @@ function HealthCell({
   const { t } = useT("runtimes");
   const { t: tAgents } = useT("agents");
   const labelOf = useHealthLabel();
+  const fmtLastSeen = useFormatLastSeen();
   const registrationFailure = customRuntimeRegistrationFailure(runtime);
   if (registrationFailure) {
     return (
@@ -308,7 +306,7 @@ function HealthCell({
 
   const health = deriveRuntimeHealth(runtime, now);
   const offline = health === "offline" || health === "about_to_gc";
-  const lastSeen = formatLastSeen(runtime.last_seen_at);
+  const lastSeen = fmtLastSeen(runtime.last_seen_at);
   const active = workload.runningCount + workload.queuedCount;
 
   return (

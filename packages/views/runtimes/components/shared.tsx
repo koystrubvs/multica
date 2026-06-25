@@ -190,11 +190,11 @@ export function KpiCard({
         ? "text-success"
         : "";
   return (
-    <div className="flex flex-col gap-2 p-5">
+    <div className="flex min-w-0 flex-col gap-2 p-5">
       <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-      <div className={`text-3xl font-semibold leading-none tabular-nums ${valueClass}`}>
+      <div className={`break-words text-2xl font-semibold leading-tight tabular-nums sm:text-3xl ${valueClass}`}>
         {value}
       </div>
       {hint != null && (

@@ -39,7 +39,7 @@ import { ActorAvatar } from "../../common/actor-avatar";
 import { BreadcrumbHeader } from "../../layout/breadcrumb-header";
 import { AppLink, useNavigation } from "../../navigation";
 import { availabilityConfig, workloadConfig } from "../../agents/presence";
-import { formatLastSeen } from "../utils";
+import { useFormatLastSeen } from "../use-format-last-seen";
 import { HealthBadge } from "./shared";
 import { ProviderLogo } from "./provider-logo";
 import { UpdateSection } from "./update-section";
@@ -149,7 +149,8 @@ export function RuntimeDetail({ runtime }: { runtime: AgentRuntime }) {
   };
 
   const daemonShort = shortDaemonId(runtime.daemon_id);
-  const lastSeen = formatLastSeen(runtime.last_seen_at);
+  const fmtLastSeen = useFormatLastSeen();
+  const lastSeen = fmtLastSeen(runtime.last_seen_at);
 
   return (
     <div className="flex h-full flex-col">
