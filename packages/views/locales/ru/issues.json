@@ -478,6 +478,8 @@
     "more": "Ещё",
     "create_sub_issue": "Создать подзадачу",
     "set_parent_issue": "Указать родительскую задачу...",
+    "remove_parent_issue": "Удалить родительскую задачу",
+    "remove_parent_issue_success": "Родительская задача удалена",
     "add_sub_issue": "Добавить подзадачу...",
     "delete_issue": "Удалить задачу"
   },
