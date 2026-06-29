@@ -20,7 +20,12 @@
   },
   "inspector": {
     "details_section": "Details",
-    "archive_button": "Archive"
+    "archive_button": "Archive",
+    "leader": "Leader",
+    "members": "Members",
+    "created_by": "Created by",
+    "created": "Created",
+    "updated": "Updated"
   },
   "archive_dialog": {
     "title": "Archive this squad?",
@@ -102,5 +107,13 @@
     "filter_active_count_one": "{{count}} filter",
     "filter_active_count_other": "{{count}} filters",
     "clear_filters": "Clear filters"
+  },
+  "tabs": {
+    "members": "Members",
+    "instructions": "Instructions"
+  },
+  "member_type": {
+    "agent": "Agent",
+    "member": "Member"
   }
 }

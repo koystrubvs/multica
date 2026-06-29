@@ -20,7 +20,12 @@
   },
   "inspector": {
     "details_section": "详情",
-    "archive_button": "归档"
+    "archive_button": "归档",
+    "leader": "队长",
+    "members": "成员",
+    "created_by": "创建者",
+    "created": "创建时间",
+    "updated": "更新时间"
   },
   "archive_dialog": {
     "title": "归档这个小队？",
@@ -102,5 +107,13 @@
     "filter_active_count_one": "{{count}} 项筛选",
     "filter_active_count_other": "{{count}} 项筛选",
     "clear_filters": "清除筛选"
+  },
+  "tabs": {
+    "members": "成员",
+    "instructions": "说明"
+  },
+  "member_type": {
+    "agent": "智能体",
+    "member": "成员"
   }
 }

@@ -20,7 +20,12 @@
   },
   "inspector": {
     "details_section": "Детали",
-    "archive_button": "Архивировать"
+    "archive_button": "Архивировать",
+    "leader": "Лидер",
+    "members": "Участники",
+    "created_by": "Создатель",
+    "created": "Создан",
+    "updated": "Обновлён"
   },
   "archive_dialog": {
     "title": "Архивировать эту команду?",
@@ -108,5 +113,13 @@
     "result_count_title": "Найдено / всего",
     "section_columns": "Столбцы",
     "sort_by": "Сортировка"
+  },
+  "tabs": {
+    "members": "Участники",
+    "instructions": "Инструкции"
+  },
+  "member_type": {
+    "agent": "Агент",
+    "member": "Участник"
   }
 }

@@ -850,25 +850,25 @@ function SquadDetailInspector({
           {t(($) => $.inspector.details_section)}
         </div>
         <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
-          <InspectorRow label="Leader">
+          <InspectorRow label={t(($) => $.inspector.leader)}>
             <span className="flex min-w-0 items-center gap-1.5">
               <ActorAvatar actorType="agent" actorId={squad.leader_id} size={14} />
               <span className="truncate">{leaderName}</span>
             </span>
           </InspectorRow>
-          <InspectorRow label="Members">
+          <InspectorRow label={t(($) => $.inspector.members)}>
             <span className="text-muted-foreground tabular-nums">{memberCount}</span>
           </InspectorRow>
-          <InspectorRow label="Created by">
+          <InspectorRow label={t(($) => $.inspector.created_by)}>
             <span className="flex min-w-0 items-center gap-1.5">
               <ActorAvatar actorType="member" actorId={squad.creator_id} size={14} />
               <span className="truncate">{creatorName}</span>
             </span>
           </InspectorRow>
-          <InspectorRow label="Created">
+          <InspectorRow label={t(($) => $.inspector.created)}>
             <span className="text-muted-foreground">{timeAgo(squad.created_at)}</span>
           </InspectorRow>
-          <InspectorRow label="Updated">
+          <InspectorRow label={t(($) => $.inspector.updated)}>
             <span className="text-muted-foreground">{timeAgo(squad.updated_at)}</span>
           </InspectorRow>
         </div>
@@ -994,9 +994,9 @@ function SquadDescriptionEditorBody({
 // ---------------------------------------------------------------------------
 type SquadDetailTab = "members" | "instructions";
 
-const squadDetailTabs: { id: SquadDetailTab; label: string; icon: typeof FileText }[] = [
-  { id: "members", label: "Members", icon: Users },
-  { id: "instructions", label: "Instructions", icon: FileText },
+const squadDetailTabs: { id: SquadDetailTab; icon: typeof FileText }[] = [
+  { id: "members", icon: Users },
+  { id: "instructions", icon: FileText },
 ];
 
 function SquadOverviewPane({
@@ -1065,7 +1065,7 @@ function SquadOverviewPane({
             }`}
           >
             <tab.icon className="h-3.5 w-3.5" />
-            {tab.label}
+            {tab.id === "members" ? t(($) => $.tabs.members) : t(($) => $.tabs.instructions)}
           </button>
         ))}
       </div>
@@ -1167,14 +1167,14 @@ function SquadMembersTab({
   const p = useWorkspacePaths();
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-medium">{t(($) => $.members_tab.section_title)}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             {t(($) => $.members_tab.section_count, { count: members.length })}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onCreateAgentClick && (
             <Button size="sm" variant="outline" onClick={onCreateAgentClick}>
               <Plus className="size-3.5 mr-1.5" />
@@ -1224,7 +1224,7 @@ function SquadMembersTab({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{getEntityName(m.member_type, m.member_id)}</span>
-                  <span className="text-xs text-muted-foreground capitalize">{m.member_type}</span>
+                  <span className="text-xs text-muted-foreground capitalize">{m.member_type === "agent" ? t(($) => $.member_type.agent) : t(($) => $.member_type.member)}</span>
                   {isLeader(m) && (
                     <span className="inline-flex items-center gap-0.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
                       <Crown className="size-3" />

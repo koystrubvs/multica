@@ -20,7 +20,12 @@
   },
   "inspector": {
     "details_section": "세부 정보",
-    "archive_button": "보관"
+    "archive_button": "보관",
+    "leader": "리더",
+    "members": "멤버",
+    "created_by": "생성자",
+    "created": "생성일",
+    "updated": "수정일"
   },
   "archive_dialog": {
     "title": "이 스쿼드를 보관할까요?",
@@ -102,5 +107,13 @@
     "filter_active_count_one": "필터 {{count}}개",
     "filter_active_count_other": "필터 {{count}}개",
     "clear_filters": "필터 지우기"
+  },
+  "tabs": {
+    "members": "멤버",
+    "instructions": "지침"
+  },
+  "member_type": {
+    "agent": "에이전트",
+    "member": "멤버"
   }
 }

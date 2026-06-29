@@ -20,7 +20,12 @@
   },
   "inspector": {
     "details_section": "詳細",
-    "archive_button": "アーカイブ"
+    "archive_button": "アーカイブ",
+    "leader": "リーダー",
+    "members": "メンバー",
+    "created_by": "作成者",
+    "created": "作成日時",
+    "updated": "更新日時"
   },
   "archive_dialog": {
     "title": "このスクワッドをアーカイブしますか？",
@@ -99,5 +104,13 @@
     "filter_active_count_one": "{{count}} 件のフィルター",
     "filter_active_count_other": "{{count}} 件のフィルター",
     "clear_filters": "フィルターをクリア"
+  },
+  "tabs": {
+    "members": "メンバー",
+    "instructions": "指示"
+  },
+  "member_type": {
+    "agent": "エージェント",
+    "member": "メンバー"
   }
 }
