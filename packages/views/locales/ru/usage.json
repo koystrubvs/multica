@@ -42,6 +42,8 @@
   "leaderboard": {
     "title": "Лидерборд",
     "caption": "{{count}} агентов",
+    "caption_with_deleted": "{{count}} агентов · {{deleted}} удалено",
+    "deleted_agents": "Удалённые агенты",
     "header_agent": "Агент",
     "header_tokens": "Токены",
     "header_cost": "Стоимость",
