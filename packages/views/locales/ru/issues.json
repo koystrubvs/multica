@@ -91,6 +91,7 @@
     "card_project": "Проект",
     "card_labels": "Метки",
     "card_child_progress": "Прогресс подзадача",
+    "show_sub_issues": "Показать подзадачи",
     "group_parent": "Родительская задача",
     "group_project": "Проект"
   },
