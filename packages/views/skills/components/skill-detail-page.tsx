@@ -14,6 +14,7 @@ import {
   Save,
   Sparkles,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 import type {
   Agent,
@@ -26,6 +27,7 @@ import type {
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@multica/core/api";
+import { useAuthStore } from "@multica/core/auth";
 import { useTimeAgo } from "../../i18n";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
@@ -65,6 +67,10 @@ import { CapabilityBanner } from "@multica/ui/components/common/capability-banne
 import { readOrigin, totalFileCount, type OriginInfo } from "../lib/origin";
 import { FileTree } from "./file-tree";
 import { FileViewer } from "./file-viewer";
+import {
+  AddToAgentDialog,
+  type SkillActionsContext,
+} from "./skill-list-actions";
 import { useT } from "../../i18n";
 
 const SKILL_MD = "SKILL.md";
@@ -250,6 +256,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const qc = useQueryClient();
   const paths = useWorkspacePaths();
   const navigation = useNavigation();
+  const currentUserId = useAuthStore((s) => s.user?.id ?? null);
 
   const {
     data: skill,
@@ -274,6 +281,19 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const canEdit = useCanEditSkill(skill, wsId);
   const skillPermissions = useSkillPermissions(skill ?? null, wsId);
 
+  // Context for the shared "Add to agent" dialog (also used by the skills
+  // list). Members see their own agents; workspace owners/admins see all.
+  const myRole = useMemo(
+    () => members.find((m) => m.user_id === currentUserId)?.role ?? null,
+    [members, currentUserId],
+  );
+  const actionsCtx: SkillActionsContext = {
+    wsId,
+    agents,
+    currentUserId,
+    isAdmin: myRole === "owner" || myRole === "admin",
+  };
+
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
@@ -282,6 +302,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showAddToAgents, setShowAddToAgents] = useState(false);
   const [addingFile, setAddingFile] = useState(false);
   const [conflictPending, setConflictPending] = useState(false);
 
@@ -871,9 +892,20 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
           )}
 
           <div>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t(($) => $.detail.sidebar.used_by, { count: skillAgents.length })}
-            </h3>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="min-w-0 truncate text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t(($) => $.detail.sidebar.used_by, { count: skillAgents.length })}
+              </h3>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => setShowAddToAgents(true)}
+                className="h-6 shrink-0 gap-1"
+              >
+                <UserPlus className="h-3 w-3" />
+                {t(($) => $.actions.add_to_agent)}
+              </Button>
+            </div>
             <UsedBySection agents={skillAgents} />
           </div>
 
@@ -948,6 +980,13 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddToAgentDialog
+        skills={[skill]}
+        ctx={actionsCtx}
+        open={showAddToAgents}
+        onOpenChange={setShowAddToAgents}
+      />
     </div>
   );
 }
