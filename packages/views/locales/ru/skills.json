@@ -312,7 +312,9 @@
     "has_partial": "Часть агентов уже имеет этот навык",
     "my_agents": "Мои агенты",
     "no_agents": "Нет агентов",
+    "no_agents_match": "Совпадений не найдено.",
     "other_agents": "Остальные агенты",
+    "search_placeholder": "Поиск агентов…",
     "row_menu": "Действия с навыком",
     "selected": "{{count}} выбрано"
   },
