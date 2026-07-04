@@ -104,13 +104,18 @@ export interface ClientBillingUsageLine {
   priced: boolean;
 }
 
+export type ClientBillingChargeSource = "done_hook" | "sweep" | "manual";
+
 export interface ClientBillingCharge {
   id: string;
   issue_id: string;
   project_id: string;
   workspace_id: string;
-  /** Billing period the confirmed charge is attached to (null until confirm). */
+  /** Billing period the charge is attached to (sweep sets it immediately;
+   *  legacy done_hook drafts get it on confirm). */
   period_id: string | null;
+  /** Where the line came from (metering v2, migration 134). */
+  source: ClientBillingChargeSource;
   usage: ClientBillingUsageLine[];
   /** Token cost at public list prices with NO cache discounts, USD. */
   nocache_usd: number;
@@ -159,4 +164,58 @@ export interface ClientBillingCurrentPeriod {
   /** budget_rub (mode=budget) or fair_use_rub (mode=subscription); 0 = no cap. */
   limit_rub: number;
   percent: number;
+}
+
+// --- Metering v2 (migration 134) ---
+
+/** One row of an issue's charge ledger as embedded in IssueBillingCost. */
+export interface ClientBillingChargeSlim {
+  id: string;
+  period_id: string | null;
+  price_rub: number;
+  nocache_usd: number;
+  status: ClientBillingChargeStatus;
+  source: ClientBillingChargeSource;
+  adjusted_reason: string | null;
+  created_at: string;
+}
+
+export type ClientBillingDisputeStatus = "open" | "resolved";
+export type ClientBillingDisputeResolution = "keep" | "exclude" | "adjust";
+
+/** A client's "this price is wrong" claim on one issue. */
+export interface ClientBillingDispute {
+  id: string;
+  issue_id: string;
+  project_id: string;
+  opened_by_type: "member" | "guest";
+  opened_by: string | null;
+  reason: string;
+  status: ClientBillingDisputeStatus;
+  resolution: ClientBillingDisputeResolution | null;
+  resolution_comment: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  /** Present in project-level lists only. */
+  issue_title?: string;
+}
+
+/** Live cost of an issue in ANY status (GET /issues/{id}/billing/cost).
+ *  `internal` (the agency's cache-discounted cost) is present for the
+ *  workspace OWNER only — it is the margin and must never reach clients. */
+export interface IssueBillingCost {
+  billing_enabled: boolean;
+  usage: ClientBillingUsageLine[];
+  total_tokens: number;
+  nocache_usd: number;
+  fx_rate: number;
+  markup: number;
+  estimate_rub: number;
+  billed_rub: number;
+  unbilled_nocache_usd: number;
+  unbilled_estimate_rub: number;
+  charges: ClientBillingChargeSlim[];
+  dispute?: ClientBillingDispute;
+  internal?: { usd: number; rub: number };
 }

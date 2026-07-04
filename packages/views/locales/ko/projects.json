@@ -207,7 +207,16 @@
     "create_invoice": "Create invoice",
     "period_invoiced_toast": "Period closed; invoice and act created in Elba",
     "elba_push_failed_toast": "Elba push failed: {{error}}",
-    "elba_invoice_ref": "Elba invoice: {{id}}"
+    "elba_invoice_ref": "Elba invoice: {{id}}",
+    "sweep": "Bill accrued work",
+    "sweep_done_toast": "Sweep done: {{count}} draft line(s) created",
+    "disputes_title": "Open disputes ({{count}})",
+    "dispute_keep": "Keep price",
+    "dispute_exclude": "Exclude",
+    "dispute_adjust": "Set price…",
+    "dispute_resolved_toast": "Dispute resolved",
+    "dispute_adjust_price_prompt": "New price, ₽:",
+    "dispute_adjust_comment_prompt": "Reason (shown to the client):"
   },
   "toolbar": {
     "result_count_title": "일치하는 프로젝트 / 전체 프로젝트",

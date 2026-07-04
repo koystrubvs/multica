@@ -338,6 +338,7 @@ type ClientBillingCharge struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	PeriodID       pgtype.UUID        `json:"period_id"`
+	Source         string             `json:"source"`
 }
 
 type ClientBillingConfig struct {
@@ -357,6 +358,22 @@ type ClientBillingConfig struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ElbaContractorID   pgtype.Text        `json:"elba_contractor_id"`
 	ElbaBankAccountID  pgtype.Text        `json:"elba_bank_account_id"`
+}
+
+type ClientBillingDispute struct {
+	ID                pgtype.UUID        `json:"id"`
+	IssueID           pgtype.UUID        `json:"issue_id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	OpenedByType      string             `json:"opened_by_type"`
+	OpenedBy          pgtype.UUID        `json:"opened_by"`
+	Reason            string             `json:"reason"`
+	Status            string             `json:"status"`
+	Resolution        pgtype.Text        `json:"resolution"`
+	ResolutionComment pgtype.Text        `json:"resolution_comment"`
+	ResolvedBy        pgtype.UUID        `json:"resolved_by"`
+	ResolvedAt        pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type ClientBillingPeriod struct {

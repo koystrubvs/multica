@@ -2626,12 +2626,8 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		h.notifyParentOfChildDone(r.Context(), prevIssue, issue, actorType, actorID)
 	}
 
-	// Agency billing: freeze a draft price snapshot the moment an issue
-	// reaches `done` (see client_billing.go). Best-effort by design - billing
-	// must never fail the status update itself.
-	if statusChanged && issue.Status == "done" {
-		h.maybeCreateBillingChargeForIssue(r.Context(), issue)
-	}
+	// Agency billing v2 (migration 134): metered — no done-hook. The sweep in
+	// client_billing_metering.go bills usage deltas regardless of status.
 
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -3174,11 +3170,6 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 		// (MUL-2538). Best-effort; failure does not abort the batch.
 		if statusChanged {
 			h.notifyParentOfChildDone(r.Context(), prevIssue, issue, actorType, actorID)
-		}
-
-		// Agency billing snapshot on done, mirrored from UpdateIssue.
-		if statusChanged && issue.Status == "done" {
-			h.maybeCreateBillingChargeForIssue(r.Context(), issue)
 		}
 
 		updated++

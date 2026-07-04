@@ -275,7 +275,7 @@ SELECT cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.period_id, cb
        cbc.fx_rate::float8     AS fx_rate,
        cbc.markup::float8      AS markup,
        cbc.price_rub::float8   AS price_rub,
-       cbc.status, cbc.adjusted_reason, cbc.confirmed_by, cbc.confirmed_at,
+       cbc.status, cbc.source, cbc.adjusted_reason, cbc.confirmed_by, cbc.confirmed_at,
        cbc.created_at, cbc.updated_at,
        i.title AS issue_title
 FROM client_billing_charge cbc
@@ -296,6 +296,7 @@ type ListClientBillingChargesByPeriodRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -325,6 +326,7 @@ func (q *Queries) ListClientBillingChargesByPeriod(ctx context.Context, periodID
 			&i.Markup,
 			&i.PriceRub,
 			&i.Status,
+			&i.Source,
 			&i.AdjustedReason,
 			&i.ConfirmedBy,
 			&i.ConfirmedAt,

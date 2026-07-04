@@ -31,6 +31,7 @@ export const clientBillingKeys = {
   currentPeriod: (projectId: string) => ["client-billing", "current-period", projectId] as const,
   periods: (projectId: string) => ["client-billing", "periods", projectId] as const,
   wsConfig: () => ["client-billing", "workspace-config"] as const,
+  disputes: (projectId: string) => ["client-billing", "disputes", projectId] as const,
   elbaContractors: (orgId: string) => ["client-billing", "elba-contractors", orgId] as const,
   elbaBankAccounts: (orgId: string) => ["client-billing", "elba-bank-accounts", orgId] as const,
 };
@@ -118,6 +119,7 @@ export function ProjectBillingSection({ projectId }: { projectId: string }) {
           ) : (
             <div className="flex flex-col gap-4">
               {config.enabled && <CurrentPeriodCard projectId={projectId} />}
+              {config.enabled && <DisputesBlock projectId={projectId} />}
               <ConfigForm
                 config={config}
                 saving={saveMut.isPending}
@@ -183,6 +185,16 @@ function CurrentPeriodCard({ projectId }: { projectId: string }) {
     onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
   });
 
+  const sweepMut = useMutation({
+    mutationFn: () => api.sweepProjectBilling(projectId),
+    onSuccess: (res) => {
+      toast.success(t(($) => $.billing.sweep_done_toast, { count: res.created }));
+      qc.invalidateQueries({ queryKey: clientBillingKeys.charges(projectId) });
+      invalidatePeriods();
+    },
+    onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
+  });
+
   if (!current) return null;
   const { period, confirmed_total, draft_count, limit_rub, percent } = current;
   const overBudget = limit_rub > 0 && percent >= 100;
@@ -222,7 +234,16 @@ function CurrentPeriodCard({ projectId }: { projectId: string }) {
           </span>
         </div>
       )}
-      <div>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-6 px-2 text-xs"
+          disabled={sweepMut.isPending}
+          onClick={() => sweepMut.mutate()}
+        >
+          {t(($) => $.billing.sweep)}
+        </Button>
         <Button
           size="sm"
           variant="outline"
@@ -233,6 +254,95 @@ function CurrentPeriodCard({ projectId }: { projectId: string }) {
           {t(($) => $.billing.close_period)}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// Open client disputes: resolving them is a precondition for closing the
+// period (the backend refuses otherwise). keep = price stands; exclude =
+// drafts void + the unbilled delta is burned; adjust = custom price with a
+// mandatory comment.
+function DisputesBlock({ projectId }: { projectId: string }) {
+  const { t } = useT("projects");
+  const qc = useQueryClient();
+  const { data: disputes = [] } = useQuery({
+    queryKey: clientBillingKeys.disputes(projectId),
+    queryFn: () => api.listProjectBillingDisputes(projectId, "open"),
+  });
+
+  const resolveMut = useMutation({
+    mutationFn: ({
+      disputeId,
+      resolution,
+      comment,
+      priceRub,
+    }: {
+      disputeId: string;
+      resolution: "keep" | "exclude" | "adjust";
+      comment?: string;
+      priceRub?: number;
+    }) => api.resolveBillingDispute(projectId, disputeId, resolution, comment, priceRub),
+    onSuccess: () => {
+      toast.success(t(($) => $.billing.dispute_resolved_toast));
+      qc.invalidateQueries({ queryKey: clientBillingKeys.disputes(projectId) });
+      qc.invalidateQueries({ queryKey: clientBillingKeys.charges(projectId) });
+      qc.invalidateQueries({ queryKey: clientBillingKeys.currentPeriod(projectId) });
+    },
+    onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
+  });
+
+  const handleAdjust = (disputeId: string) => {
+    const priceRaw = window.prompt(t(($) => $.billing.dispute_adjust_price_prompt));
+    if (priceRaw === null) return;
+    const price = Number(priceRaw);
+    if (!Number.isFinite(price) || price < 0) return;
+    const comment = window.prompt(t(($) => $.billing.dispute_adjust_comment_prompt));
+    if (!comment) return;
+    resolveMut.mutate({ disputeId, resolution: "adjust", comment, priceRub: price });
+  };
+
+  if (disputes.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-red-600 dark:text-red-400">
+        {t(($) => $.billing.disputes_title, { count: disputes.length })}
+      </span>
+      {disputes.map((d) => (
+        <div key={d.id} className="flex flex-col gap-1 rounded-md border border-red-500/30 bg-red-500/5 px-2 py-1.5">
+          <span className="text-xs font-medium">{d.issue_title}</span>
+          <span className="text-[11px] text-muted-foreground">{d.reason}</span>
+          <div className="flex flex-wrap gap-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-5 px-1.5 text-[11px]"
+              disabled={resolveMut.isPending}
+              onClick={() => resolveMut.mutate({ disputeId: d.id, resolution: "keep" })}
+            >
+              {t(($) => $.billing.dispute_keep)}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-5 px-1.5 text-[11px]"
+              disabled={resolveMut.isPending}
+              onClick={() => resolveMut.mutate({ disputeId: d.id, resolution: "exclude" })}
+            >
+              {t(($) => $.billing.dispute_exclude)}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-5 px-1.5 text-[11px] text-muted-foreground"
+              disabled={resolveMut.isPending}
+              onClick={() => handleAdjust(d.id)}
+            >
+              {t(($) => $.billing.dispute_adjust)}
+            </Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -93,7 +93,7 @@ SELECT cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.period_id, cb
        cbc.fx_rate::float8     AS fx_rate,
        cbc.markup::float8      AS markup,
        cbc.price_rub::float8   AS price_rub,
-       cbc.status, cbc.adjusted_reason, cbc.confirmed_by, cbc.confirmed_at,
+       cbc.status, cbc.source, cbc.adjusted_reason, cbc.confirmed_by, cbc.confirmed_at,
        cbc.created_at, cbc.updated_at,
        i.title AS issue_title
 FROM client_billing_charge cbc

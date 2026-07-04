@@ -51,6 +51,8 @@ import type {
   RuntimeUsage,
   IssueUsageSummary,
   ClientBillingCharge,
+  ClientBillingDispute,
+  IssueBillingCost,
   ClientBillingConfig,
   ClientBillingConfigUpdate,
   ClientBillingPeriod,
@@ -1510,22 +1512,63 @@ export class ApiClient {
     }
   }
 
-  async confirmIssueBillingCharge(issueId: string): Promise<ClientBillingCharge> {
-    return this.fetch(`/api/issues/${issueId}/billing/charge/confirm`, { method: "POST" });
+  /** Metering v2: live cost of an issue in ANY status — cumulative usage,
+   *  billed/unbilled split, the charge ledger and (owner only) internal cost. */
+  async getIssueBillingCost(issueId: string): Promise<IssueBillingCost> {
+    return this.fetch(`/api/issues/${issueId}/billing/cost`);
   }
 
-  async voidIssueBillingCharge(issueId: string): Promise<ClientBillingCharge> {
-    return this.fetch(`/api/issues/${issueId}/billing/charge/void`, { method: "POST" });
+  async confirmIssueBillingCharge(issueId: string, chargeId: string): Promise<ClientBillingCharge> {
+    return this.fetch(`/api/issues/${issueId}/billing/charges/${chargeId}/confirm`, { method: "POST" });
+  }
+
+  async voidIssueBillingCharge(issueId: string, chargeId: string): Promise<ClientBillingCharge> {
+    return this.fetch(`/api/issues/${issueId}/billing/charges/${chargeId}/void`, { method: "POST" });
   }
 
   async adjustIssueBillingCharge(
     issueId: string,
+    chargeId: string,
     priceRub: number,
     reason: string,
   ): Promise<ClientBillingCharge> {
-    return this.fetch(`/api/issues/${issueId}/billing/charge/adjust`, {
+    return this.fetch(`/api/issues/${issueId}/billing/charges/${chargeId}/adjust`, {
       method: "POST",
       body: JSON.stringify({ price_rub: priceRub, reason }),
+    });
+  }
+
+  /** The client-side "contest this price" action (members and guests). */
+  async openIssueBillingDispute(issueId: string, reason: string): Promise<ClientBillingDispute> {
+    return this.fetch(`/api/issues/${issueId}/billing/dispute`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  /** Bill every issue's unbilled usage delta into the open period as drafts. */
+  async sweepProjectBilling(projectId: string): Promise<{ created: number }> {
+    return this.fetch(`/api/projects/${projectId}/billing/sweep`, { method: "POST" });
+  }
+
+  async listProjectBillingDisputes(
+    projectId: string,
+    status?: "open" | "resolved",
+  ): Promise<ClientBillingDispute[]> {
+    const qs = status ? `?status=${status}` : "";
+    return this.fetch(`/api/projects/${projectId}/billing/disputes${qs}`);
+  }
+
+  async resolveBillingDispute(
+    projectId: string,
+    disputeId: string,
+    resolution: "keep" | "exclude" | "adjust",
+    comment?: string,
+    priceRub?: number,
+  ): Promise<ClientBillingDispute> {
+    return this.fetch(`/api/projects/${projectId}/billing/disputes/${disputeId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ resolution, comment: comment ?? "", price_rub: priceRub ?? 0 }),
     });
   }
 

@@ -210,5 +210,11 @@ export type {
   ClientBillingEffectivePricing,
   ClientBillingWorkspaceConfig,
   ClientBillingWorkspaceConfigUpdate,
+  ClientBillingChargeSource,
+  ClientBillingChargeSlim,
+  ClientBillingDisputeStatus,
+  ClientBillingDisputeResolution,
+  ClientBillingDispute,
+  IssueBillingCost,
   ElbaEntity,
 } from "./client-billing";

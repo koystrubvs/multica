@@ -102,6 +102,9 @@ export const issueKeys = {
   billingChargeAll: () => ["issues", "billing-charge"] as const,
   billingCharge: (issueId: string) =>
     [...issueKeys.billingChargeAll(), issueId] as const,
+  billingCostAll: () => ["issues", "billing-cost"] as const,
+  billingCost: (issueId: string) =>
+    [...issueKeys.billingCostAll(), issueId] as const,
   attachmentsAll: () => ["issues", "attachments"] as const,
   /** Issue-level attachments — used by the description editor so its
    *  inline file-card / image NodeViews can re-sign download URLs at
@@ -540,6 +543,15 @@ export function issueBillingChargeOptions(issueId: string) {
   return queryOptions({
     queryKey: issueKeys.billingCharge(issueId),
     queryFn: () => api.getIssueBillingCharge(issueId),
+  });
+}
+
+// Metering v2: live cost of the issue in any status — cumulative usage,
+// billed/unbilled split, the charge ledger and (owner only) internal cost.
+export function issueBillingCostOptions(issueId: string) {
+  return queryOptions({
+    queryKey: issueKeys.billingCost(issueId),
+    queryFn: () => api.getIssueBillingCost(issueId),
   });
 }
 

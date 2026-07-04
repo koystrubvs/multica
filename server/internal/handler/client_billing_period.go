@@ -384,18 +384,42 @@ func (h *Handler) ListBillingPeriodCharges(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// CloseBillingPeriod freezes the open period with its confirmed total.
+// CloseBillingPeriod freezes the open period. Metering (v2): open disputes
+// block the close; the leftovers sweep runs so nothing accrued escapes the
+// cycle; every draft still attached is auto-confirmed (the human review —
+// void/adjust — happens on the period charge list BEFORE close).
 func (h *Handler) CloseBillingPeriod(w http.ResponseWriter, r *http.Request) {
 	project, ok := h.loadProjectForBilling(w, r)
 	if !ok {
 		return
 	}
-	if _, ok := h.requireBillingEditor(w, r, uuidToString(project.WorkspaceID)); !ok {
+	userUUID, ok := h.requireBillingEditor(w, r, uuidToString(project.WorkspaceID))
+	if !ok {
 		return
 	}
 	period, ok := h.loadPeriodForProject(w, r, project.ID)
 	if !ok {
 		return
+	}
+	if open, err := h.Queries.CountOpenClientBillingDisputesInProject(r.Context(), project.ID); err == nil && open > 0 {
+		writeError(w, http.StatusConflict, fmt.Sprintf("resolve %d open billing dispute(s) before closing the period", open))
+		return
+	}
+	// Sweep the unbilled tail into this cycle, then auto-confirm the drafts.
+	if cfg, err := h.Queries.GetClientBillingConfig(r.Context(), project.ID); err == nil && cfg.Enabled && period.Status == "open" {
+		if _, err := h.sweepProjectBilling(r.Context(), project, cfg); err != nil {
+			slog.Error("billing: close-time sweep failed", "period_id", uuidToString(period.ID), "error", err)
+			writeError(w, http.StatusInternalServerError, "sweep failed: "+err.Error())
+			return
+		}
+	}
+	if confirmed, err := h.Queries.ConfirmDraftChargesInPeriod(r.Context(), db.ConfirmDraftChargesInPeriodParams{
+		PeriodID: period.ID, UserID: userUUID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to confirm period drafts")
+		return
+	} else if len(confirmed) > 0 {
+		slog.Info("billing: drafts auto-confirmed at close", "period_id", uuidToString(period.ID), "count", len(confirmed))
 	}
 	total, err := h.Queries.SumConfirmedChargesInPeriod(r.Context(), period.ID)
 	if err != nil {
