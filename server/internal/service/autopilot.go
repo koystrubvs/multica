@@ -47,25 +47,33 @@ func NewAutopilotService(q *db.Queries, tx TxStarter, bus *events.Bus, taskSvc *
 // It creates a run and either creates an issue or enqueues a direct agent task
 // depending on execution_mode.
 //
-// Before any work is queued we run an admission check against the assignee
-// agent's runtime. Two skip outcomes are possible (MUL-1899 + MUL-2863):
+// Before run_only work is queued we run an admission check against the assignee
+// agent's runtime (the "触发时准入" gate from MUL-1899 — without it a paused
+// laptop / offline daemon piles thousands of doomed tasks onto
+// agent_task_queue). Two skip outcomes are possible (MUL-1899 + MUL-2863):
 //
-//  1. The runtime is offline. MUL-2863 makes this a *durable* skip: we
-//     persist a `pending_runtime` run with the runtime_id it was waiting
-//     behind, so when the runtime/daemon reappears the
-//     DispatchPendingRuntimeRunsForRuntime hook picks it up and dispatches
-//     the actual work. This is the "the cron should not be silently lost
-//     while my laptop is asleep" fix from MUL-2863.
+//  1. The runtime is offline. For run_only, MUL-2863 makes this a *durable*
+//     skip: instead of dropping the cron we persist a `pending_runtime` run
+//     with the runtime_id it was waiting behind, so when the runtime/daemon
+//     reappears the DispatchPendingRuntimeRunsForRuntime hook picks it up and
+//     dispatches the actual work ("the cron should not be silently lost while
+//     my laptop is asleep"). See the create_issue exception below — for that
+//     mode an offline runtime does not skip at all.
 //
 //  2. Any other admission failure (agent archived, squad archived, no
-//     runtime bound, private-agent gate, etc.) is a *terminal* skip. The
-//     cron is recorded as `skipped` with a failure_reason, mirroring the
-//     legacy MUL-1899 behaviour. Retrying wouldn't change anything, and
+//     runtime bound, private-agent invocation gate, etc.) is a *terminal*
+//     skip. The cron is recorded as `skipped` with a failure_reason, mirroring
+//     the legacy MUL-1899 behaviour. Retrying wouldn't change anything, and
 //     retrying would inflate the failure-rate auto-pause monitor.
 //
+// create_issue mode is different: its primary contract is a durable audit
+// trail. If the assignee has a runtime but that runtime is merely offline,
+// dispatch still creates the issue and issue task so the work is visible and
+// can be claimed when the runtime returns.
+//
 // When assignee_type='squad' the gate runs against the squad leader (Path A
-// from MUL-2429: Autopilot-on-squad ≈ Autopilot-on-leader), so an offline or
-// archived leader produces the same skip behaviour as an offline solo agent.
+// from MUL-2429: Autopilot-on-squad ≈ Autopilot-on-leader), with the same
+// create_issue audit-trail exception for a merely offline leader runtime.
 func (s *AutopilotService) DispatchAutopilot(
 	ctx context.Context,
 	autopilot db.Autopilot,
@@ -171,11 +179,11 @@ func (s *AutopilotService) DispatchAutopilotForPlan(
 //   - It is in-flight in a state whose downstream side effect is
 //     observable:
 //
-//     * issue_created with a valid issue_id — the issue exists and
-//       the issue-event listener owns task creation from here.
+//   - issue_created with a valid issue_id — the issue exists and
+//     the issue-event listener owns task creation from here.
 //
-//     * running with a valid task_id — the task is queued, the
-//       listener will close the run when the task terminates.
+//   - running with a valid task_id — the task is queued, the
+//     listener will close the run when the task terminates.
 //
 // Anything else — most importantly issue_created/running with NULL
 // issue_id/task_id, or the brief 'pending' state — is a partial run:
@@ -433,10 +441,11 @@ func (s *AutopilotService) dispatchCreateIssue(ctx context.Context, ap db.Autopi
 	// MUL-2429); agent-assigned autopilots go through the standard issue
 	// path. Both code paths land in agent_task_queue with agent_id = leader.
 	if ap.AssigneeType == "squad" {
-		// Fail-closed private-leader gate: if the leader is private, verify
-		// the autopilot creator still has access. This catches illegitimate
-		// configs that were saved before the save-time gate was added.
-		if leader.Visibility == "private" && !s.canCreatorAccessPrivateLeader(ctx, ap, leader) {
+		// Fail-closed invocation gate: verify the autopilot creator may still
+		// invoke the leader under the permission model. Catches configs that
+		// predate the save-time gate, and admin-created configs that no longer
+		// pass (MUL-3963).
+		if !s.canCreatorInvokeAgent(ctx, ap, leader) {
 			return fmt.Errorf("autopilot creator cannot access private squad leader")
 		}
 		if _, err := s.TaskSvc.EnqueueTaskForSquadLeader(ctx, issue, leader.ID, ap.AssigneeID, pgtype.UUID{}); err != nil {
@@ -580,8 +589,8 @@ func (s *AutopilotService) dispatchRunOnly(ctx context.Context, ap db.Autopilot,
 		return &errDispatchSkipped{reason: formatAdmissionReason(ap, reason)}
 	}
 
-	// Fail-closed private-leader gate for squad autopilots.
-	if ap.AssigneeType == "squad" && agent.Visibility == "private" && !s.canCreatorAccessPrivateLeader(ctx, ap, agent) {
+	// Fail-closed invocation gate for squad autopilots.
+	if ap.AssigneeType == "squad" && !s.canCreatorInvokeAgent(ctx, ap, agent) {
 		return &errDispatchSkipped{reason: formatAdmissionReason(ap, "creator cannot access private squad leader")}
 	}
 
@@ -904,33 +913,24 @@ func (s *AutopilotService) shouldSkipDispatch(ctx context.Context, ap db.Autopil
 		return "", false
 	}
 	if !ready {
-		return formatAdmissionReason(ap, reason), true
-	}
-	// Private-agent gate at the autopilot layer. Caller identity = the
-	// autopilot's creator: if the creator no longer has access to the
-	// (now-private) target agent, the dispatch is recorded as `skipped`.
-	// Agent-created autopilots bypass the gate to preserve A2A
-	// collaboration. Errors loading the workspace member fail closed —
-	// without an authoritative role the gate cannot grant access.
-	//
-	// For squad autopilots the gate runs against the resolved leader.
-	// Leader visibility is the right thing to check — if the human creator
-	// can no longer reach the leader, the autopilot would silently fail
-	// even though the squad itself looks intact.
-	if agent.Visibility == "private" && ap.CreatedByType == "member" {
-		creatorID := util.UUIDToString(ap.CreatedByID)
-		if util.UUIDToString(agent.OwnerID) != creatorID {
-			member, err := s.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
-				UserID:      ap.CreatedByID,
-				WorkspaceID: ap.WorkspaceID,
-			})
-			if err != nil {
-				return "autopilot creator no longer in workspace", true
-			}
-			if member.Role != "owner" && member.Role != "admin" {
-				return "autopilot creator lacks access to private assignee agent", true
-			}
+		if ap.ExecutionMode == "create_issue" && strings.HasPrefix(reason, "agent runtime is ") {
+			slog.Info("autopilot admission: allowing create_issue dispatch for offline runtime",
+				"autopilot_id", util.UUIDToString(ap.ID),
+				"runtime_id", util.UUIDToString(agent.RuntimeID),
+				"reason", reason,
+			)
+		} else {
+			return formatAdmissionReason(ap, reason), true
 		}
+	}
+	// Invocation gate at the autopilot layer (MUL-3963). Effective user = the
+	// autopilot's creator: if the creator may not invoke the target agent
+	// under the permission model, the dispatch is recorded as `skipped`.
+	// Admins do NOT bypass a private agent they do not own; agent-created
+	// autopilots are judged as workspace principals. For squad autopilots the
+	// gate runs against the resolved leader.
+	if !s.canCreatorInvokeAgent(ctx, ap, agent) {
+		return "autopilot creator lacks access to private assignee agent", true
 	}
 	return "", false
 }
@@ -1768,24 +1768,52 @@ func (s *AutopilotService) getIssuePrefix(workspaceID pgtype.UUID) string {
 	return ws.IssuePrefix
 }
 
-// canCreatorAccessPrivateLeader checks whether the autopilot's creator still
-// has access to a private leader agent. Mirrors handler.canAccessPrivateAgent
-// logic: agent creators always pass; member creators must be the agent owner
-// or a workspace owner/admin. Returns false (fail-closed) on any lookup error.
-func (s *AutopilotService) canCreatorAccessPrivateLeader(ctx context.Context, ap db.Autopilot, leader db.Agent) bool {
-	if ap.CreatedByType == "agent" {
-		return true
-	}
+// canCreatorInvokeAgent checks whether the autopilot's creator may invoke the
+// target agent under the invocation-permission model (MUL-3963). It mirrors
+// handler.canInvokeAgent with the autopilot creator as the effective user:
+//   - member creator who owns the agent -> always
+//   - private agent -> only the owner (NO admin bypass, NO agent-created bypass)
+//   - public_to agent -> workspace target admits any workspace-member creator
+//     (and agent-created autopilots as workspace principals); member target
+//     admits the matching creator; team targets are inert.
+// Fail-closed on any lookup error.
+func (s *AutopilotService) canCreatorInvokeAgent(ctx context.Context, ap db.Autopilot, agent db.Agent) bool {
 	creatorID := util.UUIDToString(ap.CreatedByID)
-	if util.UUIDToString(leader.OwnerID) == creatorID {
+	if ap.CreatedByType == "member" && util.UUIDToString(agent.OwnerID) == creatorID {
 		return true
 	}
-	member, err := s.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
-		UserID:      ap.CreatedByID,
-		WorkspaceID: ap.WorkspaceID,
-	})
+	if agent.PermissionMode != "public_to" {
+		// private (or unknown mode): deny-by-default; only the owner branch
+		// above passes. Admins and agent-created autopilots do not bypass.
+		return false
+	}
+	targets, err := s.Queries.ListAgentInvocationTargets(ctx, agent.ID)
 	if err != nil {
 		return false
 	}
-	return member.Role == "owner" || member.Role == "admin"
+	// Agent-created autopilots are workspace-internal principals: a workspace
+	// target admits them. Member creators must be workspace members.
+	workspaceBroad := ap.CreatedByType == "agent"
+	isWorkspaceMember := false
+	if ap.CreatedByType == "member" {
+		if _, err := s.Queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
+			UserID:      ap.CreatedByID,
+			WorkspaceID: ap.WorkspaceID,
+		}); err == nil {
+			isWorkspaceMember = true
+		}
+	}
+	for _, t := range targets {
+		switch t.TargetType {
+		case "workspace":
+			if isWorkspaceMember || workspaceBroad {
+				return true
+			}
+		case "member":
+			if ap.CreatedByType == "member" && util.UUIDToString(t.TargetID) == creatorID {
+				return true
+			}
+		}
+	}
+	return false
 }

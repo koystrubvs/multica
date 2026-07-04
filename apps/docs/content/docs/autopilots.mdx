@@ -241,9 +241,11 @@ your provider's webhook-retry machinery doesn't keep hammering the URL:
 - `{"status":"accepted","run_id":"…","autopilot_id":"…","trigger_id":"…"}`
   — a run was dispatched.
 - `{"status":"pending_runtime","run_id":"…","reason":"agent runtime is offline at dispatch time"}`
-  — the assignee's runtime is offline; the run is parked and will be
-  auto-dispatched when the runtime/daemon comes back online (MUL-2863).
-  The work is not lost.
+  — for `run_only` autopilots, the assignee's runtime is offline; the run is
+  parked and will be auto-dispatched when the runtime/daemon comes back online
+  (MUL-2863). The work is not lost. `create_issue` autopilots do not park — they
+  still create the tracked issue so the work stays visible and can be claimed
+  when the runtime returns.
 - `{"status":"skipped","run_id":"…","reason":"…"}`
   — the cron was deliberately dropped (assignee agent hard-deleted, squad
   archived, etc.). The reason in `failure_reason` explains why.
