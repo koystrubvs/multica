@@ -148,26 +148,28 @@ export function IssueBillingSection({ issueId }: { issueId: string }) {
           </div>
 
           {cost.charges.length > 0 && (
-            <div className="mt-2 space-y-1">
+            <div className="mt-2 space-y-1.5">
               {cost.charges.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 text-xs">
-                  <span className={c.status === "void" ? "text-muted-foreground line-through" : ""}>
-                    {formatRub(c.price_rub)}
-                  </span>
-                  <StatusBadge status={c.status} />
-                  <span className="text-muted-foreground">
-                    {new Date(c.created_at).toLocaleDateString("ru-RU")}
-                  </span>
-                  {c.adjusted_reason && (
-                    <span className="truncate text-muted-foreground" title={c.adjusted_reason}>
-                      {c.adjusted_reason}
+                <div key={c.id} className="rounded-md border border-border/40 px-2 py-1.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                    <span className={`font-medium ${c.status === "void" ? "text-muted-foreground line-through" : ""}`}>
+                      {formatRub(c.price_rub)}
                     </span>
+                    <StatusBadge status={c.status} />
+                    <span className="text-muted-foreground whitespace-nowrap">
+                      {new Date(c.created_at).toLocaleDateString("ru-RU")}
+                    </span>
+                  </div>
+                  {c.adjusted_reason && (
+                    <div className="mt-0.5 text-[11px] text-muted-foreground" title={c.adjusted_reason}>
+                      {c.adjusted_reason}
+                    </div>
                   )}
                   {c.status === "draft" && (
-                    <span className="ml-auto flex gap-1">
+                    <div className="mt-1 flex flex-wrap gap-1">
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="outline"
                         className="h-5 px-1.5 text-[11px]"
                         disabled={confirmMut.isPending}
                         onClick={() => confirmMut.mutate(c.id)}
@@ -183,7 +185,7 @@ export function IssueBillingSection({ issueId }: { issueId: string }) {
                       >
                         {t(($) => $.detail.billing_void)}
                       </Button>
-                    </span>
+                    </div>
                   )}
                 </div>
               ))}
