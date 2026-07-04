@@ -245,7 +245,16 @@
     "billing_void": "Аннулировать",
     "billing_confirmed_toast": "Стоимость подтверждена",
     "billing_voided_toast": "Стоимость аннулирована",
-    "billing_action_failed_toast": "Не удалось выполнить действие"
+    "billing_action_failed_toast": "Не удалось выполнить действие",
+    "billing_unbilled": "Накоплено (не выставлено)",
+    "billing_billed": "Выставлено",
+    "billing_internal": "Себестоимость (с кэшем)",
+    "billing_dispute_active": "Оспорено",
+    "billing_dispute_open": "Оспорить сумму",
+    "billing_dispute_reason_ph": "Почему сумма некорректна?",
+    "billing_dispute_submit": "Отправить",
+    "billing_dispute_cancel": "Отмена",
+    "billing_dispute_opened_toast": "Спор открыт — мы его рассмотрим"
   },
   "timeline": {
     "loading": "Загрузка..."

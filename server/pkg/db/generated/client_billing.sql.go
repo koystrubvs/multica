@@ -14,19 +14,20 @@ import (
 const adjustClientBillingCharge = `-- name: AdjustClientBillingCharge :one
 UPDATE client_billing_charge
 SET price_rub = $1::float8, adjusted_reason = $2, updated_at = now()
-WHERE issue_id = $3 AND status = 'draft'
+WHERE id = $3 AND issue_id = $4 AND status = 'draft'
 RETURNING
     id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
     price_rub::float8   AS price_rub,
-    status, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
+    status, source, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
 `
 
 type AdjustClientBillingChargeParams struct {
 	PriceRub float64     `json:"price_rub"`
 	Reason   pgtype.Text `json:"reason"`
+	ChargeID pgtype.UUID `json:"charge_id"`
 	IssueID  pgtype.UUID `json:"issue_id"`
 }
 
@@ -42,6 +43,7 @@ type AdjustClientBillingChargeRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -51,7 +53,12 @@ type AdjustClientBillingChargeRow struct {
 
 // Manual price override while still draft; adjusted_reason is the audit trail.
 func (q *Queries) AdjustClientBillingCharge(ctx context.Context, arg AdjustClientBillingChargeParams) (AdjustClientBillingChargeRow, error) {
-	row := q.db.QueryRow(ctx, adjustClientBillingCharge, arg.PriceRub, arg.Reason, arg.IssueID)
+	row := q.db.QueryRow(ctx, adjustClientBillingCharge,
+		arg.PriceRub,
+		arg.Reason,
+		arg.ChargeID,
+		arg.IssueID,
+	)
 	var i AdjustClientBillingChargeRow
 	err := row.Scan(
 		&i.ID,
@@ -65,6 +72,7 @@ func (q *Queries) AdjustClientBillingCharge(ctx context.Context, arg AdjustClien
 		&i.Markup,
 		&i.PriceRub,
 		&i.Status,
+		&i.Source,
 		&i.AdjustedReason,
 		&i.ConfirmedBy,
 		&i.ConfirmedAt,
@@ -77,19 +85,20 @@ func (q *Queries) AdjustClientBillingCharge(ctx context.Context, arg AdjustClien
 const confirmClientBillingCharge = `-- name: ConfirmClientBillingCharge :one
 UPDATE client_billing_charge
 SET status = 'confirmed', confirmed_by = $1, confirmed_at = now(), updated_at = now()
-WHERE issue_id = $2 AND status = 'draft'
+WHERE id = $2 AND issue_id = $3 AND status = 'draft'
 RETURNING
     id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
     price_rub::float8   AS price_rub,
-    status, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
+    status, source, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
 `
 
 type ConfirmClientBillingChargeParams struct {
-	UserID  pgtype.UUID `json:"user_id"`
-	IssueID pgtype.UUID `json:"issue_id"`
+	UserID   pgtype.UUID `json:"user_id"`
+	ChargeID pgtype.UUID `json:"charge_id"`
+	IssueID  pgtype.UUID `json:"issue_id"`
 }
 
 type ConfirmClientBillingChargeRow struct {
@@ -104,6 +113,7 @@ type ConfirmClientBillingChargeRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -112,7 +122,7 @@ type ConfirmClientBillingChargeRow struct {
 }
 
 func (q *Queries) ConfirmClientBillingCharge(ctx context.Context, arg ConfirmClientBillingChargeParams) (ConfirmClientBillingChargeRow, error) {
-	row := q.db.QueryRow(ctx, confirmClientBillingCharge, arg.UserID, arg.IssueID)
+	row := q.db.QueryRow(ctx, confirmClientBillingCharge, arg.UserID, arg.ChargeID, arg.IssueID)
 	var i ConfirmClientBillingChargeRow
 	err := row.Scan(
 		&i.ID,
@@ -126,6 +136,7 @@ func (q *Queries) ConfirmClientBillingCharge(ctx context.Context, arg ConfirmCli
 		&i.Markup,
 		&i.PriceRub,
 		&i.Status,
+		&i.Source,
 		&i.AdjustedReason,
 		&i.ConfirmedBy,
 		&i.ConfirmedAt,
@@ -135,13 +146,60 @@ func (q *Queries) ConfirmClientBillingCharge(ctx context.Context, arg ConfirmCli
 	return i, err
 }
 
+const confirmDraftChargesInPeriod = `-- name: ConfirmDraftChargesInPeriod :many
+UPDATE client_billing_charge
+SET status = 'confirmed', confirmed_by = $1, confirmed_at = now(), updated_at = now()
+WHERE period_id = $2 AND status = 'draft'
+RETURNING id
+`
+
+type ConfirmDraftChargesInPeriodParams struct {
+	UserID   pgtype.UUID `json:"user_id"`
+	PeriodID pgtype.UUID `json:"period_id"`
+}
+
+// Period close auto-confirms whatever drafts are still attached: the review
+// happens in the period charge list BEFORE close (void/adjust the outliers).
+func (q *Queries) ConfirmDraftChargesInPeriod(ctx context.Context, arg ConfirmDraftChargesInPeriodParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, confirmDraftChargesInPeriod, arg.UserID, arg.PeriodID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countOpenClientBillingDisputesInProject = `-- name: CountOpenClientBillingDisputesInProject :one
+SELECT COUNT(*)::int FROM client_billing_dispute
+WHERE project_id = $1 AND status = 'open'
+`
+
+func (q *Queries) CountOpenClientBillingDisputesInProject(ctx context.Context, projectID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countOpenClientBillingDisputesInProject, projectID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createClientBillingCharge = `-- name: CreateClientBillingCharge :one
 INSERT INTO client_billing_charge (
     issue_id, project_id, workspace_id, usage,
-    nocache_usd, fx_rate, markup, price_rub
+    nocache_usd, fx_rate, markup, price_rub, source, period_id
 ) VALUES (
     $1, $2, $3, $4,
-    $5::float8, $6::float8, $7::float8, $8::float8
+    $5::float8, $6::float8, $7::float8, $8::float8,
+    $9, $10::uuid
 )
 RETURNING
     id, issue_id, project_id, workspace_id, period_id, usage,
@@ -149,7 +207,7 @@ RETURNING
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
     price_rub::float8   AS price_rub,
-    status, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
+    status, source, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
 `
 
 type CreateClientBillingChargeParams struct {
@@ -161,6 +219,8 @@ type CreateClientBillingChargeParams struct {
 	FxRate      float64     `json:"fx_rate"`
 	Markup      float64     `json:"markup"`
 	PriceRub    float64     `json:"price_rub"`
+	Source      string      `json:"source"`
+	PeriodID    pgtype.UUID `json:"period_id"`
 }
 
 type CreateClientBillingChargeRow struct {
@@ -175,6 +235,7 @@ type CreateClientBillingChargeRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -182,6 +243,9 @@ type CreateClientBillingChargeRow struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+// Metering (migration 134): a charge is one "issue × period" line; several may
+// exist per issue. period_id is set immediately for sweep-created lines and
+// stays NULL for legacy/manual drafts until confirm attaches them.
 func (q *Queries) CreateClientBillingCharge(ctx context.Context, arg CreateClientBillingChargeParams) (CreateClientBillingChargeRow, error) {
 	row := q.db.QueryRow(ctx, createClientBillingCharge,
 		arg.IssueID,
@@ -192,6 +256,8 @@ func (q *Queries) CreateClientBillingCharge(ctx context.Context, arg CreateClien
 		arg.FxRate,
 		arg.Markup,
 		arg.PriceRub,
+		arg.Source,
+		arg.PeriodID,
 	)
 	var i CreateClientBillingChargeRow
 	err := row.Scan(
@@ -206,11 +272,61 @@ func (q *Queries) CreateClientBillingCharge(ctx context.Context, arg CreateClien
 		&i.Markup,
 		&i.PriceRub,
 		&i.Status,
+		&i.Source,
 		&i.AdjustedReason,
 		&i.ConfirmedBy,
 		&i.ConfirmedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createClientBillingDispute = `-- name: CreateClientBillingDispute :one
+
+INSERT INTO client_billing_dispute (
+    issue_id, project_id, workspace_id, opened_by_type, opened_by, reason
+) VALUES (
+    $1, $2, $3, $4, $5::uuid, $6
+)
+RETURNING id, issue_id, project_id, workspace_id, opened_by_type, opened_by,
+    reason, status, resolution, resolution_comment, resolved_by, resolved_at, created_at
+`
+
+type CreateClientBillingDisputeParams struct {
+	IssueID      pgtype.UUID `json:"issue_id"`
+	ProjectID    pgtype.UUID `json:"project_id"`
+	WorkspaceID  pgtype.UUID `json:"workspace_id"`
+	OpenedByType string      `json:"opened_by_type"`
+	OpenedBy     pgtype.UUID `json:"opened_by"`
+	Reason       string      `json:"reason"`
+}
+
+// --- Disputes (migration 134) ---
+func (q *Queries) CreateClientBillingDispute(ctx context.Context, arg CreateClientBillingDisputeParams) (ClientBillingDispute, error) {
+	row := q.db.QueryRow(ctx, createClientBillingDispute,
+		arg.IssueID,
+		arg.ProjectID,
+		arg.WorkspaceID,
+		arg.OpenedByType,
+		arg.OpenedBy,
+		arg.Reason,
+	)
+	var i ClientBillingDispute
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.ProjectID,
+		&i.WorkspaceID,
+		&i.OpenedByType,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Status,
+		&i.Resolution,
+		&i.ResolutionComment,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -222,9 +338,11 @@ SELECT
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
     price_rub::float8   AS price_rub,
-    status, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
+    status, source, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
 FROM client_billing_charge
 WHERE issue_id = $1
+ORDER BY created_at DESC
+LIMIT 1
 `
 
 type GetClientBillingChargeByIssueRow struct {
@@ -239,6 +357,7 @@ type GetClientBillingChargeByIssueRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -246,6 +365,7 @@ type GetClientBillingChargeByIssueRow struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+// Latest charge of an issue (the ledger head).
 func (q *Queries) GetClientBillingChargeByIssue(ctx context.Context, issueID pgtype.UUID) (GetClientBillingChargeByIssueRow, error) {
 	row := q.db.QueryRow(ctx, getClientBillingChargeByIssue, issueID)
 	var i GetClientBillingChargeByIssueRow
@@ -261,6 +381,7 @@ func (q *Queries) GetClientBillingChargeByIssue(ctx context.Context, issueID pgt
 		&i.Markup,
 		&i.PriceRub,
 		&i.Status,
+		&i.Source,
 		&i.AdjustedReason,
 		&i.ConfirmedBy,
 		&i.ConfirmedAt,
@@ -394,6 +515,160 @@ func (q *Queries) GetClientBillingWorkspaceConfig(ctx context.Context, workspace
 	return i, err
 }
 
+const getOpenClientBillingDisputeByIssue = `-- name: GetOpenClientBillingDisputeByIssue :one
+SELECT id, issue_id, project_id, workspace_id, opened_by_type, opened_by,
+    reason, status, resolution, resolution_comment, resolved_by, resolved_at, created_at
+FROM client_billing_dispute
+WHERE issue_id = $1 AND status = 'open'
+`
+
+func (q *Queries) GetOpenClientBillingDisputeByIssue(ctx context.Context, issueID pgtype.UUID) (ClientBillingDispute, error) {
+	row := q.db.QueryRow(ctx, getOpenClientBillingDisputeByIssue, issueID)
+	var i ClientBillingDispute
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.ProjectID,
+		&i.WorkspaceID,
+		&i.OpenedByType,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Status,
+		&i.Resolution,
+		&i.ResolutionComment,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listChargeUsageByIssue = `-- name: ListChargeUsageByIssue :many
+SELECT usage FROM client_billing_charge WHERE issue_id = $1
+`
+
+// Usage snapshots of ALL charges (void included): the issue's billed-through
+// watermark is the per-class sum of these rows.
+func (q *Queries) ListChargeUsageByIssue(ctx context.Context, issueID pgtype.UUID) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, listChargeUsageByIssue, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var usage []byte
+		if err := rows.Scan(&usage); err != nil {
+			return nil, err
+		}
+		items = append(items, usage)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChargeUsageByProject = `-- name: ListChargeUsageByProject :many
+SELECT issue_id, usage FROM client_billing_charge WHERE project_id = $1
+`
+
+type ListChargeUsageByProjectRow struct {
+	IssueID pgtype.UUID `json:"issue_id"`
+	Usage   []byte      `json:"usage"`
+}
+
+func (q *Queries) ListChargeUsageByProject(ctx context.Context, projectID pgtype.UUID) ([]ListChargeUsageByProjectRow, error) {
+	rows, err := q.db.Query(ctx, listChargeUsageByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChargeUsageByProjectRow{}
+	for rows.Next() {
+		var i ListChargeUsageByProjectRow
+		if err := rows.Scan(&i.IssueID, &i.Usage); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClientBillingChargesByIssue = `-- name: ListClientBillingChargesByIssue :many
+SELECT
+    id, issue_id, project_id, workspace_id, period_id, usage,
+    nocache_usd::float8 AS nocache_usd,
+    fx_rate::float8     AS fx_rate,
+    markup::float8      AS markup,
+    price_rub::float8   AS price_rub,
+    status, source, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
+FROM client_billing_charge
+WHERE issue_id = $1
+ORDER BY created_at DESC
+`
+
+type ListClientBillingChargesByIssueRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	IssueID        pgtype.UUID        `json:"issue_id"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	PeriodID       pgtype.UUID        `json:"period_id"`
+	Usage          []byte             `json:"usage"`
+	NocacheUsd     float64            `json:"nocache_usd"`
+	FxRate         float64            `json:"fx_rate"`
+	Markup         float64            `json:"markup"`
+	PriceRub       float64            `json:"price_rub"`
+	Status         string             `json:"status"`
+	Source         string             `json:"source"`
+	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
+	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
+	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListClientBillingChargesByIssue(ctx context.Context, issueID pgtype.UUID) ([]ListClientBillingChargesByIssueRow, error) {
+	rows, err := q.db.Query(ctx, listClientBillingChargesByIssue, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClientBillingChargesByIssueRow{}
+	for rows.Next() {
+		var i ListClientBillingChargesByIssueRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.ProjectID,
+			&i.WorkspaceID,
+			&i.PeriodID,
+			&i.Usage,
+			&i.NocacheUsd,
+			&i.FxRate,
+			&i.Markup,
+			&i.PriceRub,
+			&i.Status,
+			&i.Source,
+			&i.AdjustedReason,
+			&i.ConfirmedBy,
+			&i.ConfirmedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClientBillingChargesByProject = `-- name: ListClientBillingChargesByProject :many
 SELECT
     cbc.id, cbc.issue_id, cbc.project_id, cbc.workspace_id, cbc.period_id, cbc.usage,
@@ -401,7 +676,7 @@ SELECT
     cbc.fx_rate::float8     AS fx_rate,
     cbc.markup::float8      AS markup,
     cbc.price_rub::float8   AS price_rub,
-    cbc.status, cbc.adjusted_reason, cbc.confirmed_by, cbc.confirmed_at,
+    cbc.status, cbc.source, cbc.adjusted_reason, cbc.confirmed_by, cbc.confirmed_at,
     cbc.created_at, cbc.updated_at,
     i.title AS issue_title
 FROM client_billing_charge cbc
@@ -428,6 +703,7 @@ type ListClientBillingChargesByProjectRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -457,11 +733,81 @@ func (q *Queries) ListClientBillingChargesByProject(ctx context.Context, arg Lis
 			&i.Markup,
 			&i.PriceRub,
 			&i.Status,
+			&i.Source,
 			&i.AdjustedReason,
 			&i.ConfirmedBy,
 			&i.ConfirmedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IssueTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClientBillingDisputesByProject = `-- name: ListClientBillingDisputesByProject :many
+SELECT cbd.id, cbd.issue_id, cbd.project_id, cbd.workspace_id, cbd.opened_by_type,
+    cbd.opened_by, cbd.reason, cbd.status, cbd.resolution, cbd.resolution_comment,
+    cbd.resolved_by, cbd.resolved_at, cbd.created_at,
+    i.title AS issue_title
+FROM client_billing_dispute cbd
+JOIN issue i ON i.id = cbd.issue_id
+WHERE cbd.project_id = $1
+  AND ($2::text IS NULL OR cbd.status = $2)
+ORDER BY cbd.created_at DESC
+`
+
+type ListClientBillingDisputesByProjectParams struct {
+	ProjectID pgtype.UUID `json:"project_id"`
+	Status    pgtype.Text `json:"status"`
+}
+
+type ListClientBillingDisputesByProjectRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	IssueID           pgtype.UUID        `json:"issue_id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	OpenedByType      string             `json:"opened_by_type"`
+	OpenedBy          pgtype.UUID        `json:"opened_by"`
+	Reason            string             `json:"reason"`
+	Status            string             `json:"status"`
+	Resolution        pgtype.Text        `json:"resolution"`
+	ResolutionComment pgtype.Text        `json:"resolution_comment"`
+	ResolvedBy        pgtype.UUID        `json:"resolved_by"`
+	ResolvedAt        pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	IssueTitle        string             `json:"issue_title"`
+}
+
+func (q *Queries) ListClientBillingDisputesByProject(ctx context.Context, arg ListClientBillingDisputesByProjectParams) ([]ListClientBillingDisputesByProjectRow, error) {
+	rows, err := q.db.Query(ctx, listClientBillingDisputesByProject, arg.ProjectID, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListClientBillingDisputesByProjectRow{}
+	for rows.Next() {
+		var i ListClientBillingDisputesByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.ProjectID,
+			&i.WorkspaceID,
+			&i.OpenedByType,
+			&i.OpenedBy,
+			&i.Reason,
+			&i.Status,
+			&i.Resolution,
+			&i.ResolutionComment,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.CreatedAt,
 			&i.IssueTitle,
 		); err != nil {
 			return nil, err
@@ -526,6 +872,106 @@ func (q *Queries) ListIssueUsageByModel(ctx context.Context, issueID pgtype.UUID
 		return nil, err
 	}
 	return items, nil
+}
+
+const listProjectIssueUsageByModel = `-- name: ListProjectIssueUsageByModel :many
+SELECT
+    atq.issue_id,
+    tu.provider,
+    tu.model,
+    COALESCE(SUM(tu.input_tokens), 0)::bigint       AS input_tokens,
+    COALESCE(SUM(tu.output_tokens), 0)::bigint      AS output_tokens,
+    COALESCE(SUM(tu.cache_read_tokens), 0)::bigint  AS cache_read_tokens,
+    COALESCE(SUM(tu.cache_write_tokens), 0)::bigint AS cache_write_tokens
+FROM task_usage tu
+JOIN agent_task_queue atq ON atq.id = tu.task_id
+JOIN issue i ON i.id = atq.issue_id
+WHERE i.project_id = $1
+GROUP BY atq.issue_id, tu.provider, tu.model
+ORDER BY atq.issue_id, tu.provider, tu.model
+`
+
+type ListProjectIssueUsageByModelRow struct {
+	IssueID          pgtype.UUID `json:"issue_id"`
+	Provider         string      `json:"provider"`
+	Model            string      `json:"model"`
+	InputTokens      int64       `json:"input_tokens"`
+	OutputTokens     int64       `json:"output_tokens"`
+	CacheReadTokens  int64       `json:"cache_read_tokens"`
+	CacheWriteTokens int64       `json:"cache_write_tokens"`
+}
+
+// Per-issue × (provider, model) token totals for every issue of a project.
+// The sweep diffs these cumulative counters against the charge-ledger
+// watermark to find unbilled deltas.
+func (q *Queries) ListProjectIssueUsageByModel(ctx context.Context, projectID pgtype.UUID) ([]ListProjectIssueUsageByModelRow, error) {
+	rows, err := q.db.Query(ctx, listProjectIssueUsageByModel, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectIssueUsageByModelRow{}
+	for rows.Next() {
+		var i ListProjectIssueUsageByModelRow
+		if err := rows.Scan(
+			&i.IssueID,
+			&i.Provider,
+			&i.Model,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CacheReadTokens,
+			&i.CacheWriteTokens,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveClientBillingDispute = `-- name: ResolveClientBillingDispute :one
+UPDATE client_billing_dispute
+SET status = 'resolved', resolution = $1,
+    resolution_comment = $2, resolved_by = $3, resolved_at = now()
+WHERE id = $4 AND status = 'open'
+RETURNING id, issue_id, project_id, workspace_id, opened_by_type, opened_by,
+    reason, status, resolution, resolution_comment, resolved_by, resolved_at, created_at
+`
+
+type ResolveClientBillingDisputeParams struct {
+	Resolution pgtype.Text `json:"resolution"`
+	Comment    pgtype.Text `json:"comment"`
+	ResolvedBy pgtype.UUID `json:"resolved_by"`
+	ID         pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) ResolveClientBillingDispute(ctx context.Context, arg ResolveClientBillingDisputeParams) (ClientBillingDispute, error) {
+	row := q.db.QueryRow(ctx, resolveClientBillingDispute,
+		arg.Resolution,
+		arg.Comment,
+		arg.ResolvedBy,
+		arg.ID,
+	)
+	var i ClientBillingDispute
+	err := row.Scan(
+		&i.ID,
+		&i.IssueID,
+		&i.ProjectID,
+		&i.WorkspaceID,
+		&i.OpenedByType,
+		&i.OpenedBy,
+		&i.Reason,
+		&i.Status,
+		&i.Resolution,
+		&i.ResolutionComment,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const upsertClientBillingConfig = `-- name: UpsertClientBillingConfig :one
@@ -742,15 +1188,20 @@ func (q *Queries) UpsertClientBillingWorkspaceConfig(ctx context.Context, arg Up
 const voidClientBillingCharge = `-- name: VoidClientBillingCharge :one
 UPDATE client_billing_charge
 SET status = 'void', updated_at = now()
-WHERE issue_id = $1 AND status <> 'void'
+WHERE id = $1 AND issue_id = $2 AND status <> 'void'
 RETURNING
     id, issue_id, project_id, workspace_id, period_id, usage,
     nocache_usd::float8 AS nocache_usd,
     fx_rate::float8     AS fx_rate,
     markup::float8      AS markup,
     price_rub::float8   AS price_rub,
-    status, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
+    status, source, adjusted_reason, confirmed_by, confirmed_at, created_at, updated_at
 `
+
+type VoidClientBillingChargeParams struct {
+	ChargeID pgtype.UUID `json:"charge_id"`
+	IssueID  pgtype.UUID `json:"issue_id"`
+}
 
 type VoidClientBillingChargeRow struct {
 	ID             pgtype.UUID        `json:"id"`
@@ -764,6 +1215,7 @@ type VoidClientBillingChargeRow struct {
 	Markup         float64            `json:"markup"`
 	PriceRub       float64            `json:"price_rub"`
 	Status         string             `json:"status"`
+	Source         string             `json:"source"`
 	AdjustedReason pgtype.Text        `json:"adjusted_reason"`
 	ConfirmedBy    pgtype.UUID        `json:"confirmed_by"`
 	ConfirmedAt    pgtype.Timestamptz `json:"confirmed_at"`
@@ -771,8 +1223,8 @@ type VoidClientBillingChargeRow struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) VoidClientBillingCharge(ctx context.Context, issueID pgtype.UUID) (VoidClientBillingChargeRow, error) {
-	row := q.db.QueryRow(ctx, voidClientBillingCharge, issueID)
+func (q *Queries) VoidClientBillingCharge(ctx context.Context, arg VoidClientBillingChargeParams) (VoidClientBillingChargeRow, error) {
+	row := q.db.QueryRow(ctx, voidClientBillingCharge, arg.ChargeID, arg.IssueID)
 	var i VoidClientBillingChargeRow
 	err := row.Scan(
 		&i.ID,
@@ -786,6 +1238,7 @@ func (q *Queries) VoidClientBillingCharge(ctx context.Context, issueID pgtype.UU
 		&i.Markup,
 		&i.PriceRub,
 		&i.Status,
+		&i.Source,
 		&i.AdjustedReason,
 		&i.ConfirmedBy,
 		&i.ConfirmedAt,
@@ -793,4 +1246,38 @@ func (q *Queries) VoidClientBillingCharge(ctx context.Context, issueID pgtype.UU
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const voidDraftChargesByIssue = `-- name: VoidDraftChargesByIssue :many
+UPDATE client_billing_charge
+SET status = 'void', updated_at = now()
+WHERE issue_id = $1 AND status = 'draft'
+RETURNING id, period_id
+`
+
+type VoidDraftChargesByIssueRow struct {
+	ID       pgtype.UUID `json:"id"`
+	PeriodID pgtype.UUID `json:"period_id"`
+}
+
+// Dispute resolution "exclude": every pending draft of the issue is voided in
+// one shot (void rows keep advancing the watermark).
+func (q *Queries) VoidDraftChargesByIssue(ctx context.Context, issueID pgtype.UUID) ([]VoidDraftChargesByIssueRow, error) {
+	rows, err := q.db.Query(ctx, voidDraftChargesByIssue, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []VoidDraftChargesByIssueRow{}
+	for rows.Next() {
+		var i VoidDraftChargesByIssueRow
+		if err := rows.Scan(&i.ID, &i.PeriodID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

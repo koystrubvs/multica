@@ -257,7 +257,16 @@
     "create_invoice": "Выставить счёт",
     "period_invoiced_toast": "Период закрыт, счёт и акт созданы в Эльбе",
     "elba_push_failed_toast": "Не удалось выставить счёт в Эльбе: {{error}}",
-    "elba_invoice_ref": "Счёт в Эльбе: {{id}}"
+    "elba_invoice_ref": "Счёт в Эльбе: {{id}}",
+    "sweep": "Тарифицировать работу",
+    "sweep_done_toast": "Свип: создано строк — {{count}}",
+    "disputes_title": "Открытые споры ({{count}})",
+    "dispute_keep": "Оставить цену",
+    "dispute_exclude": "Исключить",
+    "dispute_adjust": "Своя цена…",
+    "dispute_resolved_toast": "Спор решён",
+    "dispute_adjust_price_prompt": "Новая цена, ₽:",
+    "dispute_adjust_comment_prompt": "Причина (увидит клиент):"
   },
   "toolbar": {
     "clear_filters": "Сбросить фильтры",

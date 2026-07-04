@@ -15,10 +15,11 @@ package handler
 // discount the agency actually receives from the provider is its margin and
 // is deliberately not passed through to the client.
 //
-// A charge is a frozen snapshot taken when an issue transitions to `done`
-// (hooked from UpdateIssue / BatchUpdateIssues). Usage, USD totals, the
-// effective FX rate and the markup are captured as-of that moment and never
-// recomputed: issued invoices must not drift when prices or rates change.
+// Since migration 134 (metering v2, see client_billing_metering.go) a charge
+// is one "issue × period" line created by the SWEEP — not a done-transition
+// snapshot. Usage, USD totals, the effective FX rate and the markup are still
+// frozen as-of creation and never recomputed: issued invoices must not drift
+// when prices or rates change.
 
 import (
 	"context"
@@ -150,72 +151,10 @@ func (h *Handler) latestFxRubPerUsd(ctx context.Context) float64 {
 	return stored[len(stored)-1].UsdRub
 }
 
-// maybeCreateBillingChargeForIssue creates a draft price snapshot for an
-// issue that just transitioned to `done`. Best-effort: billing must never
-// fail the status update itself. No-ops when the issue has no project, the
-// project has no enabled billing config, a charge already exists (reopen ->
-// re-done keeps the original snapshot), or the issue has zero agent usage
-// (nothing AI-priced to bill; a manual charge can be added in a later phase).
-func (h *Handler) maybeCreateBillingChargeForIssue(ctx context.Context, issue db.Issue) {
-	if !issue.ProjectID.Valid {
-		return
-	}
-	cfg, err := h.Queries.GetClientBillingConfig(ctx, issue.ProjectID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return
-	}
-	if err != nil {
-		slog.Warn("billing: config lookup failed", "issue_id", uuidToString(issue.ID), "error", err)
-		return
-	}
-	if !cfg.Enabled {
-		return
-	}
-	if _, err := h.Queries.GetClientBillingChargeByIssue(ctx, issue.ID); err == nil {
-		return // snapshot already taken
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		slog.Warn("billing: charge lookup failed", "issue_id", uuidToString(issue.ID), "error", err)
-		return
-	}
-	rows, err := h.Queries.ListIssueUsageByModel(ctx, issue.ID)
-	if err != nil {
-		slog.Warn("billing: usage lookup failed", "issue_id", uuidToString(issue.ID), "error", err)
-		return
-	}
-	lines, totalUSD, totalTokens := computeBillingUsage(rows)
-	if totalTokens == 0 {
-		slog.Info("billing: skipping issue with no agent usage", "issue_id", uuidToString(issue.ID))
-		return
-	}
-	pricing := h.resolveBillingPricing(ctx, cfg, issue.WorkspaceID)
-	fx := h.latestFxRubPerUsd(ctx) * (1 + pricing.FxMarkupPercent/100)
-	fx = math.Round(fx*10000) / 10000
-	price := computePriceRub(totalUSD, fx, pricing.Markup, pricing.MinPriceRub, pricing.RoundingRub)
-	usageJSON, err := json.Marshal(lines)
-	if err != nil {
-		slog.Warn("billing: usage marshal failed", "issue_id", uuidToString(issue.ID), "error", err)
-		return
-	}
-	charge, err := h.Queries.CreateClientBillingCharge(ctx, db.CreateClientBillingChargeParams{
-		IssueID:     issue.ID,
-		ProjectID:   issue.ProjectID,
-		WorkspaceID: issue.WorkspaceID,
-		Usage:       usageJSON,
-		NocacheUsd:  totalUSD,
-		FxRate:      fx,
-		Markup:      pricing.Markup,
-		PriceRub:    price,
-	})
-	if err != nil {
-		// A unique-violation race with a concurrent done-transition is benign.
-		slog.Warn("billing: charge insert failed", "issue_id", uuidToString(issue.ID), "error", err)
-		return
-	}
-	slog.Info("billing: draft charge created",
-		"issue_id", uuidToString(issue.ID),
-		"charge_id", uuidToString(charge.ID),
-		"nocache_usd", totalUSD, "fx_rate", fx, "price_rub", price)
-}
+// The v1 done-transition hook (maybeCreateBillingChargeForIssue) is gone:
+// since migration 134 billing is METERED — issues accrue usage in any status
+// and the sweep (client_billing_metering.go) bills the unbilled delta on
+// demand and at period close.
 
 // requireBillingEditor gates billing mutations (config writes, charge
 // confirm/void/adjust) to real workspace staff: any member except guests.
@@ -729,13 +668,18 @@ func (h *Handler) ConfirmIssueBillingCharge(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	chargeUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "chargeId"), "charge id")
+	if !ok {
+		return
+	}
 	userUUID, ok := h.requireBillingEditor(w, r, uuidToString(issue.WorkspaceID))
 	if !ok {
 		return
 	}
 	charge, err := h.Queries.ConfirmClientBillingCharge(r.Context(), db.ConfirmClientBillingChargeParams{
-		IssueID: issue.ID,
-		UserID:  userUUID,
+		ChargeID: chargeUUID,
+		IssueID:  issue.ID,
+		UserID:   userUUID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusConflict, "charge is not in draft status (or does not exist)")
@@ -749,12 +693,7 @@ func (h *Handler) ConfirmIssueBillingCharge(w http.ResponseWriter, r *http.Reque
 	// Phase 2: attach to the open billing period, refresh its total and fire
 	// budget / fair-use threshold alerts. Best-effort by design.
 	h.afterChargeConfirmed(r.Context(), db.GetClientBillingChargeByIssueRow(charge), requestUserID(r))
-	// Re-read so the response carries the period_id the attach just set.
-	out := db.GetClientBillingChargeByIssueRow(charge)
-	if fresh, err := h.Queries.GetClientBillingChargeByIssue(r.Context(), issue.ID); err == nil {
-		out = fresh
-	}
-	writeJSON(w, http.StatusOK, chargeJSON(out))
+	writeJSON(w, http.StatusOK, chargeJSON(db.GetClientBillingChargeByIssueRow(charge)))
 }
 
 // VoidIssueBillingCharge cancels a charge (draft or confirmed) so it never
@@ -764,10 +703,17 @@ func (h *Handler) VoidIssueBillingCharge(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	chargeUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "chargeId"), "charge id")
+	if !ok {
+		return
+	}
 	if _, ok := h.requireBillingEditor(w, r, uuidToString(issue.WorkspaceID)); !ok {
 		return
 	}
-	charge, err := h.Queries.VoidClientBillingCharge(r.Context(), issue.ID)
+	charge, err := h.Queries.VoidClientBillingCharge(r.Context(), db.VoidClientBillingChargeParams{
+		ChargeID: chargeUUID,
+		IssueID:  issue.ID,
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusConflict, "charge is already void (or does not exist)")
 		return
@@ -796,6 +742,10 @@ func (h *Handler) AdjustIssueBillingCharge(w http.ResponseWriter, r *http.Reques
 	if _, ok := h.requireBillingEditor(w, r, uuidToString(issue.WorkspaceID)); !ok {
 		return
 	}
+	chargeUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "chargeId"), "charge id")
+	if !ok {
+		return
+	}
 	var req adjustChargeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -810,6 +760,7 @@ func (h *Handler) AdjustIssueBillingCharge(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	charge, err := h.Queries.AdjustClientBillingCharge(r.Context(), db.AdjustClientBillingChargeParams{
+		ChargeID: chargeUUID,
 		IssueID:  issue.ID,
 		PriceRub: req.PriceRub,
 		Reason:   pgtype.Text{String: req.Reason, Valid: true},

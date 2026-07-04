@@ -245,7 +245,16 @@
     "billing_void": "Void",
     "billing_confirmed_toast": "Charge confirmed",
     "billing_voided_toast": "Charge voided",
-    "billing_action_failed_toast": "Billing action failed"
+    "billing_action_failed_toast": "Billing action failed",
+    "billing_unbilled": "Accrued (not billed)",
+    "billing_billed": "Billed",
+    "billing_internal": "Internal cost (cached)",
+    "billing_dispute_active": "Disputed",
+    "billing_dispute_open": "Dispute this amount",
+    "billing_dispute_reason_ph": "Why is this amount wrong?",
+    "billing_dispute_submit": "Submit",
+    "billing_dispute_cancel": "Cancel",
+    "billing_dispute_opened_toast": "Dispute opened — we will review it"
   },
   "timeline": {
     "loading": "불러오는 중..."
