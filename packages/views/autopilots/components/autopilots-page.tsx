@@ -870,7 +870,7 @@ export function AutopilotsPage() {
           />
           <div
             ref={listScrollRef}
-            className="min-h-0 flex-1 overflow-auto @container"
+            className="min-h-0 flex-1 overflow-auto [overflow-anchor:none] @container"
           >
             <ListGrid
               className={`${GRID_COLS} @2xl:min-w-[var(--apc-minw)]`}
