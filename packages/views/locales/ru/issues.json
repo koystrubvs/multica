@@ -489,7 +489,7 @@
     "unpin_from_sidebar": "Открепить из боковой панели",
     "copy_link": "Скопировать ссылку",
     "copy_workdir_path": "Скопировать путь к локальному workdir",
-    "more": "Ещё",
+    "relations": "Связи",
     "create_sub_issue": "Создать подзадачу",
     "set_parent_issue": "Указать родительскую задачу...",
     "remove_parent_issue": "Удалить родительскую задачу",
