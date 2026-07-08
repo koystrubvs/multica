@@ -81,6 +81,7 @@ import type {
   ChatMessagesPage,
   ChatPendingTask,
   PendingChatTasksResponse,
+  HasPendingChatTasksResponse,
   SendChatMessageResponse,
   CancelTaskResponse,
   Project,
@@ -2069,6 +2070,10 @@ export class ApiClient {
 
   async listPendingChatTasks(): Promise<PendingChatTasksResponse> {
     return this.fetch(`/api/chat/pending-tasks`);
+  }
+
+  async hasAnyPendingChatTasks(): Promise<HasPendingChatTasksResponse> {
+    return this.fetch(`/api/chat/pending-tasks/has-any`);
   }
 
   async markChatSessionRead(sessionId: string): Promise<void> {
