@@ -10,7 +10,8 @@
     "usage": "Использование",
     "runtimes": "Среды выполнения",
     "skills": "Skills",
-    "settings": "Настройки"
+    "settings": "Настройки",
+    "chat": "Чат"
   },
   "help": {
     "trigger": "Помощь",

@@ -281,7 +281,10 @@
       "upload_failed_toast": "Не удалось загрузить аватар"
     },
     "isolation_label": "Изоляция",
-    "isolation_description": "Запускать агента в Docker-контейнере"
+    "isolation_description": "Запускать агента в Docker-контейнере",
+    "runtime_search_placeholder": "Поиск машин…",
+    "runtime_no_results": "Нет подходящих машин",
+    "runtime_group_online": "{{online}}/{{total}} в сети"
   },
   "tab_body": {
     "common": {
@@ -456,7 +459,9 @@
     "runtime_label": "Среда выполнения",
     "skills_label": "Skills",
     "owner_label": "Владелец",
-    "unknown_runtime": "Неизвестная среда выполнения"
+    "unknown_runtime": "Неизвестная среда выполнения",
+    "model_label": "Модель",
+    "model_unset": "По умолчанию среды"
   },
   "live_peek": {
     "current_issue_label": "Сейчас над",
