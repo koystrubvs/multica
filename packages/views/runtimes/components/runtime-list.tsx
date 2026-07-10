@@ -473,7 +473,7 @@ function AgentStack({ agentIds }: { agentIds: string[] }) {
           <ActorAvatar
             actorType="agent"
             actorId={id}
-            size={22}
+            size="md"
             enableHoverCard
           />
         </span>
@@ -706,7 +706,7 @@ export function RuntimeList({
                       <ActorAvatar
                         actorType="member"
                         actorId={row.ownerMember.user_id}
-                        size={18}
+                        size="sm"
                       />
                       <span className="min-w-0 truncate text-xs text-muted-foreground">
                         {row.ownerMember.name}

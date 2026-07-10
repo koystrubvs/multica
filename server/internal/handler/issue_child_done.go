@@ -117,10 +117,175 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 		return
 	}
 
-	prefix := h.getIssuePrefix(ctx, issue.WorkspaceID)
-	identifier := prefix + "-" + strconv.Itoa(int(issue.Number))
-	childID := uuidToString(issue.ID)
-	title := sanitizeChildTitleForSystemComment(issue.Title)
+	// MUL-2766: reaching in_review is a per-child review signal, not a stage
+	// completion. Wake the parent's leader immediately regardless of sibling
+	// progress, with review-action wording (no promote-backlog clause), and skip
+	// the stage barrier below — a review ping must not wait for siblings. The
+	// eventual in_review → done is a no-op (isChildCompletedStatus already counts
+	// in_review as completed), so the stage advance never double-fires for
+	// review-workflow children.
+	if issue.Status == "in_review" {
+		h.postChildInReviewComment(ctx, parent, issue)
+		return
+	}
+
+	// Stage barrier (MUL-3508 / discussion #4320). The notification + assignee
+	// wake fire only when this completion *closes a stage* — i.e. every sibling
+	// in the lowest unfinished stage is now terminal. An unstaged sibling set is
+	// one implicit stage, so this collapses to "wake once when the last
+	// sub-issue finishes" instead of the old fire-on-every-child behavior that
+	// caused the surprise cascade. A completion that does not close a stage is
+	// silent: no comment, no wake. ListChildIssues already reflects this child's
+	// committed `done` status (the status update commits before this runs).
+	children, err := h.Queries.ListChildIssues(ctx, parent.ID)
+	if err != nil {
+		slog.Warn("child done: failed to list siblings for stage barrier",
+			"error", err,
+			"child_id", uuidToString(issue.ID),
+			"parent_id", uuidToString(parent.ID))
+		return
+	}
+	if !stageBarrierClosed(children, issue) {
+		return
+	}
+	staged := siblingsAreStaged(children)
+	// When the set is staged and the barrier closed, the completed child is
+	// guaranteed to carry a stage (stageBarrierClosed returns false for an
+	// unstaged completed child in a staged set), so issue.Stage.Int32 is safe.
+	var closedStage int32
+	if staged {
+		closedStage = issue.Stage.Int32
+	}
+	h.postChildDoneComment(ctx, parent, issue, children, staged, closedStage, false)
+}
+
+// notifyParentsOfBatchChildDone emits child-done parent notifications for a
+// whole batch AFTER every status write has committed. `completed` is the set of
+// children that transitioned non-terminal -> terminal during the batch.
+//
+// Evaluating the stage barrier per-child inside the batch loop used the
+// mid-batch sibling snapshot, so a batch that closed several stages at once
+// fired one comment per intermediate stage: the first (stale) comment pinned the
+// parent assignee's wake to an already-superseded "advance Stage N+1"
+// instruction while the accurate final wake was swallowed by the pending-task
+// dedup, and the outcome depended on issue_ids order (MUL-4155). Aggregating
+// here makes the result order-independent — each affected parent gets at most
+// one comment built from the final state, plus one wake pinned to that comment.
+//
+// Best-effort, mirroring notifyParentOfChildDone: a failure on one parent is
+// logged and skipped; it never rolls back the committed batch.
+func (h *Handler) notifyParentsOfBatchChildDone(ctx context.Context, completed []db.Issue) {
+	if len(completed) == 0 {
+		return
+	}
+
+	// Group the completed children by parent, preserving first-seen order so the
+	// emitted comments (and any test assertions) are deterministic.
+	type parentGroup struct {
+		parentID pgtype.UUID
+		children []db.Issue
+	}
+	var groups []*parentGroup
+	index := map[string]*parentGroup{}
+	for _, c := range completed {
+		if !c.ParentIssueID.Valid {
+			continue
+		}
+		key := uuidToString(c.ParentIssueID)
+		g, ok := index[key]
+		if !ok {
+			g = &parentGroup{parentID: c.ParentIssueID}
+			index[key] = g
+			groups = append(groups, g)
+		}
+		g.children = append(g.children, c)
+	}
+
+	for _, g := range groups {
+		parent, err := h.Queries.GetIssue(ctx, g.parentID)
+		if err != nil {
+			slog.Warn("batch child done: failed to load parent",
+				"error", err, "parent_id", uuidToString(g.parentID))
+			continue
+		}
+		// Same parent guards as the single path (see notifyParentOfChildDone).
+		if parent.Status == "done" || parent.Status == "cancelled" {
+			continue
+		}
+		if parent.Status == "backlog" {
+			continue
+		}
+		if parent.AssigneeType.Valid && parent.AssigneeType.String == "member" {
+			continue
+		}
+
+		children, err := h.Queries.ListChildIssues(ctx, parent.ID)
+		if err != nil {
+			slog.Warn("batch child done: failed to list siblings for stage barrier",
+				"error", err, "parent_id", uuidToString(parent.ID))
+			continue
+		}
+
+		batch := len(g.children) > 1
+		if !siblingsAreStaged(children) {
+			// Unstaged: one implicit stage. Fire once iff every child is terminal
+			// in the final state. stageBarrierClosed ignores `completed` on the
+			// unstaged path, so any completed child stands in for the barrier check.
+			if !stageBarrierClosed(children, g.children[0]) {
+				continue
+			}
+			h.postChildDoneComment(ctx, parent, g.children[0], children, false, 0, batch)
+			continue
+		}
+
+		// Staged: announce the HIGHEST stage among this batch's completed children
+		// whose barrier is closed in the final state. This is what makes the
+		// result order-independent — whether the caller sent [stage1, stage2] or
+		// [stage2, stage1], the final committed state is identical, so the same
+		// top stage wins and stageProgressSummary's "Stage N is next" reflects
+		// reality rather than a mid-batch snapshot. A lower closed stage would
+		// re-introduce the stale "advance the next stage" instruction the bug was
+		// about.
+		var rep db.Issue
+		var bestStage int32
+		found := false
+		for _, c := range g.children {
+			if !c.Stage.Valid {
+				continue // an unstaged child in a staged set closes no stage
+			}
+			if !stageBarrierClosed(children, c) {
+				continue
+			}
+			if !found || c.Stage.Int32 > bestStage {
+				found = true
+				bestStage = c.Stage.Int32
+				rep = c
+			}
+		}
+		if !found {
+			continue
+		}
+		h.postChildDoneComment(ctx, parent, rep, children, true, bestStage, batch)
+	}
+}
+
+// postChildDoneComment builds and posts the parent's child-done system comment
+// for a closed stage barrier, then dispatches the parent-assignee trigger. It
+// assumes every guard in notifyParentOfChildDone / notifyParentsOfBatchChildDone
+// has already passed and that `completed` is a terminal child whose barrier is
+// closed within `children` (the final sibling set).
+//
+// `completed` is the representative finished child named in the comment.
+// `staged`/`closedStage` describe the closed barrier (closedStage is unused for
+// an unstaged set). `batch` selects batch-aware wording: a single update keeps
+// its historical byte-identical copy, while a batch that finished several
+// children at once must not claim "the last sub-issue just finished".
+func (h *Handler) postChildDoneComment(ctx context.Context, parent, completed db.Issue, children []db.Issue, staged bool, closedStage int32, batch bool) {
+	prefix := h.getIssuePrefix(ctx, completed.WorkspaceID)
+	identifier := prefix + "-" + strconv.Itoa(int(completed.Number))
+	childID := uuidToString(completed.ID)
+	title := sanitizeChildTitleForSystemComment(completed.Title)
+	parentID := uuidToString(parent.ID)
 
 	// Build the parent-assignee mention prefix. Empty when the parent has no
 	// assignee or the assignee row is missing (deleted member, archived
@@ -128,52 +293,25 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 	mentionPrefix := h.buildParentAssigneeMention(ctx, parent)
 
 	var content string
-	if issue.Status == "in_review" {
-		// MUL-2766: reaching in_review is a per-child review signal, not a stage
-		// completion. Wake the parent's leader immediately regardless of sibling
-		// progress, with review-action wording (no promote-backlog clause). The
-		// stage barrier below is intentionally skipped — a review ping should not
-		// wait for siblings, and the eventual in_review → done is a no-op so the
-		// stage advance does not double-fire for review-workflow children.
-		content = childInReviewSystemCommentContent(mentionPrefix, identifier, childID, title)
-	} else {
-		// Terminal completion (done/cancelled): apply the stage barrier (MUL-3508
-		// / discussion #4320). The notification + assignee wake fire only when
-		// this completion *closes a stage* — i.e. every sibling in the lowest
-		// unfinished stage is now terminal. An unstaged sibling set is one
-		// implicit stage, so this collapses to "wake once when the last sub-issue
-		// finishes" instead of the old fire-on-every-child cascade. A completion
-		// that does not close a stage is silent: no comment, no wake.
-		// ListChildIssues already reflects this child's committed terminal status
-		// (the status update commits before this runs).
-		children, err := h.Queries.ListChildIssues(ctx, parent.ID)
-		if err != nil {
-			slog.Warn("child done: failed to list siblings for stage barrier",
-				"error", err,
-				"child_id", uuidToString(issue.ID),
-				"parent_id", uuidToString(parent.ID))
-			return
-		}
-		if !stageBarrierClosed(children, issue) {
-			return
-		}
-		parentID := uuidToString(parent.ID)
-		// When the set is staged and the barrier closed, the completed child is
-		// guaranteed to carry a stage (stageBarrierClosed returns false for an
-		// unstaged completed child in a staged set), so issue.Stage.Int32 is safe.
-		if siblingsAreStaged(children) {
-			closedStage := issue.Stage.Int32
-			summary, nextStage := stageProgressSummary(children, closedStage)
-			// MUL-4062 (#4927/#4932): use stageAdvanceInstruction instead of the old
-			// inline "This was the final stage" wording. When nextStage == 0 there is
-			// simply no later stage among the sub-issues created so far — which for a
-			// lazily-built pipeline looks identical to a true final stage — so the
-			// helper hands the wrap-up-vs-create-next decision back to the leader
-			// rather than asserting a finality the server cannot know.
-			advance := stageAdvanceInstruction(nextStage, parentID)
+	if staged {
+		summary, nextStage := stageProgressSummary(children, closedStage)
+		advance := stageAdvanceInstruction(nextStage, parentID)
+		if batch {
+			content = fmt.Sprintf(
+				"%sStage %d of this issue is complete — its sub-issues just finished together in a batch update, most recently [%s](mention://issue/%s) — \"%s\". Stage progress — %s.%s",
+				mentionPrefix, closedStage, identifier, childID, title, summary, advance,
+			)
+		} else {
 			content = fmt.Sprintf(
 				"%sStage %d of this issue is complete — its last sub-issue [%s](mention://issue/%s) — \"%s\" — just finished. Stage progress — %s.%s",
 				mentionPrefix, closedStage, identifier, childID, title, summary, advance,
+			)
+		}
+	} else {
+		if batch {
+			content = fmt.Sprintf(
+				"%sAll sub-issues are complete — they just finished together in a batch update, most recently [%s](mention://issue/%s) — \"%s\". Continue the parent: synthesize the children's results and move it forward, or close it out if nothing remains.",
+				mentionPrefix, identifier, childID, title,
 			)
 		} else {
 			content = fmt.Sprintf(
@@ -183,6 +321,32 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 		}
 	}
 
+	h.postParentSystemComment(ctx, parent, content, childID)
+}
+
+// postChildInReviewComment posts the MUL-2766 in_review review-ping on the
+// parent and wakes its assignee, bypassing the stage barrier. `completed` is the
+// child that just entered in_review. Every guard in notifyParentOfChildDone
+// (parent not done/cancelled/backlog, assignee not a human) has already passed.
+func (h *Handler) postChildInReviewComment(ctx context.Context, parent, completed db.Issue) {
+	prefix := h.getIssuePrefix(ctx, completed.WorkspaceID)
+	identifier := prefix + "-" + strconv.Itoa(int(completed.Number))
+	childID := uuidToString(completed.ID)
+	title := sanitizeChildTitleForSystemComment(completed.Title)
+	mentionPrefix := h.buildParentAssigneeMention(ctx, parent)
+	content := childInReviewSystemCommentContent(mentionPrefix, identifier, childID, title)
+	h.postParentSystemComment(ctx, parent, content, childID)
+}
+
+// postParentSystemComment inserts the child-done system comment on the parent,
+// publishes the created event, and dispatches the explicit parent-assignee
+// trigger. Shared by the stage-barrier path (postChildDoneComment) and the
+// MUL-2766 in_review ping (postChildInReviewComment); `childID` is used only for
+// log correlation. Listener-level mention parsing is intentionally NOT involved
+// (the notification + subscriber listeners both short-circuit on
+// author_type='system'); this keeps smuggled mentions from the child title inert
+// and gives the platform a single place to apply the loop and idempotency guards.
+func (h *Handler) postParentSystemComment(ctx context.Context, parent db.Issue, content, childID string) {
 	// author_type='system', author_id=zero UUID. The zero UUID is a valid 16
 	// byte value and the column is NOT NULL; frontend code should branch on
 	// author_type === 'system' rather than on the UUID value.
@@ -211,12 +375,6 @@ func (h *Handler) notifyParentOfChildDone(ctx context.Context, prev, issue db.Is
 		"issue_status":        parent.Status,
 	})
 
-	// Dispatch the explicit trigger / inbox row for the parent assignee.
-	// Listener-level mention parsing is intentionally NOT involved (the
-	// notification + subscriber listeners both short-circuit on
-	// author_type='system'); this keeps smuggled mentions from the child
-	// title inert and gives the platform a single place to apply the loop
-	// and idempotency guards.
 	h.dispatchParentAssigneeTrigger(ctx, parent, comment)
 }
 
@@ -239,8 +397,8 @@ func isChildCompletedStatus(status string) bool {
 // send it back (move child to `in_progress` with comment-described changes);
 // promoting backlog siblings is premature until the review lands, so this
 // wording deliberately omits the done-flavoured promote-backlog clause. The
-// terminal (done/cancelled) wording is built inline in notifyParentOfChildDone
-// from the stage-barrier result.
+// terminal (done/cancelled) wording is built in postChildDoneComment from the
+// stage-barrier result.
 func childInReviewSystemCommentContent(mentionPrefix, identifier, childID, title string) string {
 	return fmt.Sprintf(
 		"%sSub-issue [%s](mention://issue/%s) — \"%s\" — is ready for review. Inspect the work the child reported, then either accept it by moving the child to `done`, or send it back by moving the child to `in_progress` with a comment describing the requested changes. Do NOT promote any waiting `backlog` sub-issue until the review lands.",
