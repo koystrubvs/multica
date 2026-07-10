@@ -567,7 +567,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 const isLead = project.lead_type === "member" && project.lead_id === m.user_id;
                 return (
                   <div key={m.user_id} className="group/member flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-accent/50">
-                    <ActorAvatar actorType="member" actorId={m.user_id} size={16} enableHoverCard showStatusDot />
+                    <ActorAvatar actorType="member" actorId={m.user_id} size="xs" enableHoverCard showStatusDot />
                     <span className="truncate">{m.name}</span>
                     {isLead && (
                       <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{t(($) => $.table.lead)}</span>
@@ -631,7 +631,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
 
             {boundGuests.map((m) => (
               <div key={m.user_id} className="group/guest flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-accent/50">
-                <ActorAvatar actorType="member" actorId={m.user_id} size={16} enableHoverCard />
+                <ActorAvatar actorType="member" actorId={m.user_id} size="xs" enableHoverCard />
                 <span className="truncate">{m.name}</span>
                 <span className="ml-auto shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">{t(($) => $.people.guest_badge)}</span>
                 <button
