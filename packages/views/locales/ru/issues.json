@@ -224,6 +224,7 @@
     "archive_tooltip": "Архивировать",
     "pin_tooltip": "Закрепить в боковой панели",
     "unpin_tooltip": "Открепить из боковой панели",
+    "thread_nav_label": "Перейти к ветке комментариев",
     "sidebar_tooltip": "Переключить боковую панель",
     "find": {
       "placeholder": "Поиск в задаче...",
@@ -430,6 +431,10 @@
     "trigger_comment": "Триггер из комментария",
     "trigger_initial": "Первый запуск",
     "trigger_handoff_prefix": "Передача: ",
+    "included_comments_one": "Включает {{count}} комментарий",
+    "included_comments_few": "Включает {{count}} комментария",
+    "included_comments_many": "Включает {{count}} комментариев",
+    "included_comments_other": "Включает {{count}} комментариев",
     "status_queued": "В очереди",
     "status_dispatched": "Запускается",
     "status_running": "Работает",
