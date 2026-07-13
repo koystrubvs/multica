@@ -316,7 +316,15 @@
     "other_agents": "Остальные агенты",
     "search_placeholder": "Поиск агентов…",
     "row_menu": "Действия с навыком",
-    "selected": "{{count}} выбрано"
+    "selected": "{{count}} выбрано",
+    "added_multi_toast_few": "Навык добавлен {{count}} агентам",
+    "added_multi_toast_many": "Навык добавлен {{count}} агентам",
+    "delete_dialog_desc_few": "Будет удалено {{count}} навыка. Это действие необратимо.",
+    "delete_dialog_desc_many": "Будет удалено {{count}} навыков. Это действие необратимо.",
+    "delete_dialog_title_few": "Удалить навыки?",
+    "delete_dialog_title_many": "Удалить навыки?",
+    "deleted_toast_few": "{{count}} навыка удалено",
+    "deleted_toast_many": "{{count}} навыков удалено"
   },
   "toolbar": {
     "clear_filters": "Сбросить фильтры",
@@ -329,6 +337,8 @@
     "result_count_title": "Найдено / всего",
     "section_columns": "Столбцы",
     "sort_by": "Сортировка",
-    "section_usage": "Использование"
+    "section_usage": "Использование",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   }
 }

@@ -66,7 +66,9 @@
     "date_last_3_days": "Последние 3 дня",
     "date_last_7_days": "Последние 7 дней",
     "date_today": "Сегодня",
-    "section_date": "Дата"
+    "section_date": "Дата",
+    "active_count_few": "Активных: {{count}}",
+    "active_count_many": "Активных: {{count}}"
   },
   "display": {
     "tooltip": "Настройки отображения",
@@ -371,7 +373,9 @@
       "bar_authors_more_other": "{{names}} и ещё {{count}}",
       "resolve_failed": "Не удалось закрыть тред",
       "unresolve_failed": "Не удалось открыть тред заново"
-    }
+    },
+    "trigger_will_start_count_few": "{{count}} агента начнут работать после отправки",
+    "trigger_will_start_count_many": "{{count}} агентов начнут работать после отправки"
   },
   "reply": {
     "placeholder": "Оставьте ответ...",

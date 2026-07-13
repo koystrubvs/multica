@@ -72,7 +72,9 @@
     "fallback_runtime_local": "Локально",
     "actions_aria": "Действия строки",
     "task_count_one": "{{count}} задача",
-    "task_count_other": "{{count}} задач"
+    "task_count_other": "{{count}} задач",
+    "task_count_few": "{{count}} задачи",
+    "task_count_many": "{{count}} задач"
   },
   "activity_tooltip": {
     "created_today": "Создан сегодня",
@@ -113,8 +115,8 @@
     "cancel_dialog_queued_few": "{{count}} в очереди",
     "cancel_dialog_queued_many": "{{count}} в очереди",
     "cancel_dialog_queued_other": "{{count}} в очереди",
-    "cancel_dialog_impact_one": "Это отменит {{summary}} task.",
-    "cancel_dialog_impact_other": "Это отменит {{summary}} tasks.",
+    "cancel_dialog_impact_one": "Это отменит {{summary}} задачу.",
+    "cancel_dialog_impact_other": "Это отменит {{summary}} задач.",
     "cancel_dialog_running_note": " Выполняющиеся tasks могут останавливаться до 5 секунд.",
     "cancel_dialog_irreversible": " Отменённые tasks нельзя возобновить.",
     "cancel_dialog_keep": "Оставить",
@@ -122,7 +124,9 @@
     "archive_dialog_title": "Архивировать «{{name}}»?",
     "archive_dialog_description": "Агента нельзя будет назначить или упомянуть, активные tasks будут отменены. Вся история сохраняется, восстановить можно позже.",
     "archive_dialog_cancel": "Отмена",
-    "archive_dialog_confirm": "Архивировать"
+    "archive_dialog_confirm": "Архивировать",
+    "cancel_dialog_impact_few": "Это отменит {{summary}} задачи.",
+    "cancel_dialog_impact_many": "Это отменит {{summary}} задач."
   },
   "detail": {
     "back_to_agents": "Агенты",
@@ -650,18 +654,24 @@
     "section_cloud": "Облачные",
     "agent_count_one": "{{count}} агент",
     "agent_count_other": "{{count}} агентов",
-    "empty": "Пока нет машин"
+    "empty": "Пока нет машин",
+    "agent_count_few": "{{count}} агента",
+    "agent_count_many": "{{count}} агентов"
   },
   "actions": {
     "clear_selection": "Снять выделение",
     "selected_one": "{{count}} выбран",
-    "selected_other": "{{count}} выбрано"
+    "selected_other": "{{count}} выбрано",
+    "selected_few": "{{count}} выбрано",
+    "selected_many": "{{count}} выбрано"
   },
   "last_active": {
     "days_ago_one": "{{count}} день назад",
     "days_ago_other": "{{count}} дн. назад",
     "none": "Нет активности",
-    "today": "Сегодня"
+    "today": "Сегодня",
+    "days_ago_few": "{{count}} дня назад",
+    "days_ago_many": "{{count}} дней назад"
   },
   "toolbar": {
     "clear_filters": "Сбросить фильтры",
@@ -677,7 +687,9 @@
     "section_availability": "Доступность",
     "section_model": "Модель",
     "section_owner": "Владелец",
-    "section_runtime": "Среда выполнения"
+    "section_runtime": "Среда выполнения",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   },
   "access": {
     "tooltip": "Доступ · кто может запускать этого агента",

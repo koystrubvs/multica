@@ -19,7 +19,9 @@
     "selected_other": "{{count}} выбрано",
     "unpin": "Открепить",
     "view_cards": "Карточки",
-    "view_table": "Таблица"
+    "view_table": "Таблица",
+    "selected_few": "{{count}} выбрано",
+    "selected_many": "{{count}} выбрано"
   },
   "table": {
     "name": "Название",
@@ -282,6 +284,8 @@
     "section_lead": "Ответственный",
     "section_priority": "Приоритет",
     "section_status": "Статус",
-    "view": "Вид"
+    "view": "Вид",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   }
 }

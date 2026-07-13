@@ -395,13 +395,17 @@
       "description_one": "Будет удалён {{count}} автопилот. Это действие необратимо.",
       "description_other": "Будет удалено {{count}} автопилота. Это действие необратимо.",
       "title": "Удалить автопилоты?",
-      "warning": "Это удалит выбранные автопилоты."
+      "warning": "Это удалит выбранные автопилоты.",
+      "description_few": "Будет удалено {{count}} автопилота. Это действие необратимо.",
+      "description_many": "Будет удалено {{count}} автопилотов. Это действие необратимо."
     },
     "pause": "Поставить на паузу",
     "resume": "Возобновить",
     "row_menu": "Действия с автопилотом",
     "selected_one": "{{count}} выбран",
-    "selected_other": "{{count}} выбрано"
+    "selected_other": "{{count}} выбрано",
+    "selected_few": "{{count}} выбрано",
+    "selected_many": "{{count}} выбрано"
   },
   "toolbar": {
     "clear_filters": "Сбросить фильтры",
@@ -417,6 +421,8 @@
     "section_assignee": "Исполнитель",
     "section_creator": "Создатель",
     "section_mode": "Режим",
-    "section_trigger": "Триггер"
+    "section_trigger": "Триггер",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   }
 }

@@ -112,7 +112,9 @@
     "filter_label": "Фильтр",
     "result_count_title": "Найдено / всего",
     "section_columns": "Столбцы",
-    "sort_by": "Сортировка"
+    "sort_by": "Сортировка",
+    "filter_active_count_few": "{{count}} фильтра",
+    "filter_active_count_many": "{{count}} фильтров"
   },
   "tabs": {
     "members": "Участники",
