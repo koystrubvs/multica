@@ -109,7 +109,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const locale = await getRequestLocale();
-  const resources = { [locale]: RESOURCES[locale] };
+  // Local fix: always ship the `en` bundle alongside the active locale so the
+  // configured `fallbackLng: "en"` actually resolves. Without it, any key
+  // missing from a non-en locale renders as its raw dotted path instead of the
+  // English text (i18next has no en resources to fall back to). Keep both the
+  // server (RSC) and client bundles identical to avoid hydration mismatch.
+  const resources =
+    locale === "en"
+      ? { en: RESOURCES.en }
+      : { [locale]: RESOURCES[locale], en: RESOURCES.en };
 
   return (
     <html
