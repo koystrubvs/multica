@@ -262,7 +262,7 @@ export function AgentDetailInspector({
           </SettingsRow>
           <SettingsRow
             label={t(($) => $.inspector.prop_isolation)}
-            controlClassName="sm:w-80"
+            size="select-wide"
           >
             <Switch
               size="sm"
