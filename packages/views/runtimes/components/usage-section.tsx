@@ -5,6 +5,7 @@ import { BarChart3, ChevronRight, AlertCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
+import { CompactNumberFlow } from "@multica/ui/components/ui/number-flow";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { agentListOptions } from "@multica/core/workspace/queries";
 import type { RuntimeUsage, AgentRuntime } from "@multica/core/types";
@@ -129,7 +130,7 @@ function Segmented<T extends string | number>({
 // ---------------------------------------------------------------------------
 
 export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
-  const { t } = useT("runtimes");
+  const { t, i18n } = useT("runtimes");
   const runtimeId = runtime.id;
   // Reports render in the viewer's timezone — the backend slices the UTC
   // hourly rollup on the same `tz` we pass here, so every frontend window
@@ -182,6 +183,7 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
     cacheableTokens > 0 ? Math.round((totals.cacheRead / cacheableTokens) * 100) : 0;
 
   const costDelta = pctChange(totals.cost, prevTotals.cost);
+  const locales = i18n.resolvedLanguage ?? i18n.language;
 
   // Read-only readout of today's official CBR USD->RUB. The operator can
   // see the current rate but not change it; the cost figures themselves are
@@ -252,6 +254,9 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
       <div className="grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0 rounded-lg border bg-card">
         <KpiCard
           label={t(($) => $.usage.kpi_cost_label, { days })}
+          // Cost totals are already in rubles (aggregators apply the historical
+          // CBR rate per-date); keep our ₽ formatter. CurrencyNumberFlow only
+          // supports a leading prefix, but ₽ goes after the number (RU convention).
           value={formatRub(totals.cost)}
           hint={
             costDelta == null ? undefined : (
@@ -287,7 +292,13 @@ export function UsageSection({ runtime }: { runtime: AgentRuntime }) {
         />
         <KpiCard
           label={t(($) => $.usage.kpi_tokens_label, { days })}
-          value={formatTokens(tokensTotal)}
+          value={
+            <CompactNumberFlow
+              value={tokensTotal}
+              locales={locales}
+              aria-label={formatTokens(tokensTotal)}
+            />
+          }
           hint={
             <span>
               {t(($) => $.usage.kpi_tokens_hint, {
@@ -907,4 +918,3 @@ function computeTotals(rows: RuntimeUsage[], fx: FxResolver): UsageTotals {
     { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, cacheSavings: 0 },
   );
 }
-

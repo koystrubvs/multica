@@ -35,6 +35,8 @@ import { PriorityIcon } from "../../issues/components/priority-icon";
 import { ProjectResourcesSection } from "./project-resources-section";
 import { SitepingIntegrationSection } from "./siteping-integration-section";
 import { ProjectBillingSection } from "./project-billing-section";
+import { ProjectStartDatePicker } from "./project-start-date-picker";
+import { ProjectDueDatePicker } from "./project-due-date-picker";
 import { IssueSurface } from "../../issues/surface/issue-surface";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
@@ -492,6 +494,12 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 </div>
               </PopoverContent>
             </Popover>
+          </PropRow>
+          <PropRow label={t(($) => $.detail.prop_start_date)}>
+            <ProjectStartDatePicker startDate={project.start_date} onUpdate={handleUpdateField} />
+          </PropRow>
+          <PropRow label={t(($) => $.detail.prop_due_date)}>
+            <ProjectDueDatePicker dueDate={project.due_date} onUpdate={handleUpdateField} />
           </PropRow>
         </div>}
       </div>

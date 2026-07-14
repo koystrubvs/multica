@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/featureflags"
 	skillpkg "github.com/multica-ai/multica/server/internal/skill"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
@@ -609,8 +610,21 @@ func (h *Handler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.Queries.WithTx(tx)
+	// Sweep resource-label junctions so a deleted skill leaves no dangling
+	// skill_to_label rows (MUL-4479). Harmless for global skills (deletes 0).
+	if err := qtx.DeleteSkillLabelAssignmentsBySkill(r.Context(), skill.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to remove skill label assignments")
+		return
+	}
 	if skill.WorkspaceID.Valid {
-		if err := h.Queries.DeleteSkill(r.Context(), db.DeleteSkillParams{
+		if err := qtx.DeleteSkill(r.Context(), db.DeleteSkillParams{
 			ID:          skill.ID,
 			WorkspaceID: skill.WorkspaceID,
 		}); err != nil {
@@ -620,13 +634,17 @@ func (h *Handler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Global skill: scope the delete by owner (canManageSkill already
 		// verified the caller is the owner).
-		if err := h.Queries.DeleteGlobalSkill(r.Context(), db.DeleteGlobalSkillParams{
+		if err := qtx.DeleteGlobalSkill(r.Context(), db.DeleteGlobalSkillParams{
 			ID:        skill.ID,
 			CreatedBy: skill.CreatedBy,
 		}); err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to delete skill")
 			return
 		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to commit skill deletion")
+		return
 	}
 
 	// Broadcast on the current workspace's channel. For a global skill this is
@@ -2360,6 +2378,10 @@ func (h *Handler) SetAgentSkillEnabled(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Enabled == nil {
 		writeError(w, http.StatusBadRequest, "enabled is required")
+		return
+	}
+	if !featureflags.AgentSkillTogglesEnabled(r.Context(), h.FeatureFlags) {
+		writeError(w, http.StatusNotFound, "agent skill toggles are not enabled")
 		return
 	}
 

@@ -5,6 +5,10 @@ import { BarChart3, FolderKanban, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import {
+  CompactNumberFlow,
+  NumberFlow,
+} from "@multica/ui/components/ui/number-flow";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -151,7 +155,7 @@ function Segmented<T extends string | number>({
  * and the runtime page using one pricing table.
  */
 export function DashboardPage() {
-  const { t } = useT("usage");
+  const { t, i18n } = useT("usage");
   const durationUnits: DurationUnits = {
     lessThanMinute: t(($) => $.duration.less_than_minute),
     second: t(($) => $.duration.unit_second),
@@ -161,6 +165,7 @@ export function DashboardPage() {
   };
   const wsId = useWorkspaceId();
   const viewTZ = useViewingTimezone();
+  const locales = i18n.resolvedLanguage ?? i18n.language;
   const [dim, setDim] = useState<Dim>("daily");
   const [days, setDays] = useState<TimeRange>(30);
   const [projectValue, setProjectValue] = useState<string>(ALL_PROJECTS);
@@ -415,9 +420,17 @@ export function DashboardPage() {
                 />
                 <KpiCard
                   label={t(($) => $.kpi.tokens_label, { days })}
-                  value={formatTokens(
-                    totals.input + totals.output + totals.cacheRead + totals.cacheWrite,
-                  )}
+                  value={
+                    <CompactNumberFlow
+                      value={
+                        totals.input +
+                        totals.output +
+                        totals.cacheRead +
+                        totals.cacheWrite
+                      }
+                      locales={locales}
+                    />
+                  }
                   hint={t(($) => $.kpi.tokens_hint, {
                     input: formatTokens(totals.input),
                     output: formatTokens(totals.output),
@@ -432,7 +445,14 @@ export function DashboardPage() {
                 />
                 <KpiCard
                   label={t(($) => $.kpi.tasks_label, { days })}
-                  value={String(runTimeTotals.taskCount)}
+                  value={
+                    <NumberFlow
+                      value={runTimeTotals.taskCount}
+                      locales={locales}
+                      format={{ maximumFractionDigits: 0 }}
+                      aria-label={String(runTimeTotals.taskCount)}
+                    />
+                  }
                   hint={t(($) => $.kpi.tasks_hint, {
                     failed: runTimeTotals.failedCount,
                   })}
