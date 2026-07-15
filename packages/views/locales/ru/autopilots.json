@@ -99,7 +99,13 @@
       "cancel": "Отмена",
       "confirm": "Удалить",
       "deleting": "Удаление..."
-    }
+    },
+    "run_blocked_invocation_not_allowed": "Не запущено — у вас нет прав на использование агента этого автопилота",
+    "run_blocked_runtime_offline": "Не запущено — среда выполнения агента офлайн",
+    "run_blocked_target_unavailable": "Не запущено — агент недоступен",
+    "run_blocked_attribution": "Не запущено — запуск не удалось связать с ответственным участником",
+    "run_blocked_already_active": "Не запущено — недавний запуск уже покрывает это",
+    "run_blocked_generic": "Не запущено — запуск заблокирован"
   },
   "access": {
     "title": "Управление доступом",
@@ -218,7 +224,9 @@
       "error_label": "Ошибка",
       "raw_body": "Сырое тело",
       "selected_headers": "Заголовки",
-      "response_body": "Тело ответа"
+      "response_body": "Тело ответа",
+      "dispatch_attempts": "Попытки отправки",
+      "available_at": "Следующая отправка"
     },
     "replay": {
       "action": "Повторить",

@@ -375,7 +375,21 @@
       "unresolve_failed": "Не удалось открыть тред заново"
     },
     "trigger_will_start_count_few": "{{count}} агента начнут работать после отправки",
-    "trigger_will_start_count_many": "{{count}} агентов начнут работать после отправки"
+    "trigger_will_start_count_many": "{{count}} агентов начнут работать после отправки",
+    "posted_partial_trigger_one": "Комментарий опубликован, но {{count}} упоминание не запущено",
+    "posted_partial_trigger_few": "Комментарий опубликован, но {{count}} упоминания не запущено",
+    "posted_partial_trigger_many": "Комментарий опубликован, но {{count}} упоминаний не запущено",
+    "posted_partial_trigger_other": "Комментарий опубликован, но {{count}} упоминаний не запущено",
+    "posted_partial_trigger_named": "Комментарий опубликован, но {{name}} не запущен ({{reason}})",
+    "trigger_blocked_chip_aria": "{{name}} не будет запущен — {{reason}}",
+    "trigger_blocked_invocation_not_allowed": "У вас нет прав на использование этой цели",
+    "trigger_blocked_target_unavailable": "Эта цель недоступна",
+    "trigger_blocked_runtime_offline": "Среда выполнения этой цели офлайн",
+    "trigger_blocked_generic": "Эта цель не будет запущена",
+    "trigger_blocked_short_invocation_not_allowed": "Нет прав",
+    "trigger_blocked_short_target_unavailable": "Недоступно",
+    "trigger_blocked_short_runtime_offline": "Среда офлайн",
+    "trigger_blocked_short_generic": "Не запустится"
   },
   "reply": {
     "placeholder": "Оставьте ответ...",
@@ -445,7 +459,20 @@
     "status_completed": "Выполнен",
     "status_failed": "Ошибка",
     "status_cancelled": "Отменён",
-    "status_waiting_local_directory": "Ожидание локальной папки"
+    "status_waiting_local_directory": "Ожидание локальной папки",
+    "retry_blocked": "Не повторено — у вас нет прав на использование этого агента",
+    "attribution": {
+      "on_behalf_of": "от имени {{name}}",
+      "someone": "кто-то",
+      "source_direct_human": "Прямое действие участника",
+      "source_delegation": "Делегировано из другого запуска",
+      "source_comment_source": "Из ветки комментариев",
+      "source_trigger_owner": "Создатель триггера автопилота",
+      "source_rule_owner": "Публикатор правила автопилота",
+      "source_owner_fallback": "Точный владелец не определён — отнесено к владельцу агента",
+      "source_backfill": "Восстановленная атрибуция",
+      "source_unattributed": "Ответственный участник не определён"
+    }
   },
   "terminate_dialog": {
     "title": "Остановить этот task?",
