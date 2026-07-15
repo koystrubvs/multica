@@ -137,6 +137,11 @@ export interface AutopilotRun {
   // this to render "Waiting for runtime <name>" alongside the failure
   // reason in the run history.
   pending_runtime_id?: string | null;
+  // Stable, localizable, enumeration-safe classification of a non-success run
+  // (skipped/failed), derived server-side from failure_reason (MUL-4525). The
+  // "run now" UI localizes this instead of echoing the raw English reason.
+  // Older servers omit it.
+  reason_code?: string;
   trigger_payload: unknown;
   result: unknown;
   created_at: string;
@@ -241,6 +246,8 @@ export interface WebhookDelivery {
   signature_status: WebhookSignatureStatus;
   status: WebhookDeliveryStatus;
   attempt_count: number;
+  dispatch_attempts: number;
+  available_at: string;
   content_type: string | null;
   response_status: number | null;
   autopilot_run_id: string | null;
