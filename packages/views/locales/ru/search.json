@@ -28,7 +28,9 @@
     "copy_identifier": "Скопировать идентификатор ({{identifier}})",
     "switch_to_light": "Переключить на светлую тему",
     "switch_to_dark": "Переключить на тёмную тему",
-    "use_system_theme": "Использовать системную тему"
+    "use_system_theme": "Использовать системную тему",
+    "fold_all_comments": "Свернуть все комментарии",
+    "unfold_all_comments": "Развернуть все комментарии"
   },
   "toast": {
     "link_copied": "Ссылка скопирована",

@@ -62,7 +62,8 @@
     "created": "Создан",
     "last_active": "Последняя активность",
     "model": "Модель",
-    "owner": "Владелец"
+    "owner": "Владелец",
+    "access": "Доступ"
   },
   "row": {
     "you": "Вы",
@@ -126,7 +127,13 @@
     "archive_dialog_cancel": "Отмена",
     "archive_dialog_confirm": "Архивировать",
     "cancel_dialog_impact_few": "Это отменит {{summary}} задачи.",
-    "cancel_dialog_impact_many": "Это отменит {{summary}} задач."
+    "cancel_dialog_impact_many": "Это отменит {{summary}} задач.",
+    "set_access": "Задать уровень доступа",
+    "set_access_dialog_title": "Задать уровень доступа",
+    "set_access_applies_to": "Применится к {{count}} агентам.",
+    "set_access_skipped": "{{count}} пропущено (не ваши).",
+    "set_access_dialog_confirm": "Применить",
+    "set_access_bulk_partial": "Применено к {{succeeded}}; {{failed}} не удалось (оставлены как есть)."
   },
   "detail": {
     "back_to_agents": "Агенты",
@@ -315,7 +322,18 @@
     "isolation_description": "Запускать агента в Docker-контейнере",
     "runtime_search_placeholder": "Поиск машин…",
     "runtime_no_results": "Нет подходящих машин",
-    "runtime_group_online": "{{online}}/{{total}} в сети"
+    "runtime_group_online": "{{online}}/{{total}} в сети",
+    "access": {
+      "label": "Доступ",
+      "private_title": "Приватный",
+      "private_desc": "Запускать агента можете только вы",
+      "public_title": "Публичный",
+      "public_desc": "Выберите, кто может запускать этого агента",
+      "public_workspace_option": "Все в этом рабочем пространстве",
+      "public_members_group": "Определённые люди",
+      "public_members_empty": "Нет участников для выбора",
+      "public_targets_empty_hint": "Выберите хотя бы один вариант ниже — иначе агент останется приватным."
+    }
   },
   "tab_body": {
     "common": {
@@ -689,7 +707,8 @@
     "section_owner": "Владелец",
     "section_runtime": "Среда выполнения",
     "filter_active_count_few": "{{count}} фильтра",
-    "filter_active_count_many": "{{count}} фильтров"
+    "filter_active_count_many": "{{count}} фильтров",
+    "section_access": "Доступ"
   },
   "access": {
     "tooltip": "Доступ · кто может запускать этого агента",
@@ -715,7 +734,12 @@
     "section_title": "Кто может запускать этого агента",
     "shared_title": "Общий доступ",
     "shared_desc": "Выберите рабочее пространство или конкретных людей, которые могут запускать этого агента",
-    "shared_target_required": "Выберите хотя бы одного человека перед сохранением."
+    "shared_target_required": "Выберите хотя бы одного человека перед сохранением.",
+    "scope_labels": {
+      "workspace": "Рабочее пространство",
+      "specific_people": "Определённые люди",
+      "owner_only": "Только владелец"
+    }
   },
   "overview": {
     "agent_context": "Агент",

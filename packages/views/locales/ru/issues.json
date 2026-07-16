@@ -152,7 +152,8 @@
     "add_issue_tooltip": "Добавить задача",
     "empty_column": "Нет задачи",
     "empty_grouping": "Нет подходящих задачи",
-    "ordered_by": "Сортировка доски: {{field}}"
+    "ordered_by": "Сортировка доски: {{field}}",
+    "no_value": "Без значения"
   },
   "detail": {
     "not_found": "Эта задача не существует или был удалён в этом рабочем пространстве.",
@@ -564,6 +565,17 @@
       "manage_dialog_title": "Управление метками",
       "create_action": "Создать",
       "create_failed": "Не удалось создать метку"
+    },
+    "custom_property": {
+      "empty": "Пусто",
+      "clear_action": "Очистить",
+      "true_label": "Да",
+      "false_label": "Нет",
+      "value_placeholder": "Введите значение…",
+      "url_placeholder": "https://…",
+      "number_placeholder": "0",
+      "open_link": "Открыть ссылку",
+      "archived_hint": "Свойство в архиве — значение только для чтения"
     }
   },
   "labels_panel": {

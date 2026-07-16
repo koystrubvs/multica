@@ -29,5 +29,13 @@
     "minutes_ago": "{{count}} мин назад",
     "hours_ago": "{{count}} ч назад",
     "days_ago": "{{count}} д назад"
+  },
+  "color_picker": {
+    "saturation": "Насыщенность и яркость",
+    "hue": "Оттенок",
+    "hex": "HEX-цвет",
+    "eyedropper": "Выбрать цвет с экрана",
+    "presets": "Пресеты",
+    "random": "Случайный"
   }
 }
