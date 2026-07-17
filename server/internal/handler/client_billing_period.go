@@ -489,7 +489,7 @@ func (h *Handler) pushPeriodToElba(ctx context.Context, project db.Project, peri
 		if c.Status != "confirmed" {
 			continue
 		}
-		items = append(items, elbaDocItem{Name: c.IssueTitle, Quantity: 1, Price: c.PriceRub, Unit: "усл"})
+		items = append(items, elbaDocItem{ProductName: c.IssueTitle, Quantity: 1, Price: c.PriceRub, UnitName: "усл"})
 		total += c.PriceRub
 	}
 	if len(items) == 0 {
@@ -506,14 +506,18 @@ func (h *Handler) pushPeriodToElba(ctx context.Context, project db.Project, peri
 	} else if wsCfg.ElbaBankAccountID.Valid {
 		opts.BankAccountID = wsCfg.ElbaBankAccountID.String
 	}
-	// Subscription: bill the fixed fee — full work list + negative discount line.
+	// Subscription: cap the bill at the fixed fee via per-line discounts — the
+	// Elba v1 contract forbids the old negative discount line. Line prices keep
+	// showing the full delivered value; the discounts bring the payable to the fee.
 	if cfg.Mode == "subscription" && cfg.SubscriptionFeeRub > 0 && total > cfg.SubscriptionFeeRub {
-		items = append(items, elbaDocItem{
-			Name:     "Скидка по абонементу",
-			Quantity: 1,
-			Price:    -(total - cfg.SubscriptionFeeRub),
-			Unit:     "шт",
-		})
+		prices := make([]float64, len(items))
+		for i := range items {
+			prices[i] = items[i].Price
+		}
+		pcts := distributeSubscriptionDiscounts(prices, cfg.SubscriptionFeeRub)
+		for i := range items {
+			items[i].Discount = pcts[i]
+		}
 		opts.WithDiscount = true
 	}
 

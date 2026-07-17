@@ -132,19 +132,27 @@ func (c *elbaClient) BankAccounts(ctx context.Context, orgID string) ([]any, err
 	return elbaUnwrapList(data, "bankAccounts"), nil
 }
 
-// elbaDocItem is one warehouse line of a bill / act.
+// elbaDocItem is one warehouse line of a bill / act, in the elba-api.kontur.ru
+// v1 document shape: productName / unitName / quantity / price (>= 0) plus an
+// optional per-line percent Discount (max 2 decimals). The old contract's
+// negative-price discount line is NOT accepted by v1 — capping a subscription
+// bill is expressed purely through per-line Discount (see
+// distributeSubscriptionDiscounts). Reference: /tmp/elba_invoice.py (bill #101).
 type elbaDocItem struct {
-	Name     string  `json:"name"`
-	Quantity float64 `json:"quantity"`
-	Price    float64 `json:"price"`
-	Unit     string  `json:"unit"`
+	ProductName string  `json:"productName"`
+	Quantity    float64 `json:"quantity"`
+	Price       float64 `json:"price"`
+	UnitName    string  `json:"unitName"`
+	// Percent, 0..100, 2 decimals. Serialized always (0 = no discount on the
+	// line); the document-level withDiscount flag gates whether Elba applies it.
+	Discount float64 `json:"discount"`
 }
 
 type elbaDocOptions struct {
 	Date          string // YYYY-MM-DD
 	Comment       string
 	BankAccountID string // bills only
-	WithDiscount  bool   // bills only
+	WithDiscount  bool   // any line carries a discount
 }
 
 func elbaDocPayload(contractorID string, items []elbaDocItem, opts elbaDocOptions, isBill bool) map[string]any {
@@ -153,6 +161,8 @@ func elbaDocPayload(contractorID string, items []elbaDocItem, opts elbaDocOption
 		"contractorId":   contractorID,
 		"warehouseItems": items,
 		"withNDS":        false,
+		// v1 requires ndsRate to be null when withNDS is false.
+		"ndsRate": nil,
 	}
 	if opts.Comment != "" {
 		payload["comment"] = opts.Comment
@@ -160,7 +170,9 @@ func elbaDocPayload(contractorID string, items []elbaDocItem, opts elbaDocOption
 	if isBill && opts.BankAccountID != "" {
 		payload["bankAccountId"] = opts.BankAccountID
 	}
-	if isBill && opts.WithDiscount {
+	// withDiscount applies to both bills and acts under v1 (the reference sends
+	// it on both so the act shows the same capped total).
+	if opts.WithDiscount {
 		payload["withDiscount"] = true
 	}
 	return payload

@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"sort"
 	"time"
@@ -218,17 +219,131 @@ type contractorInvoiceGroup struct {
 	Items        []elbaDocItem
 }
 
-// buildContractorInvoiceItems flattens the per-project charge groups into one
-// warehouse-line list and, in subscription mode when the delivered value
-// exceeds the fixed fee, appends the negative «Скидка по абонементу» line that
-// caps the bill. The same line list feeds both the счёт and the акт: the акт
-// therefore shows the full delivered value (grossTotal) as its warehouse
-// items with the discount line making the payable total equal to the fee —
-// identical to the single-period pushPeriodToElba trick.
+// discountedKopecks mirrors Elba's per-line computation:
+// round(price * (1 - discount/100)) to the kopeck, with the discount pinned to
+// 2 decimal places (hundredths of a percent).
+func discountedKopecks(priceRub, discountPct float64) int64 {
+	p := int64(math.Round(priceRub * 100))
+	c := int64(math.Round(discountPct * 100)) // hundredths of a percent
+	if c < 0 {
+		c = 0
+	}
+	if c > 10000 {
+		c = 10000
+	}
+	return (p*(10000-c) + 5000) / 10000
+}
+
+// discountedTotalRub sums the per-line discounted totals the way Elba will.
+func discountedTotalRub(prices, discountsPct []float64) float64 {
+	var kop int64
+	for i := range prices {
+		kop += discountedKopecks(prices[i], discountsPct[i])
+	}
+	return float64(kop) / 100
+}
+
+// distributeSubscriptionDiscounts computes a per-line discount percent (max 2
+// decimals) so the sum of the discounted line totals equals feeRub, capping a
+// subscription invoice at the fixed fee WITHOUT a negative line (forbidden by
+// the Elba v1 contract). Returns one percent per price, each in [0,100].
 //
-// Returns the lines, the payable bill total (grossTotal minus any discount)
-// and grossTotal (the sum of the real charge lines, i.e. the акт's full value).
-func buildContractorInvoiceItems(groups []contractorInvoiceGroup, mode string, subscriptionFeeRub float64) (items []elbaDocItem, billTotal, grossTotal float64) {
+// Elba discounts each line as round(price*(1-pct/100)); a 2-decimal percent
+// moves a large line in coarse steps, so a single balancing line cannot hit an
+// arbitrary target. Leading lines take a uniform percent and the last two are
+// searched jointly (outward from that uniform value) for the combination whose
+// discounted sum lands on feeRub to the kopeck — the general form of the
+// hand-picked pair in the reference invoice. Falls back to the closest
+// achievable split when an exact hit is impossible.
+func distributeSubscriptionDiscounts(prices []float64, feeRub float64) []float64 {
+	n := len(prices)
+	out := make([]float64, n)
+	if n == 0 {
+		return out
+	}
+	P := make([]int64, n)
+	var total int64
+	for i, p := range prices {
+		P[i] = int64(math.Round(p * 100))
+		total += P[i]
+	}
+	F := int64(math.Round(feeRub * 100))
+	if F <= 0 || F >= total {
+		return out // nothing to cap
+	}
+
+	disc := func(p, c int64) int64 { return (p*(10000-c) + 5000) / 10000 }
+	// hundredths-of-percent that discounts price p down to ~target.
+	solveC := func(p, target int64) int64 {
+		if p <= 0 {
+			return 0
+		}
+		c := int64(math.Round(float64(p-target) * 10000 / float64(p)))
+		if c < 0 {
+			c = 0
+		}
+		if c > 10000 {
+			c = 10000
+		}
+		return c
+	}
+
+	cs := make([]int64, n)
+	if n == 1 {
+		cs[0] = solveC(P[0], F)
+		out[0] = float64(cs[0]) / 100
+		return out
+	}
+
+	uniformC := solveC(total, F)
+	var fixed int64
+	for i := 0; i < n-2; i++ {
+		cs[i] = uniformC
+		fixed += disc(P[i], uniformC)
+	}
+	r2 := F - fixed // the last two lines must sum to this after discount
+	a, b := n-2, n-1
+	bestErr := int64(1) << 62
+	bestCa, bestCb := uniformC, uniformC
+	for delta := int64(0); delta <= 10000; delta++ {
+		for _, ca := range [2]int64{uniformC + delta, uniformC - delta} {
+			if ca < 0 || ca > 10000 {
+				continue
+			}
+			ta := disc(P[a], ca)
+			cb := solveC(P[b], r2-ta)
+			tb := disc(P[b], cb)
+			err := (ta + tb) - r2
+			if err < 0 {
+				err = -err
+			}
+			if err < bestErr {
+				bestErr, bestCa, bestCb = err, ca, cb
+			}
+		}
+		if bestErr == 0 {
+			break
+		}
+	}
+	cs[a], cs[b] = bestCa, bestCb
+	for i := range cs {
+		out[i] = float64(cs[i]) / 100
+	}
+	return out
+}
+
+// buildContractorInvoiceItems flattens the per-project charge groups into one
+// warehouse-line list. In subscription mode, when the delivered value exceeds
+// the fixed fee, it caps the bill by distributing a per-line discount percent
+// so the discounted total equals the fee (Elba v1 forbids negative lines). The
+// same line list feeds both the счёт and the акт: line prices show the full
+// delivered value (grossTotal) while the discounts bring the payable total to
+// the fee.
+//
+// Returns the lines, the payable bill total (after discounts), grossTotal (sum
+// of the full line prices, i.e. the акт's headline value) and whether any
+// discount was applied.
+func buildContractorInvoiceItems(groups []contractorInvoiceGroup, mode string, subscriptionFeeRub float64) (items []elbaDocItem, billTotal, grossTotal float64, withDiscount bool) {
 	for _, g := range groups {
 		for _, it := range g.Items {
 			items = append(items, it)
@@ -237,15 +352,18 @@ func buildContractorInvoiceItems(groups []contractorInvoiceGroup, mode string, s
 	}
 	billTotal = grossTotal
 	if mode == "subscription" && subscriptionFeeRub > 0 && grossTotal > subscriptionFeeRub {
-		items = append(items, elbaDocItem{
-			Name:     "Скидка по абонементу",
-			Quantity: 1,
-			Price:    -(grossTotal - subscriptionFeeRub),
-			Unit:     "шт",
-		})
-		billTotal = subscriptionFeeRub
+		prices := make([]float64, len(items))
+		for i := range items {
+			prices[i] = items[i].Price
+		}
+		pcts := distributeSubscriptionDiscounts(prices, subscriptionFeeRub)
+		for i := range items {
+			items[i].Discount = pcts[i]
+		}
+		billTotal = discountedTotalRub(prices, pcts)
+		withDiscount = true
 	}
-	return items, billTotal, grossTotal
+	return items, billTotal, grossTotal, withDiscount
 }
 
 type contractorInvoiceRequest struct {
@@ -334,10 +452,10 @@ func (h *Handler) InvoiceContractorPeriod(w http.ResponseWriter, r *http.Request
 				continue
 			}
 			g.Items = append(g.Items, elbaDocItem{
-				Name:     fmt.Sprintf("%s: %s", p.ProjectTitle, c.IssueTitle),
-				Quantity: 1,
-				Price:    c.PriceRub,
-				Unit:     "усл",
+				ProductName: fmt.Sprintf("%s: %s", p.ProjectTitle, c.IssueTitle),
+				Quantity:    1,
+				Price:       c.PriceRub,
+				UnitName:    "усл",
 			})
 		}
 		if len(g.Items) > 0 {
@@ -362,7 +480,7 @@ func (h *Handler) InvoiceContractorPeriod(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	items, billTotal, grossTotal := buildContractorInvoiceItems(groups, mode, feeRub)
+	items, billTotal, grossTotal, withDiscount := buildContractorInvoiceItems(groups, mode, feeRub)
 	if len(items) == 0 {
 		writeError(w, http.StatusConflict, "the contractor's periods have no confirmed charges to invoice")
 		return
@@ -372,14 +490,12 @@ func (h *Handler) InvoiceContractorPeriod(w http.ResponseWriter, r *http.Request
 		Date: time.Now().UTC().Format("2006-01-02"),
 		Comment: fmt.Sprintf("Консолидированный счёт по контрагенту за период %s — %s",
 			start.Format("02.01.2006"), end.Format("02.01.2006")),
+		WithDiscount: withDiscount,
 	}
 	if bankAccountID != "" {
 		opts.BankAccountID = bankAccountID
 	} else if wsCfg.ElbaBankAccountID.Valid {
 		opts.BankAccountID = wsCfg.ElbaBankAccountID.String
-	}
-	if mode == "subscription" && feeRub > 0 && grossTotal > feeRub {
-		opts.WithDiscount = true
 	}
 
 	orgID := wsCfg.ElbaOrgID.String
