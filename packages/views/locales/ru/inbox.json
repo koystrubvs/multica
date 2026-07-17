@@ -18,14 +18,18 @@
       "minutes": "{{count}} мин",
       "hours": "{{count}} ч",
       "days": "{{count}} д"
-    }
+    },
+    "archived_title": "Архив",
+    "archived_empty": "Нет архивных уведомлений",
+    "unarchive_tooltip": "Разархивировать"
   },
   "detail": {
     "select_prompt": "Выберите уведомление для просмотра",
     "empty": "Ваши входящие пусты",
     "original_input": "Исходный ввод",
     "edit_advanced": "Редактировать как расширенную форму",
-    "archive": "Архивировать"
+    "archive": "Архивировать",
+    "unarchive": "Разархивировать"
   },
   "types": {
     "issue_assigned": "Назначено",
@@ -68,6 +72,8 @@
     "mark_all_read_failed": "Не удалось отметить все как прочитанные",
     "archive_all_failed": "Не удалось архивировать все",
     "archive_all_read_failed": "Не удалось архивировать прочитанные",
-    "archive_completed_failed": "Не удалось архивировать выполненные"
+    "archive_completed_failed": "Не удалось архивировать выполненные",
+    "unarchive_failed": "Не удалось разархивировать",
+    "archived_load_failed": "Не удалось загрузить архивные уведомления"
   }
 }
