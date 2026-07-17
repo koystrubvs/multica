@@ -682,6 +682,24 @@
     "save": "Save",
     "saved_toast": "Billing settings saved",
     "save_failed_toast": "Failed to save billing settings",
-    "elba_error": "Elba request failed: {{error}}"
+    "elba_error": "Elba request failed: {{error}}",
+    "contractors_title": "承包商",
+    "contractors_description": "计费模式和订阅按承包商整体设置——一张发票涵盖该承包商在此期间的所有项目。",
+    "contractors_pick_org": "请先在上方选择 Elba 组织。",
+    "contractors_load_error": "无法加载 Elba 承包商列表。",
+    "contractors_none": "未找到承包商。",
+    "contractor_mode": "模式",
+    "contractor_mode_postpaid": "后付费",
+    "contractor_mode_subscription": "订阅",
+    "contractor_fee": "订阅费，₽",
+    "contractor_save": "保存",
+    "contractor_saved_toast": "已保存承包商设置",
+    "contractor_save_failed_toast": "无法保存承包商设置",
+    "invoiceable_title": "待开票周期",
+    "invoiceable_description": "按承包商和周期分组的已关闭且未开票的周期。按钮会在 Elba 中创建一张发票和一份验收单。",
+    "invoiceable_none": "没有可开票的已关闭周期。",
+    "invoice_button": "开具发票 · {{amount}} ₽",
+    "invoice_success_toast": "已开具发票：{{amount}} ₽，{{projects}} 个项目",
+    "invoice_failed_toast": "无法开具发票"
   }
 }

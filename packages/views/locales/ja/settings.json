@@ -674,6 +674,24 @@
     "save": "Save",
     "saved_toast": "Billing settings saved",
     "save_failed_toast": "Failed to save billing settings",
-    "elba_error": "Elba request failed: {{error}}"
+    "elba_error": "Elba request failed: {{error}}",
+    "contractors_title": "取引先",
+    "contractors_description": "請求モードとサブスクリプションは取引先単位で設定され、期間内のすべてのプロジェクトを1つの請求書でまとめます。",
+    "contractors_pick_org": "先に上でElbaの組織を選択してください。",
+    "contractors_load_error": "Elbaの取引先リストを読み込めませんでした。",
+    "contractors_none": "取引先が見つかりません。",
+    "contractor_mode": "モード",
+    "contractor_mode_postpaid": "後払い",
+    "contractor_mode_subscription": "サブスクリプション",
+    "contractor_fee": "サブスクリプション、₽",
+    "contractor_save": "保存",
+    "contractor_saved_toast": "取引先の設定を保存しました",
+    "contractor_save_failed_toast": "取引先の設定を保存できませんでした",
+    "invoiceable_title": "請求対象の期間",
+    "invoiceable_description": "取引先とサイクルごとにまとめた、締め済みで未請求の期間。ボタンでElbaに請求書と受領書を1件作成します。",
+    "invoiceable_none": "請求可能な締め済み期間はありません。",
+    "invoice_button": "請求書を発行 · {{amount}} ₽",
+    "invoice_success_toast": "請求書を発行しました：{{amount}} ₽、{{projects}} プロジェクト",
+    "invoice_failed_toast": "請求書を発行できませんでした"
   }
 }

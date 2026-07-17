@@ -58,6 +58,7 @@ const contractorKeys = {
 // «Выставить счёт» action (migration 202). One Elba contractor can span
 // several projects; the invoice is issued for the contractor as a whole.
 function ContractorBillingSection({ orgId }: { orgId: string }) {
+  const { t } = useT("settings");
   const qc = useQueryClient();
 
   const { data: configs = [] } = useQuery({
@@ -106,10 +107,10 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
         subscription_fee_rub: v.fee.trim() === "" ? 0 : Number(v.fee),
       }),
     onSuccess: () => {
-      toast.success("Настройки контрагента сохранены");
+      toast.success(t(($) => $.billing.contractor_saved_toast));
       qc.invalidateQueries({ queryKey: contractorKeys.configs() });
     },
-    onError: () => toast.error("Не удалось сохранить настройки контрагента"),
+    onError: () => toast.error(t(($) => $.billing.contractor_save_failed_toast)),
   });
 
   const invoiceMut = useMutation({
@@ -117,12 +118,15 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
       api.invoiceContractorPeriod(g.elba_contractor_id, g.starts_on, g.ends_on),
     onSuccess: (res) => {
       toast.success(
-        `Счёт выставлен: ${res.bill_rub.toLocaleString("ru-RU")} ₽ по ${res.period_count} проект(ам)`,
+        t(($) => $.billing.invoice_success_toast, {
+          amount: res.bill_rub.toLocaleString("ru-RU"),
+          projects: res.period_count,
+        }),
       );
       qc.invalidateQueries({ queryKey: contractorKeys.invoiceable() });
     },
     onError: (e) =>
-      toast.error(e instanceof Error ? e.message : "Не удалось выставить счёт"),
+      toast.error(e instanceof Error ? e.message : t(($) => $.billing.invoice_failed_toast)),
   });
 
   const selectClass =
@@ -141,21 +145,22 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
   return (
     <>
       <div>
-        <h2 className="text-sm font-semibold">Контрагенты</h2>
+        <h2 className="text-sm font-semibold">{t(($) => $.billing.contractors_title)}</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Режим биллинга и абонемент задаются на контрагента целиком — счёт
-          выставляется одним документом по всем его проектам за период.
+          {t(($) => $.billing.contractors_description)}
         </p>
         {!orgId ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Сначала выберите организацию Эльбы выше.
+            {t(($) => $.billing.contractors_pick_org)}
           </p>
         ) : contractorsQuery.isError ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Не удалось загрузить список контрагентов Эльбы.
+            {t(($) => $.billing.contractors_load_error)}
           </p>
         ) : (contractorsQuery.data ?? []).length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">Контрагентов не найдено.</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {t(($) => $.billing.contractors_none)}
+          </p>
         ) : (
           <div className="mt-4 space-y-3">
             {(contractorsQuery.data ?? []).map((c) => {
@@ -169,18 +174,20 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
                     {elbaContractorLabel(c)}
                   </div>
                   <label className="flex flex-col gap-1 text-xs">
-                    <span className="font-medium">Режим</span>
+                    <span className="font-medium">{t(($) => $.billing.contractor_mode)}</span>
                     <select
                       value={d.mode}
                       onChange={(e) => setDraft(c.id, { mode: e.target.value })}
                       className={selectClass}
                     >
-                      <option value="postpaid">Постоплата</option>
-                      <option value="subscription">Абонемент</option>
+                      <option value="postpaid">{t(($) => $.billing.contractor_mode_postpaid)}</option>
+                      <option value="subscription">
+                        {t(($) => $.billing.contractor_mode_subscription)}
+                      </option>
                     </select>
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
-                    <span className="font-medium">Абонемент, ₽</span>
+                    <span className="font-medium">{t(($) => $.billing.contractor_fee)}</span>
                     <Input
                       type="number"
                       step="1000"
@@ -203,7 +210,7 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
                       })
                     }
                   >
-                    Сохранить
+                    {t(($) => $.billing.contractor_save)}
                   </Button>
                 </div>
               );
@@ -213,14 +220,13 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
       </div>
 
       <div>
-        <h2 className="text-sm font-semibold">Периоды к выставлению</h2>
+        <h2 className="text-sm font-semibold">{t(($) => $.billing.invoiceable_title)}</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Закрытые непровыставленные периоды, сгруппированные по контрагенту и
-          циклу. Кнопка формирует один счёт + акт в Эльбе.
+          {t(($) => $.billing.invoiceable_description)}
         </p>
         {groups.length === 0 ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            Нет закрытых периодов, готовых к выставлению.
+            {t(($) => $.billing.invoiceable_none)}
           </p>
         ) : (
           <div className="mt-4 space-y-3">
@@ -233,7 +239,7 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
                   <div className="text-sm font-medium">
                     {nameFor(g.elba_contractor_id)}
                     <span className="ml-2 text-xs font-normal text-muted-foreground">
-                      {fmt(g.starts_on)} — {fmt(g.ends_on)}
+                      {`${fmt(g.starts_on)} — ${fmt(g.ends_on)}`}
                     </span>
                   </div>
                   <Button
@@ -241,14 +247,16 @@ function ContractorBillingSection({ orgId }: { orgId: string }) {
                     disabled={invoiceMut.isPending}
                     onClick={() => invoiceMut.mutate(g)}
                   >
-                    Выставить счёт · {g.total_rub.toLocaleString("ru-RU")} ₽
+                    {t(($) => $.billing.invoice_button, {
+                      amount: g.total_rub.toLocaleString("ru-RU"),
+                    })}
                   </Button>
                 </div>
                 <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                   {g.projects.map((p) => (
                     <li key={p.period_id} className="flex justify-between">
                       <span>{p.project_title}</span>
-                      <span>{p.total_rub.toLocaleString("ru-RU")} ₽</span>
+                      <span>{`${p.total_rub.toLocaleString("ru-RU")} ₽`}</span>
                     </li>
                   ))}
                 </ul>

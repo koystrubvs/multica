@@ -694,6 +694,24 @@
     "save": "Save",
     "saved_toast": "Billing settings saved",
     "save_failed_toast": "Failed to save billing settings",
-    "elba_error": "Elba request failed: {{error}}"
+    "elba_error": "Elba request failed: {{error}}",
+    "contractors_title": "Contractors",
+    "contractors_description": "Billing mode and subscription are set per contractor as a whole — one invoice covers all of the contractor's projects for the period.",
+    "contractors_pick_org": "Select an Elba organization above first.",
+    "contractors_load_error": "Failed to load the Elba contractor list.",
+    "contractors_none": "No contractors found.",
+    "contractor_mode": "Mode",
+    "contractor_mode_postpaid": "Postpaid",
+    "contractor_mode_subscription": "Subscription",
+    "contractor_fee": "Subscription, RUB",
+    "contractor_save": "Save",
+    "contractor_saved_toast": "Contractor settings saved",
+    "contractor_save_failed_toast": "Failed to save contractor settings",
+    "invoiceable_title": "Periods to invoice",
+    "invoiceable_description": "Closed, uninvoiced periods grouped by contractor and cycle. The button creates a single invoice and act in Elba.",
+    "invoiceable_none": "No closed periods ready to invoice.",
+    "invoice_button": "Issue invoice · {{amount}} ₽",
+    "invoice_success_toast": "Invoice issued: {{amount}} ₽ across {{projects}} project(s)",
+    "invoice_failed_toast": "Failed to issue the invoice"
   }
 }
