@@ -1117,6 +1117,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Get("/api/billing/elba/organizations", h.GetElbaOrganizations)
 			r.Get("/api/billing/elba/contractors", h.GetElbaContractors)
 			r.Get("/api/billing/elba/bank-accounts", h.GetElbaBankAccounts)
+			// Contractor-level billing: settings + consolidated invoicing (202)
+			r.Get("/api/billing/contractors", h.ListContractorBillingConfigs)
+			r.Put("/api/billing/contractors", h.UpsertContractorBillingConfig)
+			r.Get("/api/billing/contractors/invoiceable", h.ListInvoiceableContractorGroups)
+			r.Post("/api/billing/contractors/{contractorId}/invoice", h.InvoiceContractorPeriod)
 
 			r.Route("/api/projects", func(r chi.Router) {
 				r.Get("/search", h.SearchProjects)

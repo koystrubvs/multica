@@ -429,6 +429,18 @@ type ClientBillingConfig struct {
 	ElbaBankAccountID  pgtype.Text        `json:"elba_bank_account_id"`
 }
 
+type ClientBillingContractorConfig struct {
+	ID                 pgtype.UUID        `json:"id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	ElbaContractorID   string             `json:"elba_contractor_id"`
+	Name               pgtype.Text        `json:"name"`
+	Mode               string             `json:"mode"`
+	SubscriptionFeeRub pgtype.Numeric     `json:"subscription_fee_rub"`
+	ElbaBankAccountID  pgtype.Text        `json:"elba_bank_account_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ClientBillingDispute struct {
 	ID                pgtype.UUID        `json:"id"`
 	IssueID           pgtype.UUID        `json:"issue_id"`

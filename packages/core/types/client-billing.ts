@@ -84,6 +84,61 @@ export interface ClientBillingWorkspaceConfigUpdate {
   elba_bank_account_id?: string;
 }
 
+/** Contractor-level billing settings (migration 202): the mode + subscription
+ *  cap applied to a whole Elba contractor's consolidated invoice, independent
+ *  of the per-project metering configs. */
+export interface ClientBillingContractorConfig {
+  workspace_id: string;
+  elba_contractor_id: string;
+  name: string | null;
+  mode: "postpaid" | "subscription";
+  subscription_fee_rub: number;
+  elba_bank_account_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientBillingContractorConfigUpdate {
+  elba_contractor_id: string;
+  name?: string;
+  mode?: "postpaid" | "subscription";
+  subscription_fee_rub?: number;
+  elba_bank_account_id?: string;
+}
+
+/** One project's closed period inside an invoiceable contractor group. */
+export interface ContractorPeriodGroupProject {
+  period_id: string;
+  project_id: string;
+  project_title: string;
+  total_rub: number;
+}
+
+/** Closed, uninvoiced periods for one (contractor, cycle) — one «Выставить
+ *  счёт» button in the UI. */
+export interface ContractorPeriodGroup {
+  elba_contractor_id: string;
+  starts_on: string;
+  ends_on: string;
+  total_rub: number;
+  projects: ContractorPeriodGroupProject[];
+}
+
+/** Result of POST .../contractors/{id}/invoice — the consolidated счёт+акт. */
+export interface ContractorInvoiceResult {
+  contractor_id: string;
+  starts_on: string;
+  ends_on: string;
+  mode: string;
+  bill_id: string;
+  act_id: string;
+  gross_rub: number;
+  bill_rub: number;
+  period_ids: string[];
+  period_count: number;
+  act_error?: string;
+}
+
 /** Loosely-typed Kontur Elba directory entries (proxied via the backend). */
 export interface ElbaEntity {
   id: string;

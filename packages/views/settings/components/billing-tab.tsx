@@ -12,7 +12,10 @@ import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { api, ApiError } from "@multica/core/api";
-import type { ClientBillingWorkspaceConfigUpdate } from "@multica/core/types";
+import type {
+  ClientBillingWorkspaceConfigUpdate,
+  ContractorPeriodGroup,
+} from "@multica/core/types";
 import { useT } from "../../i18n";
 
 const wsBillingKeys = {
@@ -39,6 +42,223 @@ function elbaBankAccountLabel(a: { id: string; [k: string]: unknown }): string {
     return bank?.name ? `${acc} · ${bank.name}` : acc;
   }
   return str(a.name) || a.id;
+}
+
+function elbaContractorLabel(c: { id: string; [k: string]: unknown }): string {
+  return str(c.name) || str(c.fullName) || str(c.shortName) || c.id;
+}
+
+const contractorKeys = {
+  configs: () => ["client-billing", "contractor-configs"] as const,
+  contractors: (orgId: string) => ["client-billing", "elba-contractors", orgId] as const,
+  invoiceable: () => ["client-billing", "invoiceable-groups"] as const,
+};
+
+// ContractorBillingSection — contractor-level mode/fee + the consolidated
+// «Выставить счёт» action (migration 202). One Elba contractor can span
+// several projects; the invoice is issued for the contractor as a whole.
+function ContractorBillingSection({ orgId }: { orgId: string }) {
+  const qc = useQueryClient();
+
+  const { data: configs = [] } = useQuery({
+    queryKey: contractorKeys.configs(),
+    queryFn: () => api.listContractorBillingConfigs(),
+  });
+  const contractorsQuery = useQuery({
+    queryKey: contractorKeys.contractors(orgId),
+    queryFn: () => api.getElbaContractors(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const { data: groups = [] } = useQuery({
+    queryKey: contractorKeys.invoiceable(),
+    queryFn: () => api.listInvoiceableContractorGroups(),
+  });
+
+  // Per-contractor draft state (mode + fee), seeded from saved configs.
+  const [drafts, setDrafts] = useState<Record<string, { mode: string; fee: string }>>({});
+  useEffect(() => {
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const c of configs) {
+        if (!next[c.elba_contractor_id]) {
+          next[c.elba_contractor_id] = {
+            mode: c.mode,
+            fee: c.subscription_fee_rub ? String(c.subscription_fee_rub) : "",
+          };
+        }
+      }
+      return next;
+    });
+  }, [configs]);
+
+  const draftFor = (id: string) => drafts[id] ?? { mode: "postpaid", fee: "" };
+  const setDraft = (id: string, patch: Partial<{ mode: string; fee: string }>) =>
+    setDrafts((prev) => ({ ...prev, [id]: { ...draftFor(id), ...patch } }));
+
+  const saveMut = useMutation({
+    mutationFn: (v: { id: string; name: string; mode: string; fee: string }) =>
+      api.upsertContractorBillingConfig({
+        elba_contractor_id: v.id,
+        name: v.name,
+        mode: v.mode === "subscription" ? "subscription" : "postpaid",
+        subscription_fee_rub: v.fee.trim() === "" ? 0 : Number(v.fee),
+      }),
+    onSuccess: () => {
+      toast.success("Настройки контрагента сохранены");
+      qc.invalidateQueries({ queryKey: contractorKeys.configs() });
+    },
+    onError: () => toast.error("Не удалось сохранить настройки контрагента"),
+  });
+
+  const invoiceMut = useMutation({
+    mutationFn: (g: ContractorPeriodGroup) =>
+      api.invoiceContractorPeriod(g.elba_contractor_id, g.starts_on, g.ends_on),
+    onSuccess: (res) => {
+      toast.success(
+        `Счёт выставлен: ${res.bill_rub.toLocaleString("ru-RU")} ₽ по ${res.period_count} проект(ам)`,
+      );
+      qc.invalidateQueries({ queryKey: contractorKeys.invoiceable() });
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "Не удалось выставить счёт"),
+  });
+
+  const selectClass =
+    "h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+
+  // Contractor id -> display name, from the Elba directory then saved configs.
+  const nameFor = (id: string): string => {
+    const fromElba = (contractorsQuery.data ?? []).find((c) => c.id === id);
+    if (fromElba) return elbaContractorLabel(fromElba);
+    const cfg = configs.find((c) => c.elba_contractor_id === id);
+    return cfg?.name || id;
+  };
+
+  const fmt = (d: string) => d.slice(0, 10).split("-").reverse().join(".");
+
+  return (
+    <>
+      <div>
+        <h2 className="text-sm font-semibold">Контрагенты</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Режим биллинга и абонемент задаются на контрагента целиком — счёт
+          выставляется одним документом по всем его проектам за период.
+        </p>
+        {!orgId ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Сначала выберите организацию Эльбы выше.
+          </p>
+        ) : contractorsQuery.isError ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Не удалось загрузить список контрагентов Эльбы.
+          </p>
+        ) : (contractorsQuery.data ?? []).length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">Контрагентов не найдено.</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {(contractorsQuery.data ?? []).map((c) => {
+              const d = draftFor(c.id);
+              return (
+                <div
+                  key={c.id}
+                  className="flex flex-wrap items-end gap-3 rounded-md border border-border p-3"
+                >
+                  <div className="min-w-40 flex-1 text-sm font-medium">
+                    {elbaContractorLabel(c)}
+                  </div>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="font-medium">Режим</span>
+                    <select
+                      value={d.mode}
+                      onChange={(e) => setDraft(c.id, { mode: e.target.value })}
+                      className={selectClass}
+                    >
+                      <option value="postpaid">Постоплата</option>
+                      <option value="subscription">Абонемент</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="font-medium">Абонемент, ₽</span>
+                    <Input
+                      type="number"
+                      step="1000"
+                      value={d.fee}
+                      disabled={d.mode !== "subscription"}
+                      onChange={(e) => setDraft(c.id, { fee: e.target.value })}
+                      className="h-8 max-w-40"
+                    />
+                  </label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={saveMut.isPending}
+                    onClick={() =>
+                      saveMut.mutate({
+                        id: c.id,
+                        name: elbaContractorLabel(c),
+                        mode: d.mode,
+                        fee: d.fee,
+                      })
+                    }
+                  >
+                    Сохранить
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-sm font-semibold">Периоды к выставлению</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Закрытые непровыставленные периоды, сгруппированные по контрагенту и
+          циклу. Кнопка формирует один счёт + акт в Эльбе.
+        </p>
+        {groups.length === 0 ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Нет закрытых периодов, готовых к выставлению.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {groups.map((g) => (
+              <div
+                key={`${g.elba_contractor_id}-${g.starts_on}-${g.ends_on}`}
+                className="rounded-md border border-border p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">
+                    {nameFor(g.elba_contractor_id)}
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      {fmt(g.starts_on)} — {fmt(g.ends_on)}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={invoiceMut.isPending}
+                    onClick={() => invoiceMut.mutate(g)}
+                  >
+                    Выставить счёт · {g.total_rub.toLocaleString("ru-RU")} ₽
+                  </Button>
+                </div>
+                <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+                  {g.projects.map((p) => (
+                    <li key={p.period_id} className="flex justify-between">
+                      <span>{p.project_title}</span>
+                      <span>{p.total_rub.toLocaleString("ru-RU")} ₽</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
 }
 
 function Field({
@@ -224,6 +444,8 @@ export function BillingTab() {
       <Button size="sm" disabled={saveMut.isPending} onClick={handleSave}>
         {t(($) => $.billing.save)}
       </Button>
+
+      <ContractorBillingSection orgId={orgId} />
     </div>
   );
 }

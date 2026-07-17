@@ -60,6 +60,10 @@ import type {
   ClientBillingCurrentPeriod,
   ClientBillingWorkspaceConfig,
   ClientBillingWorkspaceConfigUpdate,
+  ClientBillingContractorConfig,
+  ClientBillingContractorConfigUpdate,
+  ContractorPeriodGroup,
+  ContractorInvoiceResult,
   ElbaEntity,
   RuntimeHourlyActivity,
   RuntimeUsageByAgent,
@@ -1752,6 +1756,39 @@ export class ApiClient {
     return this.fetch(`/api/billing/workspace-config`, {
       method: "PUT",
       body: JSON.stringify(update),
+    });
+  }
+
+  /** Contractor-level billing settings (mode + subscription cap per Elba
+   *  contractor) — the source of the consolidated invoice. */
+  async listContractorBillingConfigs(): Promise<ClientBillingContractorConfig[]> {
+    return this.fetch(`/api/billing/contractors`);
+  }
+
+  async upsertContractorBillingConfig(
+    update: ClientBillingContractorConfigUpdate,
+  ): Promise<ClientBillingContractorConfig> {
+    return this.fetch(`/api/billing/contractors`, {
+      method: "PUT",
+      body: JSON.stringify(update),
+    });
+  }
+
+  /** Closed, uninvoiced periods grouped by (contractor, cycle) — one group per
+   *  «Выставить счёт» button. */
+  async listInvoiceableContractorGroups(): Promise<ContractorPeriodGroup[]> {
+    return this.fetch(`/api/billing/contractors/invoiceable`);
+  }
+
+  /** Issue ONE consolidated счёт+акт for a contractor's cycle across projects. */
+  async invoiceContractorPeriod(
+    contractorId: string,
+    startsOn: string,
+    endsOn: string,
+  ): Promise<ContractorInvoiceResult> {
+    return this.fetch(`/api/billing/contractors/${encodeURIComponent(contractorId)}/invoice`, {
+      method: "POST",
+      body: JSON.stringify({ starts_on: startsOn, ends_on: endsOn }),
     });
   }
 
