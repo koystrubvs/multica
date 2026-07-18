@@ -1,93 +1,109 @@
 {
-  "bubble_menu": {
-    "bold": "Жирный",
-    "italic": "Курсив",
-    "strikethrough": "Зачёркнутый",
-    "code": "Код",
-    "link": "Ссылка",
-    "list": "Список",
-    "task_list": "Список задач",
-    "quote": "Цитата",
-    "url_aria_label": "URL",
-    "heading_dropdown": {
-      "text": "Текст",
-      "normal_text": "Обычный текст",
-      "heading_1": "Заголовок 1",
-      "heading_2": "Заголовок 2",
-      "heading_3": "Заголовок 3"
-    },
-    "list_dropdown": {
-      "bullet_list": "Маркированный список",
-      "ordered_list": "Нумерованный список",
-      "task_list": "Список задач"
-    },
-    "sub_issue": {
-      "tooltip": "Создать подзадачу из выделения",
-      "created": "Создан {{identifier}}",
-      "create_failed": "Не удалось создать подзадачу"
-    },
-    "highlight": "Выделение"
-  },
-  "image": {
-    "view": "Просмотреть изображение",
-    "download": "Скачать",
-    "copy_link": "Скопировать ссылку",
-    "delete": "Удалить",
-    "link_copied": "Ссылка скопирована",
-    "copy_link_failed": "Не удалось скопировать ссылку"
-  },
-  "attachment": {
-    "download_failed": "Не удалось получить ссылку для скачивания. Попробуйте через момент.",
-    "preview": "Превью",
-    "preview_loading": "Загрузка превью…",
-    "preview_failed": "Не удалось загрузить превью",
-    "preview_too_large": "Файл слишком большой для превью. Скачайте его.",
-    "preview_unsupported": "Этот тип файла нельзя предпросмотреть.",
-    "close": "Закрыть",
-    "open_in_new_tab": "Открыть в новой вкладке",
-    "remove": "Удалить вложение"
-  },
-  "link_hover": {
-    "copy_link": "Скопировать ссылку",
-    "open_link": "Открыть ссылку",
-    "link_copied": "Ссылка скопирована",
-    "copy_failed": "Не удалось скопировать"
-  },
-  "mention": {
-    "group_users": "Пользователи",
-    "group_issues": "Задачи",
-    "all_members": "Все участники",
-    "searching": "Поиск...",
-    "no_results": "Ничего не найдено",
-    "group_current": "Текущая страница",
-    "group_recent": "Недавно просмотренные",
-    "group_search": "Результаты поиска"
-  },
-  "code_block": {
-    "copy_code": "Скопировать код",
-    "show_preview": "Показать превью",
-    "show_source": "Показать исходник",
-    "fullscreen": "Полный экран"
-  },
-  "file_card": {
-    "uploading": "Загрузка {{filename}}"
-  },
-  "title_editor": {
-    "title_aria_label": "Заголовок"
-  },
-  "mermaid": {
-    "render_error": "Не удалось отрисовать Mermaid-диаграмму.",
-    "rendering": "Отрисовка диаграммы…"
-  },
-  "slash_command": {
-    "no_skills_configured": "Навыки не настроены",
-    "no_results": "Нет подходящих навыков",
-    "commands": {
-      "note": "Добавить заметку — не запустит агентов"
-    }
-  },
-  "upload": {
-    "failed": "Не удалось загрузить {{filename}}: {{reason}}",
-    "in_progress": "Загрузка…"
-  }
+	"bubble_menu": {
+		"bold": "Жирный",
+		"italic": "Курсив",
+		"strikethrough": "Зачёркнутый",
+		"code": "Код",
+		"link": "Ссылка",
+		"list": "Список",
+		"task_list": "Список задач",
+		"quote": "Цитата",
+		"url_aria_label": "URL",
+		"heading_dropdown": {
+			"text": "Текст",
+			"normal_text": "Обычный текст",
+			"heading_1": "Заголовок 1",
+			"heading_2": "Заголовок 2",
+			"heading_3": "Заголовок 3"
+		},
+		"list_dropdown": {
+			"bullet_list": "Маркированный список",
+			"ordered_list": "Нумерованный список",
+			"task_list": "Список задач"
+		},
+		"sub_issue": {
+			"tooltip": "Создать подзадачу из выделения",
+			"created": "Создан {{identifier}}",
+			"create_failed": "Не удалось создать подзадачу"
+		},
+		"highlight": "Выделение"
+	},
+	"image": {
+		"view": "Просмотреть изображение",
+		"download": "Скачать",
+		"copy_link": "Скопировать ссылку",
+		"delete": "Удалить",
+		"link_copied": "Ссылка скопирована",
+		"copy_link_failed": "Не удалось скопировать ссылку"
+	},
+	"attachment": {
+		"download_failed": "Не удалось получить ссылку для скачивания. Попробуйте через момент.",
+		"preview": "Превью",
+		"preview_loading": "Загрузка превью…",
+		"preview_failed": "Не удалось загрузить превью",
+		"preview_too_large": "Файл слишком большой для превью. Скачайте его.",
+		"preview_unsupported": "Этот тип файла нельзя предпросмотреть.",
+		"close": "Закрыть",
+		"open_in_new_tab": "Открыть в новой вкладке",
+		"remove": "Удалить вложение"
+	},
+	"link_hover": {
+		"copy_link": "Скопировать ссылку",
+		"open_link": "Открыть ссылку",
+		"link_copied": "Ссылка скопирована",
+		"copy_failed": "Не удалось скопировать"
+	},
+	"mention": {
+		"group_users": "Пользователи",
+		"group_issues": "Задачи",
+		"all_members": "Все участники",
+		"searching": "Поиск...",
+		"no_results": "Ничего не найдено",
+		"group_current": "Текущая страница",
+		"group_recent": "Недавно просмотренные",
+		"group_search": "Результаты поиска"
+	},
+	"code_block": {
+		"copy_code": "Скопировать код",
+		"show_preview": "Показать превью",
+		"show_source": "Показать исходник",
+		"fullscreen": "Полный экран"
+	},
+	"file_card": {
+		"uploading": "Загрузка {{filename}}"
+	},
+	"title_editor": {
+		"title_aria_label": "Заголовок"
+	},
+	"mermaid": {
+		"render_error": "Не удалось отрисовать Mermaid-диаграмму.",
+		"rendering": "Отрисовка диаграммы…",
+		"viewer_title": "Диаграмма",
+		"canvas_label": "Холст диаграммы. Перетаскивайте для панорамирования, прокручивайте для масштабирования.",
+		"open_viewer": "Открыть просмотр диаграммы",
+		"close_viewer": "Закрыть",
+		"copy_source": "Копировать исходник диаграммы",
+		"show_source": "Показать исходник",
+		"show_diagram": "Показать диаграмму",
+		"zoom_in": "Приблизить",
+		"zoom_out": "Отдалить",
+		"zoom_fit": "Вписать в окно",
+		"zoom_actual": "Реальный размер",
+		"reset_view": "Сбросить вид",
+		"export": "Экспорт",
+		"export_png": "Скачать PNG",
+		"export_svg": "Скачать SVG",
+		"export_source": "Скачать .mmd"
+	},
+	"slash_command": {
+		"no_skills_configured": "Навыки не настроены",
+		"no_results": "Нет подходящих навыков",
+		"commands": {
+			"note": "Добавить заметку — не запустит агентов"
+		}
+	},
+	"upload": {
+		"failed": "Не удалось загрузить {{filename}}: {{reason}}",
+		"in_progress": "Загрузка…"
+	}
 }
