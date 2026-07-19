@@ -1372,7 +1372,7 @@ func (h *Handler) GenerateBusinessReceivables(w http.ResponseWriter, r *http.Req
 		       invoice_day, due_days, period_months, effective_from, effective_to,
 		       needs_review
 		FROM business_agreement
-		WHERE business_id = $1 AND status = 'active' AND period_months > 0
+		WHERE business_id = $1 AND status = 'active' AND period_months > 0 AND model <> 'project'
 		ORDER BY agreement_key, version DESC
 	`, businessID)
 	if err != nil {
