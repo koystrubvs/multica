@@ -262,13 +262,13 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			ORDER BY c.created_at DESC LIMIT 200
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.month, q.client_id), '[]'::jsonb) FROM (
-			SELECT bcp.client_id, to_char(COALESCE(per.starts_on, c.created_at::date), 'YYYY-MM') AS month,
+			SELECT bcp.client_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM') AS month,
 			       sum(c.price_rub) AS billed_rub, count(DISTINCT c.issue_id) AS issue_count
 			FROM client_billing_charge c
 			LEFT JOIN client_billing_period per ON per.id = c.period_id
 			JOIN business_client_project bcp ON bcp.project_id = c.project_id AND bcp.business_id = $1
 			WHERE c.status <> 'void'
-			GROUP BY bcp.client_id, to_char(COALESCE(per.starts_on, c.created_at::date), 'YYYY-MM')
+			GROUP BY bcp.client_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM')
 		) q`},
 	}
 
