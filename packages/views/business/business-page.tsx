@@ -20,19 +20,42 @@ import {
 import type { BusinessRow } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@multica/ui/components/ui/dropdown-menu";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@multica/ui/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@multica/ui/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import { cn } from "@multica/ui/lib/utils";
-import { AlertTriangle, Building2, RefreshCw, Upload } from "lucide-react";
+import { AlertTriangle, Building2, Filter, RefreshCw, Search, Upload, X } from "lucide-react";
+import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
 
 type Tab = "overview" | "clients" | "calendar" | "bank" | "team" | "economics" | "accruals" | "payouts";
 
-const selectClass = "h-8 min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
-
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 const CLASSIFICATIONS = ["client_income", "payroll", "tax", "service", "transfer", "owner_draw", "vitmax_transit", "unknown"] as const;
 const WORKER_ROLES = ["executor", "pm", "reviewer", "seo", "content", "copywriter", "designer", "domain_reviewer"] as const;
+const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
+const RECEIVABLE_STATUSES = ["expected", "invoiced", "partially_paid", "paid", "skipped", "written_off"] as const;
+const COUNTERPARTY_CLASSES = ["client_payer", "worker_payee", "vendor", "transit", "ignored", "unresolved"] as const;
 
 type TT = (key: string, options?: { defaultValue?: string }) => string;
 
@@ -62,28 +85,59 @@ function rub(value: string | number | undefined): string {
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0);
 }
 
-function cellText(row: BusinessRow, spec: ColumnSpec, tt: TT, locale: string): string {
+const PILL_BAD = new Set(["overdue", "failed", "lost", "written_off", "void", "voided", "leaving", "inactive", "escalated", "missed"]);
+const PILL_GOOD = new Set(["paid", "active", "accepted", "confirmed", "reconciled", "completed", "client_income"]);
+
+function StatusPill({ value, label }: { value: string; label: string }) {
+  const tone = PILL_BAD.has(value)
+    ? "bg-destructive/10 text-destructive"
+    : PILL_GOOD.has(value)
+      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+      : "bg-muted text-muted-foreground";
+  return <span className={cn("inline-flex shrink-0 items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium", tone)}>{label}</span>;
+}
+
+function FlagPill({ on, tone, label }: { on: boolean; tone: "bad" | "warn"; label: string }) {
+  if (!on) return <span className="text-muted-foreground/50">—</span>;
+  return (
+    <span className={cn(
+      "inline-flex shrink-0 items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
+      tone === "bad" ? "bg-destructive/10 text-destructive" : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    )}>{label}</span>
+  );
+}
+
+function cellNode(row: BusinessRow, spec: ColumnSpec, tt: TT, locale: string): React.ReactNode {
   const value = row[spec.key];
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return <span className="text-muted-foreground/50">—</span>;
   switch (spec.kind) {
-    case "money":
-      return rub(String(value));
+    case "money": {
+      const amount = Number(value);
+      if (!Number.isFinite(amount) || amount === 0) return <span className="text-muted-foreground/50">—</span>;
+      return <span className="tabular-nums">{rub(String(value))}</span>;
+    }
     case "date": {
       const parsed = new Date(String(value));
-      return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleDateString(locale);
+      return <span className="tabular-nums text-muted-foreground">{Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleDateString(locale)}</span>;
     }
     case "datetime": {
       const parsed = new Date(String(value));
-      return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+      return <span className="tabular-nums text-muted-foreground">{Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</span>;
     }
     case "bool":
-      return isTruthyFlag(value) ? "✓" : "—";
-    case "enum":
-      return tt(`values.${String(value)}`, { defaultValue: String(value) });
+      if (spec.key === "is_overdue") return <FlagPill on={isTruthyFlag(value)} tone="bad" label={tt("columns.is_overdue", { defaultValue: "overdue" })} />;
+      if (spec.key === "needs_review") return <FlagPill on={isTruthyFlag(value)} tone="warn" label={tt("columns.needs_review", { defaultValue: "review" })} />;
+      return isTruthyFlag(value) ? <span>✓</span> : <span className="text-muted-foreground/50">—</span>;
+    case "enum": {
+      const raw = String(value);
+      return <StatusPill value={raw} label={tt(`values.${raw}`, { defaultValue: raw })} />;
+    }
     case "percent":
-      return `${Number(value)}%`;
-    default:
-      return text(row, spec.key);
+      return <span className="tabular-nums">{Number(value)}%</span>;
+    default: {
+      const rendered = text(row, spec.key);
+      return <span className="truncate" title={rendered}>{rendered}</span>;
+    }
   }
 }
 
@@ -96,57 +150,150 @@ function RowTable({ rows, columns, empty, tt, locale, extra }: {
   extra?: { header: string; render: (row: BusinessRow) => React.ReactNode };
 }) {
   const specs = columns.map(normalizeColumn);
-  if (rows.length === 0) return <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">{empty}</div>;
+  if (rows.length === 0) return <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{empty}</div>;
   return (
-    <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full min-w-[720px] text-left text-sm">
-        <thead className="bg-muted/60 text-xs text-muted-foreground">
-          <tr>
-            {specs.map((spec) => <th key={spec.key} className="px-3 py-2 font-medium">{tt(`columns.${spec.key}`, { defaultValue: spec.key.replaceAll("_", " ") })}</th>)}
-            {extra && <th className="px-3 py-2 font-medium">{extra.header}</th>}
-          </tr>
-        </thead>
-        <tbody>
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            {specs.map((spec) => (
+              <TableHead key={spec.key} className="h-8 text-xs font-medium text-muted-foreground">
+                {tt(`columns.${spec.key}`, { defaultValue: spec.key.replaceAll("_", " ") })}
+              </TableHead>
+            ))}
+            {extra && <TableHead className="h-8 text-xs font-medium text-muted-foreground">{extra.header}</TableHead>}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.slice(0, 200).map((row, index) => (
-            <tr key={String(row.id ?? index)} className="border-t align-top">
-              {specs.map((spec) => {
-                const value = cellText(row, spec, tt, locale);
-                const warn = (spec.key === "is_overdue" && isTruthyFlag(row[spec.key])) || (spec.key === "needs_review" && isTruthyFlag(row[spec.key]));
-                return <td key={spec.key} className={cn("max-w-[320px] truncate px-3 py-2 tabular-nums", warn && "font-medium text-warning")} title={value}>{value}</td>;
-              })}
-              {extra && <td className="px-3 py-2">{extra.render(row)}</td>}
-            </tr>
+            <TableRow key={String(row.id ?? index)}>
+              {specs.map((spec, specIndex) => (
+                <TableCell key={spec.key} className={cn("max-w-[300px] truncate py-1.5 text-xs", specIndex === 0 && "font-medium")}>
+                  {cellNode(row, spec, tt, locale)}
+                </TableCell>
+              ))}
+              {extra && <TableCell className="py-1 text-xs">{extra.render(row)}</TableCell>}
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
 
-function FilterSelect({ label, value, onChange, options, allLabel }: {
+interface FilterSection {
+  key: string;
   label: string;
-  value: string;
-  onChange: (value: string) => void;
   options: { value: string; label: string }[];
-  allLabel: string;
+  selected: string[];
+  onToggle: (value: string) => void;
+}
+
+interface FilterToggle {
+  key: string;
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+}
+
+function FilterMenu({ label, clearLabel, sections, toggles, onClear }: {
+  label: string;
+  clearLabel: string;
+  sections: FilterSection[];
+  toggles?: FilterToggle[];
+  onClear: () => void;
 }) {
+  const activeCount = sections.reduce((sum, section) => sum + section.selected.length, 0)
+    + (toggles ?? []).filter((toggle) => toggle.checked).length;
+  const hasActive = activeCount > 0;
   return (
-    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span>{label}</span>
-      <select className={selectClass} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="">{allLabel}</option>
-        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
-    </label>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant={hasActive ? "default" : "outline"}
+            size="sm"
+            className={hasActive
+              ? "h-8 gap-1 bg-brand px-2.5 text-white hover:bg-brand/90"
+              : "h-8 gap-1 px-2.5 text-muted-foreground"}
+          >
+            <Filter className="size-3.5" />
+            <span>{label}</span>
+            {hasActive && <span className="tabular-nums">{activeCount}</span>}
+            {hasActive && (
+              <span
+                role="button"
+                tabIndex={-1}
+                aria-label={clearLabel}
+                className="-mr-1 ml-0.5 rounded-sm p-0.5 hover:bg-white/20"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onClear();
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <X className="size-3" />
+              </span>
+            )}
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-auto">
+        {sections.map((section) => (
+          <DropdownMenuSub key={section.key}>
+            <DropdownMenuSubTrigger>
+              <span className="flex-1">{section.label}</span>
+              {section.selected.length > 0 && (
+                <span className="text-xs font-medium text-primary">{section.selected.length}</span>
+              )}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-72 w-auto min-w-44 overflow-y-auto">
+              {section.options.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.value}
+                  checked={section.selected.includes(option.value)}
+                  onCheckedChange={() => section.onToggle(option.value)}
+                  className={FILTER_ITEM_CLASS}
+                >
+                  <HoverCheck checked={section.selected.includes(option.value)} />
+                  <span className="min-w-0 truncate">{option.label}</span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ))}
+        {(toggles ?? []).map((toggle) => (
+          <DropdownMenuCheckboxItem
+            key={toggle.key}
+            checked={toggle.checked}
+            onCheckedChange={toggle.onToggle}
+            className={FILTER_ITEM_CLASS}
+          >
+            <HoverCheck checked={toggle.checked} />
+            {toggle.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
+function Toolbar({ children }: { children: React.ReactNode }) {
+  return <div className="flex min-h-10 flex-wrap items-center justify-between gap-2">{children}</div>;
+}
+
+function ResultCount({ shown, total }: { shown: number; total: number }) {
+  if (shown === total) return null;
+  return <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{shown} / {total}</span>;
+}
+
 function Section({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }) {
-  return <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-medium">{title}</h2>{actions}</div>{children}</section>;
+  return <section className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>{actions}</div>{children}</section>;
 }
 
 function Metric({ label, value, hint, warning }: { label: string; value: string; hint?: string; warning?: boolean }) {
-  return <div className={cn("flex min-w-0 flex-col gap-1.5 rounded-lg border bg-card p-4", warning && "border-warning/50 bg-warning/5")}><div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div><div className="break-words text-xl font-semibold leading-tight tabular-nums sm:text-2xl">{value}</div>{hint && <div className="text-xs text-muted-foreground">{hint}</div>}</div>;
+  return <div className={cn("flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3", warning && "border-warning/50 bg-warning/5")}><div className="truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground" title={label}>{label}</div><div className="break-words text-lg font-semibold leading-tight tabular-nums">{value}</div>{hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}</div>;
 }
 
 function formData(event: FormEvent<HTMLFormElement>): FormData {
@@ -156,6 +303,10 @@ function formData(event: FormEvent<HTMLFormElement>): FormData {
 
 function monthOf(value: unknown): string {
   return String(value ?? "").slice(0, 7);
+}
+
+function toggleValue(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 
 export function BusinessPage() {
@@ -180,29 +331,29 @@ export function BusinessPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const [scopeClient, setScopeClient] = useState("");
-  const [scopeProject, setScopeProject] = useState("");
-  const [scopeService, setScopeService] = useState("");
+  const [scopeClient, setScopeClient] = useState<string[]>([]);
+  const [scopeProject, setScopeProject] = useState<string[]>([]);
+  const [scopeService, setScopeService] = useState<string[]>([]);
 
-  const [clientStatusFilter, setClientStatusFilter] = useState("");
-  const [counterpartyFilter, setCounterpartyFilter] = useState("");
-  const [receivableStatusFilter, setReceivableStatusFilter] = useState("");
-  const [receivableClientFilter, setReceivableClientFilter] = useState("");
+  const [clientStatuses, setClientStatuses] = useState<string[]>([]);
+  const [counterpartyClasses, setCounterpartyClasses] = useState<string[]>([]);
+  const [receivableStatuses, setReceivableStatuses] = useState<string[]>([]);
+  const [receivableClients, setReceivableClients] = useState<string[]>([]);
   const [receivableReviewOnly, setReceivableReviewOnly] = useState(false);
   const [receivableOverdueOnly, setReceivableOverdueOnly] = useState(false);
-  const [txClassFilter, setTxClassFilter] = useState("");
-  const [txDirectionFilter, setTxDirectionFilter] = useState("");
+  const [txClasses, setTxClasses] = useState<string[]>([]);
+  const [txDirections, setTxDirections] = useState<string[]>([]);
   const [txSearch, setTxSearch] = useState("");
   const [econWorker, setEconWorker] = useState("");
 
   const accounts = useQuery({ queryKey: ["business", "accounts"], queryFn: () => api.listBusinessAccounts(), enabled });
   const businessID = selectedBusiness || accounts.data?.[0]?.id || "";
   const dashboard = useQuery({
-    queryKey: ["business", businessID, "dashboard", month, scopeClient, scopeProject, scopeService],
+    queryKey: ["business", businessID, "dashboard", month, scopeClient[0] ?? "", scopeProject[0] ?? "", scopeService[0] ?? ""],
     queryFn: () => api.getBusinessDashboard(businessID, month, {
-      client_id: scopeClient || undefined,
-      project_id: scopeProject || undefined,
-      service_type: scopeService || undefined,
+      client_id: scopeClient[0],
+      project_id: scopeProject[0],
+      service_type: scopeService[0],
     }),
     enabled: enabled && !!businessID,
   });
@@ -231,16 +382,16 @@ export function BusinessPage() {
 
   const enrichedPayers = useMemo(() => (data?.payers ?? []).map((row) => ({ ...row, client_name: clientNameByID.get(String(row.client_id)) ?? String(row.client_id) })), [data?.payers, clientNameByID]);
 
-  const filteredClients = useMemo(() => (data?.clients ?? []).filter((row) => !clientStatusFilter || String(row.status) === clientStatusFilter), [data?.clients, clientStatusFilter]);
+  const filteredClients = useMemo(() => (data?.clients ?? []).filter((row) => clientStatuses.length === 0 || clientStatuses.includes(String(row.status))), [data?.clients, clientStatuses]);
 
-  const filteredCounterparties = useMemo(() => (data?.counterparties ?? []).filter((row) => !counterpartyFilter || String(row.classification) === counterpartyFilter), [data?.counterparties, counterpartyFilter]);
+  const filteredCounterparties = useMemo(() => (data?.counterparties ?? []).filter((row) => counterpartyClasses.length === 0 || counterpartyClasses.includes(String(row.classification))), [data?.counterparties, counterpartyClasses]);
 
   const filteredReceivables = useMemo(() => (data?.receivables ?? []).filter((row) =>
-    (!receivableStatusFilter || String(row.status) === receivableStatusFilter)
-    && (!receivableClientFilter || String(row.client_id) === receivableClientFilter)
+    (receivableStatuses.length === 0 || receivableStatuses.includes(String(row.status)))
+    && (receivableClients.length === 0 || receivableClients.includes(String(row.client_id)))
     && (!receivableReviewOnly || isTruthyFlag(row.needs_review))
     && (!receivableOverdueOnly || isTruthyFlag(row.is_overdue))
-  ), [data?.receivables, receivableStatusFilter, receivableClientFilter, receivableReviewOnly, receivableOverdueOnly]);
+  ), [data?.receivables, receivableStatuses, receivableClients, receivableReviewOnly, receivableOverdueOnly]);
 
   const receivableTotals = useMemo(() => filteredReceivables.reduce<{ planned: number; paid: number }>((acc, row) => ({
     planned: acc.planned + Number(row.planned_amount_rub ?? 0),
@@ -250,11 +401,11 @@ export function BusinessPage() {
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
     return (data?.transactions ?? []).filter((row) =>
-      (!txClassFilter || String(row.classification) === txClassFilter)
-      && (!txDirectionFilter || String(row.direction) === txDirectionFilter)
+      (txClasses.length === 0 || txClasses.includes(String(row.classification)))
+      && (txDirections.length === 0 || txDirections.includes(String(row.direction)))
       && (!needle || `${String(row.counterparty_name ?? "")} ${String(row.purpose ?? "")} ${String(row.counterparty_inn ?? "")}`.toLowerCase().includes(needle))
     );
-  }, [data?.transactions, txClassFilter, txDirectionFilter, txSearch]);
+  }, [data?.transactions, txClasses, txDirections, txSearch]);
 
   const transactionTotals = useMemo(() => filteredTransactions.reduce<{ inbound: number; outbound: number }>((acc, row) => {
     const amount = Number(row.amount_rub ?? 0);
@@ -325,7 +476,9 @@ export function BusinessPage() {
     { key: "bank", enabled: bankEnabled }, { key: "team", enabled: economicsEnabled }, { key: "economics", enabled: economicsEnabled },
     { key: "accruals", enabled: accrualsEnabled }, { key: "payouts", enabled: payoutsEnabled },
   ];
-  const filterRows = `${t(($) => $.filters.rows)}: ${filteredTransactions.length}`;
+  const single = (setter: (next: string[]) => void, current: string[]) => (value: string) => {
+    setter(current.includes(value) ? [] : [value]);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -335,15 +488,18 @@ export function BusinessPage() {
           <h1 className="truncate text-sm font-medium">{t(($) => $.title)}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {accounts.data && accounts.data.length > 1 && <select aria-label={t(($) => $.title)} className={selectClass} value={businessID} onChange={(event) => setSelectedBusiness(event.target.value)}>{accounts.data.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select>}
-          <label className="flex items-center gap-2 text-xs text-muted-foreground"><span>{t(($) => $.month)}</span><Input className="w-auto" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
-          <Button type="button" size="sm" variant="outline" onClick={() => void Promise.all([snapshot.refetch(), dashboard.refetch()])}><RefreshCw aria-hidden="true" />{t(($) => $.refresh)}</Button>
+          {accounts.data && accounts.data.length > 1 && (
+            <NativeSelect size="sm" aria-label={t(($) => $.title)} value={businessID} onChange={(event) => setSelectedBusiness(event.target.value)}>
+              {accounts.data.map((account) => <NativeSelectOption key={account.id} value={account.id}>{account.name}</NativeSelectOption>)}
+            </NativeSelect>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground"><span>{t(($) => $.month)}</span><Input className="h-8 w-auto text-sm" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+          <Button type="button" size="sm" variant="outline" className="h-8 text-muted-foreground" onClick={() => void Promise.all([snapshot.refetch(), dashboard.refetch()])}><RefreshCw aria-hidden="true" className="size-3.5" />{t(($) => $.refresh)}</Button>
         </div>
       </PageHeader>
 
       <div data-testid="business-scroll-container" className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-6xl space-y-5 p-4 sm:p-6">
-      <p className="text-xs text-muted-foreground">{t(($) => $.subtitle)}</p>
+        <div className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-5">
 
       {(error || message) && <div className={cn("rounded-lg border p-3 text-sm", error ? "border-destructive/40 bg-destructive/5 text-destructive" : "border-emerald-500/40 bg-emerald-500/5 text-emerald-700")}>{error || message}</div>}
 
@@ -353,16 +509,23 @@ export function BusinessPage() {
         </TabsList>
       </Tabs>
 
-      {tab === "overview" && <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 p-3">
-          <FilterSelect label={t(($) => $.filters.client)} value={scopeClient} onChange={setScopeClient} options={clientOptions} allLabel={t(($) => $.filters.all)} />
-          <FilterSelect label={t(($) => $.filters.project)} value={scopeProject} onChange={setScopeProject} options={projectOptions} allLabel={t(($) => $.filters.all)} />
-          <FilterSelect label={t(($) => $.filters.service)} value={scopeService} onChange={setScopeService} options={serviceOptions} allLabel={t(($) => $.filters.all)} />
-          {(scopeClient || scopeProject || scopeService) && <Button type="button" size="sm" variant="ghost" onClick={() => { setScopeClient(""); setScopeProject(""); setScopeService(""); }}>{t(($) => $.actions.clear_filters)}</Button>}
-        </div>
+      {tab === "overview" && <div className="space-y-5">
+        <Toolbar>
+          <span className="text-xs text-muted-foreground">{t(($) => $.subtitle)}</span>
+          <FilterMenu
+            label={t(($) => $.filters.filter)}
+            clearLabel={t(($) => $.actions.clear_filters)}
+            onClear={() => { setScopeClient([]); setScopeProject([]); setScopeService([]); }}
+            sections={[
+              { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: scopeClient, onToggle: single(setScopeClient, scopeClient) },
+              { key: "project", label: t(($) => $.filters.project), options: projectOptions, selected: scopeProject, onToggle: single(setScopeProject, scopeProject) },
+              { key: "service", label: t(($) => $.filters.service), options: serviceOptions, selected: scopeService, onToggle: single(setScopeService, scopeService) },
+            ]}
+          />
+        </Toolbar>
 
         <Section title={t(($) => $.metric_groups.calendar)}>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <Metric label={t(($) => $.metrics.expected)} value={rub(metrics.expected_rub)} />
             <Metric label={t(($) => $.metrics.invoiced)} value={rub(metrics.invoiced_rub)} />
             <Metric label={t(($) => $.metrics.receivable_paid)} value={rub(metrics.receivable_paid_rub)} />
@@ -372,7 +535,7 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.bank)}>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.client_income)} value={rub(metrics.bank_client_income_rub)} />
             <Metric label={t(($) => $.metrics.unknown)} value={rub(metrics.unknown_inbound_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.unmatched_count ?? 0}`} warning={(metrics.unmatched_count ?? 0) > 0} />
             <Metric label={t(($) => $.values.vitmax)} value={rub(metrics.vitmax_transit_rub)} />
@@ -381,16 +544,16 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.economics)}>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.task_value)} value={rub(metrics.task_value_rub)} />
             <Metric label={t(($) => $.metrics.participant_accrued)} value={rub(metrics.participant_accrued_rub)} />
-            <Metric label={t(($) => $.metrics.company_pool)} value={rub(metrics.company_target_pool_rub)} hint={t(($) => $.metrics.company_costs) + ": " + rub(metrics.company_costs_rub)} />
+            <Metric label={t(($) => $.metrics.company_pool)} value={rub(metrics.company_target_pool_rub)} hint={`${t(($) => $.metrics.company_costs)}: ${rub(metrics.company_costs_rub)}`} />
             <Metric label={t(($) => $.metrics.owner_margin)} value={rub(metrics.owner_target_margin_rub)} />
           </div>
         </Section>
 
         <Section title={t(($) => $.metric_groups.team)}>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.payable)} value={rub(metrics.payable_rub)} />
             <Metric label={t(($) => $.metrics.paid_workers)} value={rub(metrics.paid_to_workers_rub)} />
             <Metric label={t(($) => $.metrics.reserve)} value={rub(metrics.reserve_balance_rub)} warning={Number(metrics.reserve_deficit_rub) > 0} />
@@ -399,7 +562,7 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.summary)}>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <Metric label={t(($) => $.metrics.owner_net)} value={rub(metrics.owner_net_income_rub)} />
             <Metric label={t(($) => $.metrics.target)} value={`${metrics.owner_target_progress_pct}%`} hint={rub(metrics.owner_income_target_rub)} />
             <Metric label={t(($) => $.metrics.company_costs)} value={rub(metrics.company_costs_rub)} />
@@ -410,107 +573,174 @@ export function BusinessPage() {
           <RowTable tt={tt} locale={locale} rows={clientBreakdown as unknown as BusinessRow[]} columns={[{ key: "client_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "overdue" }]} empty={t(($) => $.empty)} />
         </Section>}
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border p-4 text-sm text-muted-foreground"><AlertTriangle className="mr-2 inline size-4 text-warning"/>{t(($) => $.vitmax_note)}</div>
-          <div className="rounded-lg border p-4 text-sm text-muted-foreground">{t(($) => $.no_penalties_note)}</div>
+        <div className="grid gap-2 md:grid-cols-2">
+          <div className="rounded-lg border p-3 text-xs text-muted-foreground"><AlertTriangle className="mr-1.5 inline size-3.5 text-warning"/>{t(($) => $.vitmax_note)}</div>
+          <div className="rounded-lg border p-3 text-xs text-muted-foreground">{t(($) => $.no_penalties_note)}</div>
         </div>
       </div>}
 
-      {tab === "clients" && clientsEnabled && <div className="space-y-8">
-        <Section title={t(($) => $.sections.clients)} actions={<div className="flex flex-wrap items-center gap-3">
-          <FilterSelect label={t(($) => $.filters.status)} value={clientStatusFilter} onChange={setClientStatusFilter} options={["active", "prospect", "paused", "leaving", "lost"].map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) }))} allLabel={t(($) => $.filters.all)} />
-          <form className="flex flex-wrap gap-2" onSubmit={(event) => { const fd=formData(event); void execute("client", () => api.businessAction(businessID,"clients",{canonical_name:fd.get("name"),status:"active",primary_payment_channel:"bank"})); event.currentTarget.reset(); }}><Input required name="name" className="w-52" placeholder={t(($) => $.fields.name)}/><Button disabled={busy!==""}>{t(($) => $.actions.add_client)}</Button></form>
-        </div>}>
+      {tab === "clients" && clientsEnabled && <div className="space-y-6">
+        <Toolbar>
+          <ResultCount shown={filteredClients.length} total={(data.clients ?? []).length} />
+          <div className="flex flex-wrap items-center gap-2">
+            <form className="flex items-center gap-1.5" onSubmit={(event) => { const fd=formData(event); void execute("client", () => api.businessAction(businessID,"clients",{canonical_name:fd.get("name"),status:"active",primary_payment_channel:"bank"})); event.currentTarget.reset(); }}>
+              <Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($) => $.fields.name)}/>
+              <Button size="sm" className="h-8" disabled={busy!==""}>{t(($) => $.actions.add_client)}</Button>
+            </form>
+            <FilterMenu
+              label={t(($) => $.filters.filter)}
+              clearLabel={t(($) => $.actions.clear_filters)}
+              onClear={() => { setClientStatuses([]); setCounterpartyClasses([]); }}
+              sections={[
+                { key: "status", label: t(($) => $.filters.status), options: CLIENT_STATUSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: clientStatuses, onToggle: (value) => setClientStatuses(toggleValue(clientStatuses, value)) },
+                { key: "class", label: t(($) => $.filters.classification), options: COUNTERPARTY_CLASSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: counterpartyClasses, onToggle: (value) => setCounterpartyClasses(toggleValue(counterpartyClasses, value)) },
+              ]}
+            />
+          </div>
+        </Toolbar>
+        <Section title={t(($) => $.sections.clients)}>
           <RowTable tt={tt} locale={locale} rows={filteredClients} columns={[{ key: "canonical_name" }, { key: "status", kind: "enum" }, { key: "primary_payment_channel", kind: "enum" }, { key: "notes" }]} empty={t(($) => $.empty)} />
         </Section>
         <Section title={t(($) => $.sections.payers)}>
           <RowTable tt={tt} locale={locale} rows={enrichedPayers} columns={[{ key: "client_name" }, { key: "name" }, { key: "inn" }, { key: "payment_channel", kind: "enum" }, { key: "status", kind: "enum" }]} empty={t(($) => $.empty)} />
         </Section>
-        <Section title={t(($) => $.sections.projects)} actions={<form className="grid gap-2 sm:grid-cols-5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));void execute("map",()=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:fd.get("workspace"),project_id:fd.get("project"),service_type:fd.get("service"),billable:true},"PUT"));}}>
-          <select required name="client" className={selectClass}>{(data.clients ?? []).map((row)=><option key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</option>)}</select><Input required name="workspace" placeholder={t(($)=>$.fields.workspace_id)}/><Input required name="project" placeholder={t(($)=>$.fields.project_id)}/><select name="service" className={selectClass}>{SERVICE_TYPES.map((value)=><option key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</option>)}</select><Button disabled={busy!==""}>{t(($)=>$.actions.map_project)}</Button>
+        <Section title={t(($) => $.sections.projects)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));void execute("map",()=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:fd.get("workspace"),project_id:fd.get("project"),service_type:fd.get("service"),billable:true},"PUT"));}}>
+          <NativeSelect size="sm" required name="client">{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>
+          <Input required name="workspace" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.workspace_id)}/>
+          <Input required name="project" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.project_id)}/>
+          <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_project)}</Button>
         </form>}><RowTable tt={tt} locale={locale} rows={data.projects ?? []} columns={[{ key: "client_name" }, { key: "project_title" }, { key: "workspace_name" }, { key: "service_type", kind: "enum" }, { key: "billable", kind: "bool" }]} empty={t(($)=>$.empty)}/></Section>
-        <Section title={t(($) => $.sections.counterparties)} actions={<FilterSelect label={t(($) => $.filters.classification)} value={counterpartyFilter} onChange={setCounterpartyFilter} options={["client_payer", "worker_payee", "vendor", "transit", "ignored", "unresolved"].map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) }))} allLabel={t(($) => $.filters.all)} />}>
+        <Section title={t(($) => $.sections.counterparties)}>
           <RowTable tt={tt} locale={locale} rows={filteredCounterparties} columns={[{ key: "name" }, { key: "inn" }, { key: "classification", kind: "enum" }, { key: "confidence", kind: "enum" }, { key: "reason" }]} empty={t(($) => $.empty)} />
         </Section>
       </div>}
 
-      {tab === "calendar" && calendarEnabled && <div className="space-y-8">
-        <Section title={t(($) => $.sections.agreements)} actions={<form className="grid gap-2 md:grid-cols-4" onSubmit={(event)=>{const fd=formData(event);void execute("agreement",()=>api.businessAction(businessID,"agreements",{client_id:fd.get("client"),service_type:fd.get("service"),agreement_key:fd.get("key"),version:1,name:fd.get("name"),model:"fixed",amount_rub:fd.get("amount"),due_days:7,period_months:1,payment_channel:"bank",effective_from:fd.get("date"),status:"active",is_estimate:false,needs_review:false,terms:{}}));}}>
-          <select required name="client" className={selectClass}>{(data.clients ?? []).map((row)=><option key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</option>)}</select><Input required name="name" placeholder={t(($)=>$.fields.name)}/><Input required name="key" placeholder={t(($)=>$.fields.agreement_key)}/><select name="service" className={selectClass}>{SERVICE_TYPES.map((value)=><option key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</option>)}</select><Input required name="amount" inputMode="decimal" placeholder={t(($)=>$.fields.amount)}/><Input required name="date" type="date"/><Button disabled={busy!==""}>{t(($)=>$.actions.add_agreement)}</Button>
+      {tab === "calendar" && calendarEnabled && <div className="space-y-6">
+        <Toolbar>
+          <div className="flex items-center gap-2">
+            <ResultCount shown={filteredReceivables.length} total={(data.receivables ?? []).length} />
+            <span className="text-xs tabular-nums text-muted-foreground">{t(($) => $.metrics.expected)}: <span className="font-medium text-foreground">{rub(receivableTotals.planned)}</span> · {t(($) => $.metrics.receivable_paid)}: <span className="font-medium text-foreground">{rub(receivableTotals.paid)}</span></span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("receivables",()=>api.businessAction(businessID,"receivables/generate",{from_month:fd.get("month"),months:Number(fd.get("months"))}));}}>
+              <Input name="month" type="month" defaultValue={month} className="h-8 w-auto text-sm"/>
+              <Input name="months" type="number" min="1" max="24" defaultValue="3" className="h-8 w-16 text-sm"/>
+              <Button size="sm" variant="outline" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.generate_receivables)}</Button>
+            </form>
+            <FilterMenu
+              label={t(($) => $.filters.filter)}
+              clearLabel={t(($) => $.actions.clear_filters)}
+              onClear={() => { setReceivableStatuses([]); setReceivableClients([]); setReceivableReviewOnly(false); setReceivableOverdueOnly(false); }}
+              sections={[
+                { key: "status", label: t(($) => $.filters.status), options: RECEIVABLE_STATUSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: receivableStatuses, onToggle: (value) => setReceivableStatuses(toggleValue(receivableStatuses, value)) },
+                { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: receivableClients, onToggle: (value) => setReceivableClients(toggleValue(receivableClients, value)) },
+              ]}
+              toggles={[
+                { key: "review", label: t(($) => $.filters.only_review), checked: receivableReviewOnly, onToggle: () => setReceivableReviewOnly(!receivableReviewOnly) },
+                { key: "overdue", label: t(($) => $.filters.only_overdue), checked: receivableOverdueOnly, onToggle: () => setReceivableOverdueOnly(!receivableOverdueOnly) },
+              ]}
+            />
+          </div>
+        </Toolbar>
+        <Section title={t(($)=>$.sections.receivables)}>
+          <RowTable tt={tt} locale={locale} rows={filteredReceivables} columns={[{ key: "period_key" }, { key: "client_name" }, { key: "project_title" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "invoice_on", kind: "date" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($)=>$.empty)}/>
+        </Section>
+        <Section title={t(($) => $.sections.agreements)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("agreement",()=>api.businessAction(businessID,"agreements",{client_id:fd.get("client"),service_type:fd.get("service"),agreement_key:fd.get("key"),version:1,name:fd.get("name"),model:"fixed",amount_rub:fd.get("amount"),due_days:7,period_months:1,payment_channel:"bank",effective_from:fd.get("date"),status:"active",is_estimate:false,needs_review:false,terms:{}}));}}>
+          <NativeSelect size="sm" required name="client">{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>
+          <Input required name="name" className="h-7 w-40 text-xs" placeholder={t(($)=>$.fields.name)}/>
+          <Input required name="key" className="h-7 w-32 text-xs" placeholder={t(($)=>$.fields.agreement_key)}/>
+          <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
+          <Input required name="amount" inputMode="decimal" className="h-7 w-24 text-xs" placeholder={t(($)=>$.fields.amount)}/>
+          <Input required name="date" type="date" className="h-7 w-auto text-xs"/>
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_agreement)}</Button>
         </form>}>
           <RowTable tt={tt} locale={locale} rows={data.agreements ?? []} columns={[{ key: "client_name" }, { key: "name" }, { key: "service_type", kind: "enum" }, { key: "model", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "hourly_rate_rub", kind: "money" }, { key: "cap_rub", kind: "money" }, { key: "invoice_day" }, { key: "status", kind: "enum" }, { key: "needs_review", kind: "bool" }]} empty={t(($) => $.empty)} />
         </Section>
-        <Section title={t(($)=>$.sections.receivables)} actions={<div className="flex flex-wrap items-center gap-3">
-          <FilterSelect label={t(($) => $.filters.status)} value={receivableStatusFilter} onChange={setReceivableStatusFilter} options={["expected", "invoiced", "partially_paid", "paid", "skipped", "written_off"].map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) }))} allLabel={t(($) => $.filters.all)} />
-          <FilterSelect label={t(($) => $.filters.client)} value={receivableClientFilter} onChange={setReceivableClientFilter} options={clientOptions} allLabel={t(($) => $.filters.all)} />
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={receivableReviewOnly} onChange={(event) => setReceivableReviewOnly(event.target.checked)} />{t(($) => $.filters.only_review)}</label>
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground"><input type="checkbox" checked={receivableOverdueOnly} onChange={(event) => setReceivableOverdueOnly(event.target.checked)} />{t(($) => $.filters.only_overdue)}</label>
-          <form className="flex flex-wrap gap-2" onSubmit={(event)=>{const fd=formData(event);void execute("receivables",()=>api.businessAction(businessID,"receivables/generate",{from_month:fd.get("month"),months:Number(fd.get("months"))}));}}><Input name="month" type="month" defaultValue={month} className="w-auto"/><Input name="months" type="number" min="1" max="24" defaultValue="3" className="w-20"/><Button disabled={busy!==""}>{t(($)=>$.actions.generate_receivables)}</Button></form>
-        </div>}>
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">{t(($) => $.filters.rows)}: {filteredReceivables.length} · {t(($) => $.metrics.expected)}: {rub(receivableTotals.planned)} · {t(($) => $.metrics.receivable_paid)}: {rub(receivableTotals.paid)}</div>
-            <RowTable tt={tt} locale={locale} rows={filteredReceivables} columns={[{ key: "period_key" }, { key: "client_name" }, { key: "project_title" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "invoice_on", kind: "date" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($)=>$.empty)}/>
+      </div>}
+
+      {tab === "bank" && bankEnabled && <div className="space-y-6">
+        <Toolbar>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input value={txSearch} onChange={(event) => setTxSearch(event.target.value)} placeholder={t(($) => $.filters.search)} className="h-8 w-56 pl-8 text-sm" />
+            </div>
+            <ResultCount shown={filteredTransactions.length} total={(data.transactions ?? []).length} />
+            <span className="hidden text-xs tabular-nums text-muted-foreground lg:inline">{t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span> · {t(($) => $.values.outbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.outbound)}</span></span>
           </div>
+          <FilterMenu
+            label={t(($) => $.filters.filter)}
+            clearLabel={t(($) => $.actions.clear_filters)}
+            onClear={() => { setTxClasses([]); setTxDirections([]); }}
+            sections={[
+              { key: "class", label: t(($) => $.filters.classification), options: CLASSIFICATIONS.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: txClasses, onToggle: (value) => setTxClasses(toggleValue(txClasses, value)) },
+              { key: "direction", label: t(($) => $.filters.direction), options: [{ value: "inbound", label: t(($) => $.values.inbound) }, { value: "outbound", label: t(($) => $.values.outbound) }], selected: txDirections, onToggle: (value) => setTxDirections(toggleValue(txDirections, value)) },
+            ]}
+          />
+        </Toolbar>
+        <Section title={t(($)=>$.sections.transactions)}>
+          <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
+            extra={{ header: t(($) => $.actions.classify), render: (row) => (
+              <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); void execute(`classify-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/classify`, { classification: fd.get("cls"), confidence: "confirmed", reason: "manual reclassification" })); }}>
+                <NativeSelect size="sm" name="cls" defaultValue={String(row.classification ?? "unknown")}>{CLASSIFICATIONS.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
+                <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+              </form>
+            ) }} />
+        </Section>
+        <Section title={t(($)=>$.actions.import_statement)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const file=fd.get("file");if(file instanceof File)void execute("bank",()=>api.importBusinessBankFile(businessID,file));}}>
+          <Input required name="file" type="file" accept=".csv,.xlsx" className="h-8 w-64 text-xs"/>
+          <Button size="sm" variant="outline" className="h-8" disabled={busy!==""}><Upload aria-hidden="true" className="size-3.5"/>{t(($)=>$.actions.import_statement)}</Button>
+        </form>}>
+          <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("transaction",()=>api.businessAction(businessID,"bank/transactions",{booked_on:fd.get("date"),direction:fd.get("direction"),amount_rub:fd.get("amount"),counterparty_name:fd.get("counterparty"),purpose:fd.get("purpose"),classification:"unknown",idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}>
+            <Input required name="date" type="date" className="h-7 w-auto text-xs"/>
+            <NativeSelect size="sm" name="direction"><NativeSelectOption value="inbound">{t(($)=>$.values.inbound)}</NativeSelectOption><NativeSelectOption value="outbound">{t(($)=>$.values.outbound)}</NativeSelectOption></NativeSelect>
+            <Input required name="amount" className="h-7 w-24 text-xs" placeholder={t(($)=>$.fields.amount)}/>
+            <Input required name="counterparty" className="h-7 w-44 text-xs" placeholder={t(($)=>$.fields.counterparty)}/>
+            <Input name="purpose" className="h-7 w-44 text-xs" placeholder={t(($)=>$.fields.purpose)}/>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_transaction)}</Button>
+          </form>
         </Section>
       </div>}
 
-      {tab === "bank" && bankEnabled && <div className="space-y-8">
-        <Section title={t(($)=>$.actions.import_statement)}><form className="flex flex-wrap items-end gap-2" onSubmit={(event)=>{const fd=formData(event);const file=fd.get("file");if(file instanceof File)void execute("bank",()=>api.importBusinessBankFile(businessID,file));}}><label className="grid gap-1 text-xs text-muted-foreground">{t(($)=>$.fields.file)}<Input required name="file" type="file" accept=".csv,.xlsx"/></label><Button disabled={busy!==""}><Upload aria-hidden="true"/>{t(($)=>$.actions.import_statement)}</Button></form></Section>
-        <Section title={t(($)=>$.actions.add_transaction)}><form className="grid gap-2 md:grid-cols-4" onSubmit={(event)=>{const fd=formData(event);void execute("transaction",()=>api.businessAction(businessID,"bank/transactions",{booked_on:fd.get("date"),direction:fd.get("direction"),amount_rub:fd.get("amount"),counterparty_name:fd.get("counterparty"),purpose:fd.get("purpose"),classification:"unknown",idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}><Input required name="date" type="date"/><select name="direction" className={selectClass}><option value="inbound">{t(($)=>$.values.inbound)}</option><option value="outbound">{t(($)=>$.values.outbound)}</option></select><Input required name="amount" placeholder={t(($)=>$.fields.amount)}/><Input required name="counterparty" placeholder={t(($)=>$.fields.counterparty)}/><Input name="purpose" placeholder={t(($)=>$.fields.purpose)}/><Button disabled={busy!==""}>{t(($)=>$.actions.add_transaction)}</Button></form></Section>
-        <Section title={t(($)=>$.sections.transactions)} actions={<div className="flex flex-wrap items-center gap-3">
-          <FilterSelect label={t(($) => $.filters.classification)} value={txClassFilter} onChange={setTxClassFilter} options={CLASSIFICATIONS.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) }))} allLabel={t(($) => $.filters.all)} />
-          <FilterSelect label={t(($) => $.filters.direction)} value={txDirectionFilter} onChange={setTxDirectionFilter} options={[{ value: "inbound", label: t(($) => $.values.inbound) }, { value: "outbound", label: t(($) => $.values.outbound) }]} allLabel={t(($) => $.filters.all)} />
-          <Input value={txSearch} onChange={(event) => setTxSearch(event.target.value)} className="w-56" placeholder={t(($) => $.filters.search)} />
-        </div>}>
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">{filterRows} · {t(($) => $.values.inbound)}: {rub(transactionTotals.inbound)} · {t(($) => $.values.outbound)}: {rub(transactionTotals.outbound)}</div>
-            <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
-              extra={{ header: t(($) => $.actions.classify), render: (row) => (
-                <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); void execute(`classify-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/classify`, { classification: fd.get("cls"), confidence: "confirmed", reason: "manual reclassification" })); }}>
-                  <select name="cls" className={selectClass} defaultValue={String(row.classification ?? "unknown")}>{CLASSIFICATIONS.map((value) => <option key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</option>)}</select>
-                  <Button size="sm" variant="outline" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
-                </form>
-              ) }} />
-          </div>
-        </Section>
-      </div>}
-
-      {tab === "team" && economicsEnabled && <div className="space-y-8">
-        <Section title={t(($)=>$.sections.workers)} actions={<form className="flex flex-wrap gap-2" onSubmit={(event)=>{const fd=formData(event);void execute("worker",()=>api.businessAction(businessID,"workers",{name:fd.get("name"),engagement_format:"self_employed"}));event.currentTarget.reset();}}><Input required name="name" className="w-52" placeholder={t(($)=>$.fields.name)}/><Button disabled={busy!==""}>{t(($)=>$.actions.add_worker)}</Button></form>}>
-          <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">{t(($) => $.team.rate_hint)}</div>
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-muted/60 text-xs text-muted-foreground"><tr>
-                  <th className="px-3 py-2 font-medium">{tt("columns.name", { defaultValue: "name" })}</th>
-                  <th className="px-3 py-2 font-medium">{tt("columns.status", { defaultValue: "status" })}</th>
-                  <th className="px-3 py-2 font-medium">{tt("columns.engagement_format", { defaultValue: "format" })}</th>
-                  <th className="px-3 py-2 font-medium">{t(($) => $.team.default_rate)}</th>
-                </tr></thead>
-                <tbody>
+      {tab === "team" && economicsEnabled && <div className="space-y-6">
+        <Section title={t(($)=>$.sections.workers)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("worker",()=>api.businessAction(businessID,"workers",{name:fd.get("name"),engagement_format:"self_employed"}));event.currentTarget.reset();}}><Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($)=>$.fields.name)}/><Button size="sm" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.add_worker)}</Button></form>}>
+          <div className="space-y-1.5">
+            <div className="text-[11px] text-muted-foreground">{t(($) => $.team.rate_hint)}</div>
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="h-8 text-xs font-medium text-muted-foreground">{tt("columns.name", { defaultValue: "name" })}</TableHead>
+                    <TableHead className="h-8 text-xs font-medium text-muted-foreground">{tt("columns.status", { defaultValue: "status" })}</TableHead>
+                    <TableHead className="h-8 text-xs font-medium text-muted-foreground">{tt("columns.engagement_format", { defaultValue: "format" })}</TableHead>
+                    <TableHead className="h-8 text-xs font-medium text-muted-foreground">{t(($) => $.team.default_rate)}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {(data.workers ?? []).map((row) => {
                     const id = String(row.id);
                     return (
-                      <tr key={id} className="border-t align-middle">
-                        <td className="px-3 py-2">{text(row, "name")}</td>
-                        <td className="px-3 py-2">{tt(`values.${String(row.status)}`, { defaultValue: String(row.status) })}</td>
-                        <td className="px-3 py-2">{tt(`values.${String(row.engagement_format)}`, { defaultValue: String(row.engagement_format) })}</td>
-                        <td className="px-3 py-2">
+                      <TableRow key={id}>
+                        <TableCell className="py-1.5 text-xs font-medium">{text(row, "name")}</TableCell>
+                        <TableCell className="py-1.5 text-xs"><StatusPill value={String(row.status)} label={tt(`values.${String(row.status)}`, { defaultValue: String(row.status) })} /></TableCell>
+                        <TableCell className="py-1.5 text-xs"><StatusPill value={String(row.engagement_format)} label={tt(`values.${String(row.engagement_format)}`, { defaultValue: String(row.engagement_format) })} /></TableCell>
+                        <TableCell className="py-1 text-xs">
                           <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void execute(`rate-${id}`, () => api.businessAction(businessID, `workers/${id}`, { default_role: fd.get("role"), default_percent: fd.get("percent") }, "PATCH")); }}>
-                            <select name="role" className={selectClass} defaultValue={String(row.default_role ?? "")}>
-                              <option value="">{t(($) => $.team.no_rate)}</option>
-                              {WORKER_ROLES.map((value) => <option key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</option>)}
-                            </select>
-                            <Input name="percent" inputMode="decimal" className="w-20" defaultValue={row.default_percent ? String(Number(row.default_percent)) : ""} placeholder="%" />
-                            <Button size="sm" variant="outline" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                            <NativeSelect size="sm" name="role" defaultValue={String(row.default_role ?? "")}>
+                              <NativeSelectOption value="">{t(($) => $.team.no_rate)}</NativeSelectOption>
+                              {WORKER_ROLES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
+                            </NativeSelect>
+                            <Input name="percent" inputMode="decimal" className="h-7 w-16 text-xs" defaultValue={row.default_percent ? String(Number(row.default_percent)) : ""} placeholder="%" />
+                            <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                           </form>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                  {(data.workers ?? []).length === 0 && <tr><td colSpan={4} className="p-8 text-center text-sm text-muted-foreground">{t(($) => $.empty)}</td></tr>}
-                </tbody>
-              </table>
+                  {(data.workers ?? []).length === 0 && <TableRow><TableCell colSpan={4} className="p-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>}
+                </TableBody>
+              </Table>
             </div>
           </div>
         </Section>
@@ -525,22 +755,33 @@ export function BusinessPage() {
         </Section>
       </div>}
 
-      {tab === "economics" && economicsEnabled && <div className="space-y-8">
-        <Section title={t(($)=>$.actions.draft_economics)}><form className="grid gap-2 md:grid-cols-4" onSubmit={(event)=>{const fd=formData(event);void execute("economics",()=>api.businessAction(businessID,"task-economics",{workspace_id:fd.get("workspace"),project_id:fd.get("project"),issue_id:fd.get("issue"),client_id:fd.get("client")||null,service_type:fd.get("service"),service_value_rub:fd.get("amount"),source:"manual_override",billing_disposition:"normal",idempotency_key:crypto.randomUUID(),participants:[{worker_id:fd.get("worker"),role:fd.get("role"),pool:fd.get("role")==="pm"?"pm":"execution",percent:fd.get("percent")}] }));}}>
-          <Input required name="workspace" placeholder={t(($)=>$.fields.workspace_id)}/><Input required name="project" placeholder={t(($)=>$.fields.project_id)}/><Input required name="issue" placeholder={t(($)=>$.fields.issue_id)}/><select name="client" className={selectClass}><option value="">—</option>{(data.clients ?? []).map((row)=><option key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</option>)}</select><select name="service" className={selectClass}>{SERVICE_TYPES.map((value)=><option key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</option>)}</select><Input required name="amount" placeholder={t(($)=>$.fields.amount)}/><select required name="worker" className={selectClass} value={econWorker || String(econWorkerRow?.id ?? "")} onChange={(event) => setEconWorker(event.target.value)}>{(data.workers ?? []).map((row)=><option key={text(row,"id")} value={text(row,"id")}>{text(row,"name")}</option>)}</select><select key={`role-${String(econWorkerRow?.id ?? "")}`} name="role" className={selectClass} defaultValue={String(econWorkerRow?.default_role ?? "executor")}>{WORKER_ROLES.map((value)=><option key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</option>)}</select><Input key={`pct-${String(econWorkerRow?.id ?? "")}`} required name="percent" defaultValue={econWorkerRow?.default_percent ? String(Number(econWorkerRow.default_percent)) : ""} placeholder={t(($)=>$.fields.percent)}/><Button disabled={busy!==""}>{t(($)=>$.actions.draft_economics)}</Button>
-        </form></Section>
-        <Section title={t(($)=>$.sections.tasks)}><div className="space-y-2"><RowTable tt={tt} locale={locale} rows={data.task_economics ?? []} columns={[{ key: "issue_title" }, { key: "project_title" }, { key: "client_name" }, { key: "service_type", kind: "enum" }, { key: "service_value_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "pm_eligible", kind: "bool" }, { key: "accepted_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/>{acceptEnabled&&accrualsEnabled&&(data.task_economics ?? []).filter((row)=>text(row,"status")==="draft").map((row)=><Button type="button" variant="outline" key={text(row,"id")} disabled={busy!==""} onClick={()=>void execute("accept",()=>api.businessAction(businessID,`task-economics/${text(row,"id")}/accept`,{reason:"owner acceptance"}))}>{t(($)=>$.actions.accept)} · {text(row,"issue_title") !== "—" ? text(row,"issue_title") : text(row,"issue_id")}</Button>)}</div></Section>
+      {tab === "economics" && economicsEnabled && <div className="space-y-6">
+        <Section title={t(($)=>$.actions.draft_economics)}>
+          <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("economics",()=>api.businessAction(businessID,"task-economics",{workspace_id:fd.get("workspace"),project_id:fd.get("project"),issue_id:fd.get("issue"),client_id:fd.get("client")||null,service_type:fd.get("service"),service_value_rub:fd.get("amount"),source:"manual_override",billing_disposition:"normal",idempotency_key:crypto.randomUUID(),participants:[{worker_id:fd.get("worker"),role:fd.get("role"),pool:fd.get("role")==="pm"?"pm":"execution",percent:fd.get("percent")}] }));}}>
+            <Input required name="workspace" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.workspace_id)}/>
+            <Input required name="project" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.project_id)}/>
+            <Input required name="issue" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.issue_id)}/>
+            <NativeSelect size="sm" name="client"><NativeSelectOption value="">—</NativeSelectOption>{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>
+            <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
+            <Input required name="amount" className="h-7 w-24 text-xs" placeholder={t(($)=>$.fields.amount)}/>
+            <NativeSelect size="sm" required name="worker" value={econWorker || String(econWorkerRow?.id ?? "")} onChange={(event) => setEconWorker(event.target.value)}>{(data.workers ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"name")}</NativeSelectOption>)}</NativeSelect>
+            <NativeSelect size="sm" key={`role-${String(econWorkerRow?.id ?? "")}`} name="role" defaultValue={String(econWorkerRow?.default_role ?? "executor")}>{WORKER_ROLES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
+            <Input key={`pct-${String(econWorkerRow?.id ?? "")}`} required name="percent" className="h-7 w-16 text-xs" defaultValue={econWorkerRow?.default_percent ? String(Number(econWorkerRow.default_percent)) : ""} placeholder={t(($)=>$.fields.percent)}/>
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.draft_economics)}</Button>
+          </form>
+        </Section>
+        <Section title={t(($)=>$.sections.tasks)}><div className="space-y-2"><RowTable tt={tt} locale={locale} rows={data.task_economics ?? []} columns={[{ key: "issue_title" }, { key: "project_title" }, { key: "client_name" }, { key: "service_type", kind: "enum" }, { key: "service_value_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "pm_eligible", kind: "bool" }, { key: "accepted_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-1.5">{acceptEnabled&&accrualsEnabled&&(data.task_economics ?? []).filter((row)=>text(row,"status")==="draft").map((row)=><Button type="button" variant="outline" size="sm" className="h-7 text-xs" key={text(row,"id")} disabled={busy!==""} onClick={()=>void execute("accept",()=>api.businessAction(businessID,`task-economics/${text(row,"id")}/accept`,{reason:"owner acceptance"}))}>{t(($)=>$.actions.accept)} · {text(row,"issue_title") !== "—" ? text(row,"issue_title") : text(row,"issue_id")}</Button>)}</div></div></Section>
       </div>}
 
-      {tab === "accruals" && accrualsEnabled && <div className="space-y-8">
+      {tab === "accruals" && accrualsEnabled && <div className="space-y-6">
         <Section title={t(($)=>$.sections.accruals)}><RowTable tt={tt} locale={locale} rows={data.accruals ?? []} columns={[{ key: "worker_name" }, { key: "role", kind: "enum" }, { key: "original_amount_rub", kind: "money" }, { key: "adjustment_rub", kind: "money" }, { key: "funded_rub", kind: "money" }, { key: "reserve_funded_rub", kind: "money" }, { key: "paid_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "reserve_due_on", kind: "date" }]} empty={t(($)=>$.empty)}/></Section>
-        <Section title={t(($)=>$.sections.reserve)} actions={<form className="flex flex-wrap gap-2" onSubmit={(event)=>{const fd=formData(event);void execute("reserve",()=>api.businessAction(businessID,"reserve/entries",{entry_type:"contribution",amount_rub:fd.get("amount"),reason:fd.get("reason"),idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}><Input required name="amount" className="w-32" placeholder={t(($)=>$.fields.amount)}/><Input required name="reason" className="w-64" placeholder={t(($)=>$.fields.reason)}/><Button disabled={busy!==""}>{t(($)=>$.actions.add_reserve)}</Button></form>}><RowTable tt={tt} locale={locale} rows={data.reserve_ledger ?? []} columns={[{ key: "occurred_at", kind: "datetime" }, { key: "entry_type", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "reason" }]} empty={t(($)=>$.empty)}/></Section>
+        <Section title={t(($)=>$.sections.reserve)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("reserve",()=>api.businessAction(businessID,"reserve/entries",{entry_type:"contribution",amount_rub:fd.get("amount"),reason:fd.get("reason"),idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}><Input required name="amount" className="h-7 w-28 text-xs" placeholder={t(($)=>$.fields.amount)}/><Input required name="reason" className="h-7 w-56 text-xs" placeholder={t(($)=>$.fields.reason)}/><Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_reserve)}</Button></form>}><RowTable tt={tt} locale={locale} rows={data.reserve_ledger ?? []} columns={[{ key: "occurred_at", kind: "datetime" }, { key: "entry_type", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "reason" }]} empty={t(($)=>$.empty)}/></Section>
       </div>}
 
-      {tab === "payouts" && payoutsEnabled && <div className="space-y-8">
-        <div className="rounded-lg border p-3 text-sm text-muted-foreground">{t(($)=>$.bank_draft_note)}</div>
-        <Section title={t(($)=>$.sections.payouts)} actions={<form className="flex flex-wrap gap-2" onSubmit={(event)=>{const fd=formData(event);void execute("payout",()=>api.businessAction(businessID,"payouts",{period_key:fd.get("period"),idempotency_key:`payout:${String(fd.get("period"))}`}));}}><Input required name="period" type="month" defaultValue={month} className="w-auto"/><Button disabled={busy!==""}>{t(($)=>$.actions.build_payout)}</Button></form>}>
-          <div className="space-y-3"><RowTable tt={tt} locale={locale} rows={data.payout_batches ?? []} columns={[{ key: "period_key" }, { key: "status", kind: "enum" }, { key: "total_rub", kind: "money" }, { key: "worker_count" }, { key: "approved_at", kind: "datetime" }, { key: "submitted_at", kind: "datetime" }, { key: "paid_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-2">{(data.payout_batches ?? []).map((row)=>{const status=text(row,"status"),id=text(row,"id");return <div key={id} className="flex gap-1">{status==="draft"&&<Button type="button" variant="outline" disabled={busy!==""} onClick={()=>void execute("approve",()=>api.businessAction(businessID,`payouts/${id}/approve`))}>{t(($)=>$.actions.approve)} · {text(row,"period_key")}</Button>}{status==="approved"&&bankDraftsEnabled&&<Button type="button" variant="outline" disabled={busy!==""} onClick={()=>void execute("submit",()=>api.businessAction(businessID,`payouts/${id}/submit-draft`))}>{t(($)=>$.actions.submit_draft)} · {text(row,"period_key")}</Button>}</div>})}</div></div>
+      {tab === "payouts" && payoutsEnabled && <div className="space-y-6">
+        <div className="rounded-lg border p-3 text-xs text-muted-foreground">{t(($)=>$.bank_draft_note)}</div>
+        <Section title={t(($)=>$.sections.payouts)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("payout",()=>api.businessAction(businessID,"payouts",{period_key:fd.get("period"),idempotency_key:`payout:${String(fd.get("period"))}`}));}}><Input required name="period" type="month" defaultValue={month} className="h-8 w-auto text-sm"/><Button size="sm" variant="outline" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.build_payout)}</Button></form>}>
+          <div className="space-y-2"><RowTable tt={tt} locale={locale} rows={data.payout_batches ?? []} columns={[{ key: "period_key" }, { key: "status", kind: "enum" }, { key: "total_rub", kind: "money" }, { key: "worker_count" }, { key: "approved_at", kind: "datetime" }, { key: "submitted_at", kind: "datetime" }, { key: "paid_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-1.5">{(data.payout_batches ?? []).map((row)=>{const status=text(row,"status"),id=text(row,"id");return <div key={id} className="flex gap-1">{status==="draft"&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("approve",()=>api.businessAction(businessID,`payouts/${id}/approve`))}>{t(($)=>$.actions.approve)} · {text(row,"period_key")}</Button>}{status==="approved"&&bankDraftsEnabled&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("submit",()=>api.businessAction(businessID,`payouts/${id}/submit-draft`))}>{t(($)=>$.actions.submit_draft)} · {text(row,"period_key")}</Button>}</div>})}</div></div>
         </Section>
         <Section title={t(($) => $.sections.payout_items)}>
           <RowTable tt={tt} locale={locale} rows={enrichedPayoutItems} columns={[{ key: "worker_name" }, { key: "period_key" }, { key: "amount_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "external_operation_id" }]} empty={t(($) => $.empty)} />

@@ -79,6 +79,7 @@
     "clear_filters": "필터 초기화"
   },
   "filters": {
+    "filter": "필터",
     "client": "고객",
     "project": "프로젝트",
     "service": "서비스 유형",

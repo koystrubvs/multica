@@ -79,6 +79,7 @@
     "clear_filters": "フィルターをクリア"
   },
   "filters": {
+    "filter": "フィルター",
     "client": "顧客",
     "project": "プロジェクト",
     "service": "サービスタイプ",

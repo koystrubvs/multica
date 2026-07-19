@@ -79,6 +79,7 @@
     "clear_filters": "Сбросить фильтры"
   },
   "filters": {
+    "filter": "Фильтр",
     "client": "Клиент",
     "project": "Проект",
     "service": "Тип услуги",

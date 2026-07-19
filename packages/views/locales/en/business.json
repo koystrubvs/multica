@@ -79,6 +79,7 @@
     "clear_filters": "Clear filters"
   },
   "filters": {
+    "filter": "Filter",
     "client": "Client",
     "project": "Project",
     "service": "Service type",
