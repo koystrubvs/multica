@@ -68,7 +68,21 @@
     "percent": "Percent",
     "period": "Period",
     "reason": "Reason",
+    "agreement_key": "Agreement key",
     "file": "CSV or XLSX statement"
+  },
+  "values": {
+    "vitmax": "VitMax",
+    "transfers": "Transfers",
+    "development": "Development",
+    "support": "Support",
+    "seo": "SEO",
+    "content": "Content",
+    "inbound": "Inbound",
+    "outbound": "Outbound",
+    "executor": "Executor",
+    "pm": "PM",
+    "reviewer": "Reviewer"
   },
   "empty": "No records yet",
   "success": "Saved",

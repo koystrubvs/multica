@@ -68,7 +68,21 @@
     "percent": "Процент",
     "period": "Период",
     "reason": "Причина",
+    "agreement_key": "Ключ договорённости",
     "file": "Выписка CSV или XLSX"
+  },
+  "values": {
+    "vitmax": "VitMax",
+    "transfers": "Переводы",
+    "development": "Разработка",
+    "support": "Поддержка",
+    "seo": "SEO",
+    "content": "Контент",
+    "inbound": "Входящая",
+    "outbound": "Исходящая",
+    "executor": "Исполнитель",
+    "pm": "PM",
+    "reviewer": "Проверяющий"
   },
   "empty": "Записей пока нет",
   "success": "Сохранено",

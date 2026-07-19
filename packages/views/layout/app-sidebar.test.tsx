@@ -3,12 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@multica/core/api";
 import { AppSidebar } from "./app-sidebar";
 
-const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, navigation, pins, summary, workspaces } = vi.hoisted(() => ({
+const { appForeground, chatSessions, chatStore, detail, deletePin, featureFlags, inboxItems, navigation, pins, summary, workspaces } = vi.hoisted(() => ({
   appForeground: { current: true },
   chatSessions: { current: [] as { id?: string; unread_count?: number }[] },
   chatStore: { current: { activeSessionId: null as string | null, isOpen: false } },
   detail: { current: { isPending: false, isError: false, data: null as unknown, error: null as unknown } },
   deletePin: vi.fn(),
+  featureFlags: {
+    current: {
+      business_control_plane: true,
+      business_dashboard: true,
+    } as Record<string, boolean>,
+  },
   inboxItems: { current: [] as { id: string; read: boolean }[] },
   navigation: { current: { pathname: "/acme/issues" } },
   summary: { current: [] as { workspace_id: string; count: number }[] },
@@ -104,6 +110,10 @@ vi.mock("@multica/ui/components/common/actor-avatar", () => ({ ActorAvatar: () =
 vi.mock("@multica/core/auth", () => ({
   useAuthStore: (selector: (state: { user: { id: string } }) => unknown) => selector({ user: { id: "user-1" } }),
 }));
+vi.mock("@multica/core/config", () => ({
+  useConfigStore: (selector: (state: { featureFlags: Record<string, boolean>; workspaceCreationDisabled: boolean }) => unknown) =>
+    selector({ featureFlags: featureFlags.current, workspaceCreationDisabled: false }),
+}));
 // Callable-store shape (selectorFn + getState) per the repo testing rules.
 vi.mock("@multica/core/chat", () => ({
   useChatStore: Object.assign(
@@ -121,6 +131,7 @@ vi.mock("@multica/core/paths", () => ({
     myIssues: () => "/acme/my-issues",
     issues: () => "/acme/issues",
     projects: () => "/acme/projects",
+    business: () => "/acme/business",
     autopilots: () => "/acme/autopilots",
     agents: () => "/acme/agents",
     squads: () => "/acme/squads",
@@ -391,5 +402,38 @@ describe("personal nav — Chat", () => {
     appForeground.current = false;
     const { container } = render(<AppSidebar />);
     expect(chatBadge(container)).toHaveAttribute("aria-label", "5");
+  });
+});
+
+describe("business navigation", () => {
+  beforeEach(() => {
+    featureFlags.current = {
+      business_control_plane: true,
+      business_dashboard: true,
+    };
+    navigation.current = { pathname: "/acme/issues" };
+  });
+
+  it("shows Business immediately after Projects when the feature is enabled", () => {
+    const { container } = render(<AppSidebar />);
+    const destinations = Array.from(
+      container.querySelectorAll<HTMLElement>("button[data-href]"),
+    ).map((button) => button.dataset.href);
+
+    const projectsIndex = destinations.indexOf("/acme/projects");
+    expect(projectsIndex).toBeGreaterThanOrEqual(0);
+    expect(destinations[projectsIndex + 1]).toBe("/acme/business");
+  });
+
+  it("keeps Business hidden when the production feature is disabled", () => {
+    featureFlags.current = {
+      business_control_plane: true,
+      business_dashboard: false,
+    };
+    const { container } = render(<AppSidebar />);
+
+    expect(
+      container.querySelector('button[data-href="/acme/business"]'),
+    ).toBeNull();
   });
 });
