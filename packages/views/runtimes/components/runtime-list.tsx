@@ -68,7 +68,7 @@ import {
   isPendingCustomRuntimeWarning,
   pendingRuntimeCommandName,
 } from "./pending-runtime";
-import { useT, useTimeAgo } from "../../i18n";
+import { useT } from "../../i18n";
 
 // The machine detail's runtimes table on the shared ListGrid. Paradigm
 // pieces are taken À LA CARTE here: subgrid template + var-width tracks +

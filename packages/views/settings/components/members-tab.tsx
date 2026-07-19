@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Users, Clock, X, Mail, Eye, FolderGit2 } from "lucide-react";
+import { Crown, Shield, User, Plus, MoreHorizontal, UserMinus, Clock, X, Mail, Eye, FolderGit2 } from "lucide-react";
 import { ActorAvatar } from "../../common/actor-avatar";
 import type { MemberWithUser, MemberRole, Invitation } from "@multica/core/types";
 import { Input } from "@multica/ui/components/ui/input";

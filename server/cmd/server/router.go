@@ -902,6 +902,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Group(func(r chi.Router) {
 						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessTaskEconomicsShadow))
 						r.Post("/workers", h.CreateBusinessWorker)
+						r.Patch("/workers/{workerId}", h.UpdateBusinessWorker)
 						r.Post("/client-requests", h.CreateBusinessClientRequest)
 						r.Post("/task-economics", h.CreateBusinessTaskEconomics)
 					})

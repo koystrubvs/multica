@@ -46,7 +46,7 @@ import { ProviderLogo } from "./provider-logo";
 import { UsageSection } from "./usage-section";
 import { DeleteRuntimeDialog } from "./delete-runtime-dialog";
 import { DeleteRuntimeProfileDialog } from "./delete-runtime-profile-dialog";
-import { useT, useTimeAgo } from "../../i18n";
+import { useT } from "../../i18n";
 
 function getCliVersion(metadata: Record<string, unknown>): string | null {
   if (
@@ -91,7 +91,6 @@ export function RuntimeDetail({
   afterDeleteHref?: string;
 }) {
   const { t } = useT("runtimes");
-  const timeAgo = useTimeAgo();
   const cliVersion =
     runtime.runtime_mode === "local" ? getCliVersion(runtime.metadata) : null;
   const user = useAuthStore((s) => s.user);

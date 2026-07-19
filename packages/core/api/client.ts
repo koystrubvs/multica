@@ -3049,9 +3049,16 @@ export class ApiClient {
     return this.fetch(`/api/businesses/`);
   }
 
-  async getBusinessDashboard(businessId: string, month: string): Promise<BusinessDashboard> {
+  async getBusinessDashboard(
+    businessId: string,
+    month: string,
+    filters?: { workspace_id?: string; client_id?: string; project_id?: string; service_type?: string },
+  ): Promise<BusinessDashboard> {
     const search = new URLSearchParams();
     if (month) search.set("month", month);
+    for (const [key, value] of Object.entries(filters ?? {})) {
+      if (value) search.set(key, value);
+    }
     return this.fetch(`/api/businesses/${businessId}/dashboard?${search.toString()}`);
   }
 

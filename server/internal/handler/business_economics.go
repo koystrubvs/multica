@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,6 +80,131 @@ func (h *Handler) CreateBusinessWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+var businessWorkerRoles = []string{"pm", "executor", "reviewer", "seo", "content", "copywriter", "designer", "domain_reviewer"}
+
+type updateBusinessWorkerRequest struct {
+	Name                *string `json:"name"`
+	Status              *string `json:"status"`
+	EngagementFormat    *string `json:"engagement_format"`
+	RecipientExternalID *string `json:"recipient_external_id"`
+	RecipientMask       *string `json:"recipient_mask"`
+	Notes               *string `json:"notes"`
+	DefaultRole         *string `json:"default_role"`
+	DefaultPercent      *string `json:"default_percent"`
+}
+
+func (h *Handler) UpdateBusinessWorker(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	workerIDRaw := chi.URLParam(r, "workerId")
+	workerID, valid := parseUUIDOrBadRequest(w, workerIDRaw, "worker_id")
+	if !valid {
+		return
+	}
+	var request updateBusinessWorkerRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if request.Name != nil && strings.TrimSpace(*request.Name) == "" {
+		writeError(w, http.StatusBadRequest, "name must not be empty")
+		return
+	}
+	if request.Status != nil && !containsBusinessString([]string{"active", "inactive"}, *request.Status) {
+		writeError(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+	if request.EngagementFormat != nil && !containsBusinessString([]string{"employee", "self_employed", "individual_contractor", "vendor_person"}, *request.EngagementFormat) {
+		writeError(w, http.StatusBadRequest, "invalid engagement_format")
+		return
+	}
+	if request.DefaultRole != nil && strings.TrimSpace(*request.DefaultRole) != "" && !containsBusinessString(businessWorkerRoles, strings.TrimSpace(*request.DefaultRole)) {
+		writeError(w, http.StatusBadRequest, "invalid default_role")
+		return
+	}
+	if request.DefaultPercent != nil && strings.TrimSpace(*request.DefaultPercent) != "" {
+		percent, err := strconv.ParseFloat(strings.TrimSpace(*request.DefaultPercent), 64)
+		if err != nil || percent < 0 || percent > 100 {
+			writeError(w, http.StatusBadRequest, "default_percent must be between 0 and 100")
+			return
+		}
+	}
+
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update worker")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	var (
+		name, status, engagement                                       string
+		recipientExternal, recipientMask, notes, defRole, defPercent   *string
+	)
+	err = tx.QueryRow(r.Context(), `
+		SELECT name, status, engagement_format, recipient_external_id, recipient_mask, notes, default_role, default_percent::text
+		FROM business_worker WHERE business_id = $1 AND id = $2 FOR UPDATE
+	`, businessID, workerID).Scan(&name, &status, &engagement, &recipientExternal, &recipientMask, &notes, &defRole, &defPercent)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "worker not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update worker")
+		return
+	}
+
+	if request.Name != nil {
+		name = strings.TrimSpace(*request.Name)
+	}
+	if request.Status != nil {
+		status = *request.Status
+	}
+	if request.EngagementFormat != nil {
+		engagement = *request.EngagementFormat
+	}
+	mergeNullable := func(current *string, incoming *string) *string {
+		if incoming == nil {
+			return current
+		}
+		trimmed := strings.TrimSpace(*incoming)
+		if trimmed == "" {
+			return nil
+		}
+		return &trimmed
+	}
+	recipientExternal = mergeNullable(recipientExternal, request.RecipientExternalID)
+	recipientMask = mergeNullable(recipientMask, request.RecipientMask)
+	notes = mergeNullable(notes, request.Notes)
+	defRole = mergeNullable(defRole, request.DefaultRole)
+	defPercent = mergeNullable(defPercent, request.DefaultPercent)
+	if defRole == nil && defPercent != nil {
+		writeError(w, http.StatusBadRequest, "default_percent requires default_role")
+		return
+	}
+
+	if _, err := tx.Exec(r.Context(), `
+		UPDATE business_worker SET
+			name = $3, status = $4, engagement_format = $5,
+			recipient_external_id = $6, recipient_mask = $7, notes = $8,
+			default_role = $9, default_percent = $10::numeric, updated_at = now()
+		WHERE business_id = $1 AND id = $2
+	`, businessID, workerID, name, status, engagement, recipientExternal, recipientMask, notes, defRole, defPercent); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update worker")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "worker.update", "business_worker", workerIDRaw, "worker registry", nil, nil); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update worker")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update worker")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": workerIDRaw})
 }
 
 type createBusinessClientRequestInput struct {
