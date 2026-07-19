@@ -446,6 +446,23 @@ DO UPDATE SET
     notes = EXCLUDED.notes,
     updated_at = now();
 
+-- A linked worker needs fresh business membership to reach only the
+-- /me/compensation route. Viewer membership grants none of the owner mutation
+-- endpoints and does not imply access to any workspace.
+INSERT INTO business_account_member (business_id, user_id, role)
+SELECT
+    '6a833fce-02dd-418f-94b9-3061514e7f20'::uuid,
+    s.user_id,
+    'viewer'
+FROM seed_business_worker s
+ON CONFLICT (business_id, user_id)
+DO UPDATE SET
+    role = CASE
+        WHEN business_account_member.role = 'viewer' THEN EXCLUDED.role
+        ELSE business_account_member.role
+    END,
+    updated_at = now();
+
 CREATE TEMP TABLE seed_business_policy (
     service_type TEXT NOT NULL,
     pool TEXT NOT NULL,
