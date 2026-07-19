@@ -8,10 +8,10 @@
   "tabs": {
     "overview": "概览",
     "clients": "客户",
-    "calendar": "日历",
+    "calendar": "资金",
     "bank": "银行",
     "team": "团队",
-    "economics": "任务经济",
+    "economics": "任务",
     "accruals": "计提",
     "payouts": "付款"
   },
@@ -59,7 +59,8 @@
     "worker_months": "按月计提",
     "payout_items": "按工作人员付款",
     "participations": "任务参与",
-    "year_dynamics": "动态：按月计划与实际"
+    "year_dynamics": "动态：按月计划与实际",
+    "billing_candidates": "可评估的计费任务"
   },
   "actions": {
     "add_client": "添加客户",
@@ -77,7 +78,10 @@
     "submit_draft": "创建银行草稿",
     "save": "保存",
     "classify": "分类",
-    "clear_filters": "清除筛选"
+    "clear_filters": "清除筛选",
+    "skip": "跳过",
+    "add_payer": "添加付款方",
+    "estimate": "评估"
   },
   "filters": {
     "filter": "筛选",
@@ -172,7 +176,8 @@
     "payers_list": "付款方 / INN",
     "elba": "Elba",
     "bank_linked": "银行",
-    "agreement_name": "协议"
+    "agreement_name": "协议",
+    "price_rub": "评估额"
   },
   "fields": {
     "name": "名称",
@@ -193,7 +198,8 @@
     "period": "期间",
     "reason": "原因",
     "agreement_key": "协议标识",
-    "file": "CSV 或 XLSX 对账单"
+    "file": "CSV 或 XLSX 对账单",
+    "notes": "备注"
   },
   "values": {
     "vitmax": "VitMax",
@@ -265,11 +271,24 @@
     "fixed": "固定",
     "cap": "上限",
     "time_material": "按实际（T&M）",
-    "project": "项目"
+    "project": "项目",
+    "archived": "已归档"
   },
   "empty": "暂无记录",
   "success": "已保存",
   "bank_draft_note": "仅创建草稿。最终签署仍在银行完成。",
   "vitmax_note": "VitMax 过账和自有账户转账不计入收入。",
-  "no_penalties_note": "质量调整由所有者手动决定；不实施自动处罚。"
+  "no_penalties_note": "质量调整由所有者手动决定；不实施自动处罚。",
+  "year": "年",
+  "money": {
+    "incoming": "待入账",
+    "on_review": "待复核",
+    "received": "已入账"
+  },
+  "card": {
+    "details": "客户信息",
+    "bank": "最近银行入账",
+    "hint": "点击行打开客户卡片——协议、项目、付款方和收款计划都在那里编辑。"
+  },
+  "economics_hint": "已计费任务获得卢布评估 → 指定参与者并接受 → 参与者按比例计提。在右侧选择参与者并点击任务的「评估」。"
 }

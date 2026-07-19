@@ -888,7 +888,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Group(func(r chi.Router) {
 						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessCalendar))
 						r.Post("/agreements", h.CreateBusinessAgreement)
+						r.Patch("/agreements/{agreementId}", h.UpdateBusinessAgreement)
 						r.Post("/receivables/generate", h.GenerateBusinessReceivables)
+						r.Patch("/receivables/{receivableId}", h.UpdateBusinessReceivable)
 					})
 
 					r.Group(func(r chi.Router) {

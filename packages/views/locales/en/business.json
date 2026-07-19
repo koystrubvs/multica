@@ -8,10 +8,10 @@
   "tabs": {
     "overview": "Overview",
     "clients": "Clients",
-    "calendar": "Calendar",
+    "calendar": "Money",
     "bank": "Bank",
     "team": "Team",
-    "economics": "Task economics",
+    "economics": "Tasks",
     "accruals": "Accruals",
     "payouts": "Payouts"
   },
@@ -59,7 +59,8 @@
     "worker_months": "Accruals by month",
     "payout_items": "Payouts by worker",
     "participations": "Task participations",
-    "year_dynamics": "Dynamics: plan vs fact by month"
+    "year_dynamics": "Dynamics: plan vs fact by month",
+    "billing_candidates": "Billed tasks ready to estimate"
   },
   "actions": {
     "add_client": "Add client",
@@ -77,7 +78,10 @@
     "submit_draft": "Create bank draft",
     "save": "Save",
     "classify": "Classification",
-    "clear_filters": "Clear filters"
+    "clear_filters": "Clear filters",
+    "skip": "Skip",
+    "add_payer": "Add payer",
+    "estimate": "Estimate"
   },
   "filters": {
     "filter": "Filter",
@@ -172,7 +176,8 @@
     "payers_list": "Payers / INN",
     "elba": "Elba",
     "bank_linked": "Bank",
-    "agreement_name": "Agreement"
+    "agreement_name": "Agreement",
+    "price_rub": "Estimate"
   },
   "fields": {
     "name": "Name",
@@ -193,7 +198,8 @@
     "period": "Period",
     "reason": "Reason",
     "agreement_key": "Agreement key",
-    "file": "CSV or XLSX statement"
+    "file": "CSV or XLSX statement",
+    "notes": "Notes"
   },
   "values": {
     "vitmax": "VitMax",
@@ -265,11 +271,24 @@
     "fixed": "fixed",
     "cap": "cap",
     "time_material": "time & material",
-    "project": "project"
+    "project": "project",
+    "archived": "archived"
   },
   "empty": "No records yet",
   "success": "Saved",
   "bank_draft_note": "The system only creates a draft. The final signature stays in the bank.",
   "vitmax_note": "VitMax transit and own-account transfers are not counted as revenue.",
-  "no_penalties_note": "Quality adjustments are made only by the owner; there are no automatic penalties."
+  "no_penalties_note": "Quality adjustments are made only by the owner; there are no automatic penalties.",
+  "year": "Year",
+  "money": {
+    "incoming": "Incoming",
+    "on_review": "Needs review",
+    "received": "Received"
+  },
+  "card": {
+    "details": "Client details",
+    "bank": "Recent bank payments",
+    "hint": "Click a row to open the client card — agreements, projects, payers and the payment plan are edited there."
+  },
+  "economics_hint": "A billed task gets a ruble estimate → you assign a participant and accept → the participant accrues their percent. Pick a participant on the right and press Estimate on a task."
 }

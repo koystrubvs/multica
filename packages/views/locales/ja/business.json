@@ -8,10 +8,10 @@
   "tabs": {
     "overview": "概要",
     "clients": "顧客",
-    "calendar": "カレンダー",
+    "calendar": "資金",
     "bank": "銀行",
     "team": "チーム",
-    "economics": "タスク経済",
+    "economics": "タスク",
     "accruals": "発生額",
     "payouts": "支払"
   },
@@ -59,7 +59,8 @@
     "worker_months": "月別発生額",
     "payout_items": "担当者別支払",
     "participations": "タスク参加",
-    "year_dynamics": "推移：月別の計画と実績"
+    "year_dynamics": "推移：月別の計画と実績",
+    "billing_candidates": "見積可能な課金タスク"
   },
   "actions": {
     "add_client": "顧客を追加",
@@ -77,7 +78,10 @@
     "submit_draft": "銀行草案を作成",
     "save": "保存",
     "classify": "分類",
-    "clear_filters": "フィルターをクリア"
+    "clear_filters": "フィルターをクリア",
+    "skip": "スキップ",
+    "add_payer": "支払者を追加",
+    "estimate": "見積もる"
   },
   "filters": {
     "filter": "フィルター",
@@ -172,7 +176,8 @@
     "payers_list": "支払者 / INN",
     "elba": "Elba",
     "bank_linked": "銀行",
-    "agreement_name": "契約"
+    "agreement_name": "契約",
+    "price_rub": "見積額"
   },
   "fields": {
     "name": "名前",
@@ -193,7 +198,8 @@
     "period": "期間",
     "reason": "理由",
     "agreement_key": "契約キー",
-    "file": "CSV または XLSX 明細"
+    "file": "CSV または XLSX 明細",
+    "notes": "メモ"
   },
   "values": {
     "vitmax": "VitMax",
@@ -265,11 +271,24 @@
     "fixed": "固定",
     "cap": "上限",
     "time_material": "実費（T&M）",
-    "project": "プロジェクト"
+    "project": "プロジェクト",
+    "archived": "アーカイブ済み"
   },
   "empty": "記録はまだありません",
   "success": "保存しました",
   "bank_draft_note": "草案のみ作成します。最終署名は銀行で行います。",
   "vitmax_note": "VitMax の通過資金と自己口座間振替は収益から除外されます。",
-  "no_penalties_note": "品質調整は所有者が手動で決定し、自動ペナルティはありません。"
+  "no_penalties_note": "品質調整は所有者が手動で決定し、自動ペナルティはありません。",
+  "year": "年",
+  "money": {
+    "incoming": "入金予定",
+    "on_review": "要確認",
+    "received": "入金済み"
+  },
+  "card": {
+    "details": "顧客情報",
+    "bank": "最近の銀行入金",
+    "hint": "行をクリックすると顧客カードが開き、契約・プロジェクト・支払者・入金計画を編集できます。"
+  },
+  "economics_hint": "課金タスクにルーブル見積が付き、参加者を割り当てて承認すると、参加者に割合が発生します。右で参加者を選び、タスクの「見積もる」を押してください。"
 }

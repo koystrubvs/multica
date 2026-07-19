@@ -8,10 +8,10 @@
   "tabs": {
     "overview": "개요",
     "clients": "고객",
-    "calendar": "달력",
+    "calendar": "자금",
     "bank": "은행",
     "team": "팀",
-    "economics": "작업 경제",
+    "economics": "작업",
     "accruals": "발생액",
     "payouts": "지급"
   },
@@ -59,7 +59,8 @@
     "worker_months": "월별 발생액",
     "payout_items": "작업자별 지급",
     "participations": "작업 참여",
-    "year_dynamics": "추이: 월별 계획 대 실적"
+    "year_dynamics": "추이: 월별 계획 대 실적",
+    "billing_candidates": "평가 가능한 청구 작업"
   },
   "actions": {
     "add_client": "고객 추가",
@@ -77,7 +78,10 @@
     "submit_draft": "은행 초안 생성",
     "save": "저장",
     "classify": "분류",
-    "clear_filters": "필터 초기화"
+    "clear_filters": "필터 초기화",
+    "skip": "건너뛰기",
+    "add_payer": "지불인 추가",
+    "estimate": "평가"
   },
   "filters": {
     "filter": "필터",
@@ -172,7 +176,8 @@
     "payers_list": "지불인 / INN",
     "elba": "Elba",
     "bank_linked": "은행",
-    "agreement_name": "계약"
+    "agreement_name": "계약",
+    "price_rub": "평가액"
   },
   "fields": {
     "name": "이름",
@@ -193,7 +198,8 @@
     "period": "기간",
     "reason": "사유",
     "agreement_key": "계약 키",
-    "file": "CSV 또는 XLSX 명세서"
+    "file": "CSV 또는 XLSX 명세서",
+    "notes": "메모"
   },
   "values": {
     "vitmax": "VitMax",
@@ -265,11 +271,24 @@
     "fixed": "고정",
     "cap": "상한",
     "time_material": "실비 (T&M)",
-    "project": "프로젝트"
+    "project": "프로젝트",
+    "archived": "보관됨"
   },
   "empty": "아직 기록이 없습니다",
   "success": "저장됨",
   "bank_draft_note": "초안만 생성됩니다. 최종 서명은 은행에서 진행합니다.",
   "vitmax_note": "VitMax 경유금과 본인 계좌 이체는 수익에서 제외됩니다.",
-  "no_penalties_note": "품질 조정은 소유자가 수동으로 결정하며 자동 벌점은 없습니다."
+  "no_penalties_note": "품질 조정은 소유자가 수동으로 결정하며 자동 벌점은 없습니다.",
+  "year": "연도",
+  "money": {
+    "incoming": "입금 예정",
+    "on_review": "검토 필요",
+    "received": "입금됨"
+  },
+  "card": {
+    "details": "고객 정보",
+    "bank": "최근 은행 입금",
+    "hint": "행을 클릭하면 고객 카드가 열리며 계약, 프로젝트, 지불인, 입금 계획을 편집할 수 있습니다."
+  },
+  "economics_hint": "청구된 작업에 루블 평가가 부여되고, 참여자를 지정해 승인하면 참여자에게 비율이 발생합니다. 오른쪽에서 참여자를 선택하고 작업의 «평가»를 누르세요."
 }

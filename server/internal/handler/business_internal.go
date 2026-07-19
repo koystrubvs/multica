@@ -45,6 +45,7 @@ type BusinessSnapshotResponse struct {
 	PayoutBatches      json.RawMessage `json:"payout_batches"`
 	PayoutItems        json.RawMessage `json:"payout_items"`
 	BankOutbox         json.RawMessage `json:"bank_outbox"`
+	BillingCandidates  json.RawMessage `json:"billing_candidates"`
 	GeneratedAt        string          `json:"generated_at"`
 }
 
@@ -245,6 +246,20 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			WHERE bpi.business_id = $1 ORDER BY bpi.created_at DESC LIMIT 1000
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC), '[]'::jsonb) FROM (SELECT * FROM business_bank_outbox WHERE business_id = $1 ORDER BY created_at DESC LIMIT 200) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC), '[]'::jsonb) FROM (
+			SELECT c.id, c.issue_id, i.title AS issue_title, i.number AS issue_number, c.project_id, p.title AS project_title,
+			       c.workspace_id, c.price_rub, c.status, c.created_at, bcp.client_id, bc.canonical_name AS client_name,
+			       COALESCE(bcp.service_type, 'development') AS service_type
+			FROM client_billing_charge c
+			JOIN issue i ON i.id = c.issue_id AND i.workspace_id = c.workspace_id
+			JOIN project p ON p.id = c.project_id AND p.workspace_id = c.workspace_id
+			JOIN business_workspace bw ON bw.workspace_id = c.workspace_id AND bw.business_id = $1
+			LEFT JOIN business_client_project bcp ON bcp.project_id = c.project_id AND bcp.business_id = $1
+			LEFT JOIN business_client bc ON bc.id = bcp.client_id AND bc.business_id = $1
+			WHERE c.status <> 'void'
+			  AND NOT EXISTS (SELECT 1 FROM business_task_economics e WHERE e.business_id = $1 AND e.issue_id = c.issue_id AND e.status <> 'superseded')
+			ORDER BY c.created_at DESC LIMIT 200
+		) q`},
 	}
 
 	response := BusinessSnapshotResponse{GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
@@ -255,6 +270,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		&response.Policies, &response.ClientRequests, &response.TaskEconomics, &response.TaskParticipants,
 		&response.ReceivableTasks, &response.Accruals, &response.QualityCases, &response.AccrualAdjustments,
 		&response.ReserveLedger, &response.PayoutBatches, &response.PayoutItems, &response.BankOutbox,
+		&response.BillingCandidates,
 	}
 	for index := range queries {
 		queries[index].dst = destinations[index]
@@ -273,9 +289,22 @@ func (h *Handler) GetBusinessDashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	month, monthStart, monthEnd, ok := parseBusinessMonth(w, r.URL.Query().Get("month"))
-	if !ok {
-		return
+	var month, monthStart, monthEnd string
+	if year := r.URL.Query().Get("year"); year != "" {
+		parsedYear, err := strconv.Atoi(year)
+		if err != nil || parsedYear < 2000 || parsedYear > 2100 {
+			writeError(w, http.StatusBadRequest, "year must use YYYY")
+			return
+		}
+		month = year
+		monthStart = fmt.Sprintf("%04d-01-01", parsedYear)
+		monthEnd = fmt.Sprintf("%04d-01-01", parsedYear+1)
+	} else {
+		var monthOK bool
+		month, monthStart, monthEnd, monthOK = parseBusinessMonth(w, r.URL.Query().Get("month"))
+		if !monthOK {
+			return
+		}
 	}
 	workspaceID := r.URL.Query().Get("workspace_id")
 	clientID := r.URL.Query().Get("client_id")
@@ -488,6 +517,275 @@ func (h *Handler) GetBusinessDashboardSeries(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"from": from, "months": months, "points": points})
+}
+
+type updateBusinessAgreementRequest struct {
+	Name           *string `json:"name"`
+	ServiceType    *string `json:"service_type"`
+	Model          *string `json:"model"`
+	AmountRUB      *string `json:"amount_rub"`
+	HourlyRateRUB  *string `json:"hourly_rate_rub"`
+	CapRUB         *string `json:"cap_rub"`
+	InvoiceDay     *string `json:"invoice_day"`
+	DueDays        *string `json:"due_days"`
+	PaymentChannel *string `json:"payment_channel"`
+	Status         *string `json:"status"`
+	IsEstimate     *bool   `json:"is_estimate"`
+	NeedsReview    *bool   `json:"needs_review"`
+}
+
+func validBusinessMoney(value string) bool {
+	amount, err := strconv.ParseFloat(value, 64)
+	return err == nil && amount >= 0 && amount < 1e12
+}
+
+func (h *Handler) UpdateBusinessAgreement(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	agreementID := chi.URLParam(r, "agreementId")
+	if _, valid := parseUUIDOrBadRequest(w, agreementID, "agreement_id"); !valid {
+		return
+	}
+	var request updateBusinessAgreementRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if request.Name != nil && strings.TrimSpace(*request.Name) == "" {
+		writeError(w, http.StatusBadRequest, "name must not be empty")
+		return
+	}
+	if request.ServiceType != nil && !containsBusinessString([]string{"development", "support", "seo", "content", "internal"}, *request.ServiceType) {
+		writeError(w, http.StatusBadRequest, "invalid service_type")
+		return
+	}
+	if request.Model != nil && !containsBusinessString([]string{"fixed", "cap", "time_material", "project"}, *request.Model) {
+		writeError(w, http.StatusBadRequest, "invalid model")
+		return
+	}
+	if request.PaymentChannel != nil && !containsBusinessString([]string{"bank", "personal_card"}, *request.PaymentChannel) {
+		writeError(w, http.StatusBadRequest, "invalid payment_channel")
+		return
+	}
+	if request.Status != nil && !containsBusinessString([]string{"active", "archived"}, *request.Status) {
+		writeError(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+	for _, money := range []*string{request.AmountRUB, request.HourlyRateRUB, request.CapRUB} {
+		if money != nil && strings.TrimSpace(*money) != "" && !validBusinessMoney(strings.TrimSpace(*money)) {
+			writeError(w, http.StatusBadRequest, "invalid amount")
+			return
+		}
+	}
+	for _, day := range []*string{request.InvoiceDay, request.DueDays} {
+		if day != nil && strings.TrimSpace(*day) != "" {
+			value, err := strconv.Atoi(strings.TrimSpace(*day))
+			if err != nil || value < 0 || value > 31 {
+				writeError(w, http.StatusBadRequest, "invalid day value")
+				return
+			}
+		}
+	}
+
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update agreement")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	var (
+		name, serviceType, model, paymentChannel, status string
+		amount                                           string
+		hourly, cap, invoiceDay, dueDays                 *string
+		isEstimate, needsReview                          bool
+	)
+	err = tx.QueryRow(r.Context(), `
+		SELECT name, service_type, model, COALESCE(amount_rub::text, ''), hourly_rate_rub::text, cap_rub::text,
+		       invoice_day::text, due_days::text, payment_channel, status, is_estimate, needs_review
+		FROM business_agreement WHERE business_id = $1 AND id = $2 FOR UPDATE
+	`, businessID, agreementID).Scan(&name, &serviceType, &model, &amount, &hourly, &cap, &invoiceDay, &dueDays, &paymentChannel, &status, &isEstimate, &needsReview)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "agreement not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update agreement")
+		return
+	}
+
+	mergeNullable := func(current *string, incoming *string) *string {
+		if incoming == nil {
+			return current
+		}
+		trimmed := strings.TrimSpace(*incoming)
+		if trimmed == "" {
+			return nil
+		}
+		return &trimmed
+	}
+	if request.Name != nil {
+		name = strings.TrimSpace(*request.Name)
+	}
+	if request.ServiceType != nil {
+		serviceType = *request.ServiceType
+	}
+	if request.Model != nil {
+		model = *request.Model
+	}
+	if request.PaymentChannel != nil {
+		paymentChannel = *request.PaymentChannel
+	}
+	if request.Status != nil {
+		status = *request.Status
+	}
+	if request.AmountRUB != nil && strings.TrimSpace(*request.AmountRUB) != "" {
+		amount = strings.TrimSpace(*request.AmountRUB)
+	}
+	hourly = mergeNullable(hourly, request.HourlyRateRUB)
+	cap = mergeNullable(cap, request.CapRUB)
+	invoiceDay = mergeNullable(invoiceDay, request.InvoiceDay)
+	dueDays = mergeNullable(dueDays, request.DueDays)
+	if request.IsEstimate != nil {
+		isEstimate = *request.IsEstimate
+	}
+	if request.NeedsReview != nil {
+		needsReview = *request.NeedsReview
+	}
+
+	if _, err := tx.Exec(r.Context(), `
+		UPDATE business_agreement SET
+			name = $3, service_type = $4, model = $5, amount_rub = NULLIF($6, '')::numeric,
+			hourly_rate_rub = $7::numeric, cap_rub = $8::numeric, invoice_day = $9::int, due_days = COALESCE($10::int, due_days),
+			payment_channel = $11, status = $12, is_estimate = $13, needs_review = $14, updated_at = now()
+		WHERE business_id = $1 AND id = $2
+	`, businessID, agreementID, name, serviceType, model, amount, hourly, cap, invoiceDay, dueDays, paymentChannel, status, isEstimate, needsReview); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update agreement")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "agreement.update", "business_agreement", agreementID, "owner edit", nil, nil); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update agreement")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update agreement")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": agreementID})
+}
+
+type updateBusinessReceivableRequest struct {
+	PlannedAmountRUB *string `json:"planned_amount_rub"`
+	InvoiceOn        *string `json:"invoice_on"`
+	DueOn            *string `json:"due_on"`
+	Status           *string `json:"status"`
+	NeedsReview      *bool   `json:"needs_review"`
+	Notes            *string `json:"notes"`
+}
+
+func (h *Handler) UpdateBusinessReceivable(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	receivableID := chi.URLParam(r, "receivableId")
+	if _, valid := parseUUIDOrBadRequest(w, receivableID, "receivable_id"); !valid {
+		return
+	}
+	var request updateBusinessReceivableRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if request.PlannedAmountRUB != nil && !validBusinessMoney(strings.TrimSpace(*request.PlannedAmountRUB)) {
+		writeError(w, http.StatusBadRequest, "invalid planned_amount_rub")
+		return
+	}
+	if request.Status != nil && !containsBusinessString([]string{"expected", "invoiced", "skipped", "written_off"}, *request.Status) {
+		writeError(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+	for _, day := range []*string{request.InvoiceOn, request.DueOn} {
+		if day != nil && strings.TrimSpace(*day) != "" {
+			if _, err := time.Parse("2006-01-02", strings.TrimSpace(*day)); err != nil {
+				writeError(w, http.StatusBadRequest, "dates must use YYYY-MM-DD")
+				return
+			}
+		}
+	}
+
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update receivable")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	var (
+		planned, status         string
+		invoiceOn, dueOn, notes *string
+		needsReview             bool
+	)
+	err = tx.QueryRow(r.Context(), `
+		SELECT planned_amount_rub::text, invoice_on::text, due_on::text, status, needs_review, notes
+		FROM business_receivable WHERE business_id = $1 AND id = $2 FOR UPDATE
+	`, businessID, receivableID).Scan(&planned, &invoiceOn, &dueOn, &status, &needsReview, &notes)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "receivable not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update receivable")
+		return
+	}
+	if status == "paid" || status == "partially_paid" {
+		if request.Status != nil || request.PlannedAmountRUB != nil {
+			writeError(w, http.StatusConflict, "paid receivables can only change notes and review flag")
+			return
+		}
+	}
+
+	mergeNullable := func(current *string, incoming *string) *string {
+		if incoming == nil {
+			return current
+		}
+		trimmed := strings.TrimSpace(*incoming)
+		if trimmed == "" {
+			return nil
+		}
+		return &trimmed
+	}
+	if request.PlannedAmountRUB != nil {
+		planned = strings.TrimSpace(*request.PlannedAmountRUB)
+	}
+	if request.Status != nil {
+		status = *request.Status
+	}
+	if request.NeedsReview != nil {
+		needsReview = *request.NeedsReview
+	}
+	invoiceOn = mergeNullable(invoiceOn, request.InvoiceOn)
+	dueOn = mergeNullable(dueOn, request.DueOn)
+	notes = mergeNullable(notes, request.Notes)
+
+	if _, err := tx.Exec(r.Context(), `
+		UPDATE business_receivable SET
+			planned_amount_rub = $3::numeric, invoice_on = $4::date, due_on = $5::date,
+			status = $6, needs_review = $7, notes = $8, updated_at = now()
+		WHERE business_id = $1 AND id = $2
+	`, businessID, receivableID, planned, invoiceOn, dueOn, status, needsReview, notes); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update receivable")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "receivable.update", "business_receivable", receivableID, "owner edit", nil, nil); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update receivable")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update receivable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": receivableID})
 }
 
 func parseBusinessMonth(w http.ResponseWriter, value string) (string, string, string, bool) {

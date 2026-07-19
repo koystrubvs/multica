@@ -3052,11 +3052,12 @@ export class ApiClient {
 
   async getBusinessDashboard(
     businessId: string,
-    month: string,
+    period: { month?: string; year?: string },
     filters?: { workspace_id?: string; client_id?: string; project_id?: string; service_type?: string },
   ): Promise<BusinessDashboard> {
     const search = new URLSearchParams();
-    if (month) search.set("month", month);
+    if (period.year) search.set("year", period.year);
+    else if (period.month) search.set("month", period.month);
     for (const [key, value] of Object.entries(filters ?? {})) {
       if (value) search.set(key, value);
     }
