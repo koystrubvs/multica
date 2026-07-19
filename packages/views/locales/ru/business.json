@@ -91,7 +91,8 @@
     "all": "Все",
     "only_review": "Только на проверке",
     "only_overdue": "Только просроченные",
-    "rows": "Строк"
+    "rows": "Строк",
+    "hide_empty": "Скрыть нулевые (T&M)"
   },
   "team": {
     "default_rate": "Ставка по умолчанию (роль и %)",
@@ -170,7 +171,8 @@
     "projects_list": "Проекты",
     "payers_list": "Плательщики / ИНН",
     "elba": "Эльба",
-    "bank_linked": "Банк"
+    "bank_linked": "Банк",
+    "agreement_name": "Договорённость"
   },
   "fields": {
     "name": "Название",

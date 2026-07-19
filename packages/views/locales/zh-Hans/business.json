@@ -91,7 +91,8 @@
     "all": "全部",
     "only_review": "仅待复核",
     "only_overdue": "仅逾期",
-    "rows": "行数"
+    "rows": "行数",
+    "hide_empty": "隐藏零值行（T&M）"
   },
   "team": {
     "default_rate": "默认费率（角色和%）",
@@ -170,7 +171,8 @@
     "projects_list": "项目",
     "payers_list": "付款方 / INN",
     "elba": "Elba",
-    "bank_linked": "银行"
+    "bank_linked": "银行",
+    "agreement_name": "协议"
   },
   "fields": {
     "name": "名称",

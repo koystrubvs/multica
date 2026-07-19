@@ -312,6 +312,13 @@ function monthOf(value: unknown): string {
   return String(value ?? "").slice(0, 7);
 }
 
+function monthLabel(monthKey: string, locale: string): string {
+  const parsed = new Date(`${monthKey}-01T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return monthKey;
+  const label = parsed.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function toggleValue(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
@@ -348,6 +355,7 @@ export function BusinessPage() {
   const [receivableClients, setReceivableClients] = useState<string[]>([]);
   const [receivableReviewOnly, setReceivableReviewOnly] = useState(false);
   const [receivableOverdueOnly, setReceivableOverdueOnly] = useState(false);
+  const [hideZeroReceivables, setHideZeroReceivables] = useState(true);
   const [txClasses, setTxClasses] = useState<string[]>([]);
   const [txDirections, setTxDirections] = useState<string[]>([]);
   const [txSearch, setTxSearch] = useState("");
@@ -403,6 +411,31 @@ export function BusinessPage() {
     planned: acc.planned + Number(row.planned_amount_rub ?? 0),
     paid: acc.paid + Number(row.paid_amount_rub ?? 0),
   }), { planned: 0, paid: 0 }), [filteredReceivables]);
+
+  const calendarGroups = useMemo(() => {
+    const agreementNames = new Map<string, string>();
+    for (const row of data?.agreements ?? []) agreementNames.set(String(row.id), String(row.name ?? ""));
+    const groups = new Map<string, { rows: BusinessRow[]; planned: number; paid: number; overdue: number }>();
+    for (const row of filteredReceivables) {
+      if (hideZeroReceivables && Number(row.planned_amount_rub ?? 0) === 0 && Number(row.paid_amount_rub ?? 0) === 0) continue;
+      const monthKey = String(row.due_on ?? row.invoice_on ?? row.period_start ?? "").slice(0, 7) || "—";
+      const entry = groups.get(monthKey) ?? { rows: [], planned: 0, paid: 0, overdue: 0 };
+      entry.rows.push({ ...row, agreement_name: agreementNames.get(String(row.agreement_id)) || String(row.project_title ?? row.period_key ?? "") });
+      entry.planned += Number(row.planned_amount_rub ?? 0);
+      entry.paid += Number(row.paid_amount_rub ?? 0);
+      if (isTruthyFlag(row.is_overdue)) entry.overdue += 1;
+      groups.set(monthKey, entry);
+    }
+    return [...groups.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([monthKey, entry]) => ({
+        monthKey,
+        rows: entry.rows.sort((a, b) => String(a.due_on ?? "9999").localeCompare(String(b.due_on ?? "9999"))),
+        planned: entry.planned,
+        paid: entry.paid,
+        overdue: entry.overdue,
+      }));
+  }, [filteredReceivables, hideZeroReceivables, data?.agreements]);
 
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
@@ -551,6 +584,7 @@ export function BusinessPage() {
           toggles: [
             { key: "review", label: t(($) => $.filters.only_review), checked: receivableReviewOnly, onToggle: () => setReceivableReviewOnly(!receivableReviewOnly) },
             { key: "overdue", label: t(($) => $.filters.only_overdue), checked: receivableOverdueOnly, onToggle: () => setReceivableOverdueOnly(!receivableOverdueOnly) },
+            { key: "zero", label: t(($) => $.filters.hide_empty), checked: hideZeroReceivables, onToggle: () => setHideZeroReceivables(!hideZeroReceivables) },
           ],
         };
       case "bank":
@@ -756,7 +790,25 @@ export function BusinessPage() {
           </div>
         </Toolbar>
         <Section title={t(($)=>$.sections.receivables)}>
-          <RowTable tt={tt} locale={locale} rows={filteredReceivables} columns={[{ key: "period_key" }, { key: "client_name" }, { key: "project_title" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "invoice_on", kind: "date" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($)=>$.empty)}/>
+          {calendarGroups.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</div>
+          ) : (
+            <div className="space-y-4">
+              {calendarGroups.map((group) => (
+                <div key={group.monthKey} className="space-y-1.5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-medium">{monthLabel(group.monthKey, locale)}</h3>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {t(($) => $.metrics.expected)}: <span className="font-medium text-foreground">{rub(group.planned)}</span>
+                      {" · "}{t(($) => $.metrics.receivable_paid)}: <span className="font-medium text-foreground">{rub(group.paid)}</span>
+                      {group.overdue > 0 && <>{" · "}<span className="font-medium text-destructive">{t(($) => $.metrics.overdue)}: {group.overdue}</span></>}
+                    </span>
+                  </div>
+                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($) => $.empty)} />
+                </div>
+              ))}
+            </div>
+          )}
         </Section>
         <Section title={t(($) => $.sections.agreements)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("agreement",()=>api.businessAction(businessID,"agreements",{client_id:fd.get("client"),service_type:fd.get("service"),agreement_key:fd.get("key"),version:1,name:fd.get("name"),model:"fixed",amount_rub:fd.get("amount"),due_days:7,period_months:1,payment_channel:"bank",effective_from:fd.get("date"),status:"active",is_estimate:false,needs_review:false,terms:{}}));}}>
           <NativeSelect size="sm" required name="client">{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>

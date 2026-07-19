@@ -91,7 +91,8 @@
     "all": "전체",
     "only_review": "검토 필요만",
     "only_overdue": "연체만",
-    "rows": "행"
+    "rows": "행",
+    "hide_empty": "0 행 숨기기 (T&M)"
   },
   "team": {
     "default_rate": "기본 요율 (역할 및 %)",
@@ -170,7 +171,8 @@
     "projects_list": "프로젝트",
     "payers_list": "지불인 / INN",
     "elba": "Elba",
-    "bank_linked": "은행"
+    "bank_linked": "은행",
+    "agreement_name": "계약"
   },
   "fields": {
     "name": "이름",

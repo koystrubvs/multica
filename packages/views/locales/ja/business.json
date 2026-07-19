@@ -91,7 +91,8 @@
     "all": "すべて",
     "only_review": "要確認のみ",
     "only_overdue": "期限超過のみ",
-    "rows": "件数"
+    "rows": "件数",
+    "hide_empty": "ゼロ行を隠す（T&M）"
   },
   "team": {
     "default_rate": "既定レート（役割と%）",
@@ -170,7 +171,8 @@
     "projects_list": "プロジェクト",
     "payers_list": "支払者 / INN",
     "elba": "Elba",
-    "bank_linked": "銀行"
+    "bank_linked": "銀行",
+    "agreement_name": "契約"
   },
   "fields": {
     "name": "名前",

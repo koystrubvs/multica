@@ -91,7 +91,8 @@
     "all": "All",
     "only_review": "Needs review only",
     "only_overdue": "Overdue only",
-    "rows": "Rows"
+    "rows": "Rows",
+    "hide_empty": "Hide zero rows (T&M)"
   },
   "team": {
     "default_rate": "Default rate (role and %)",
@@ -170,7 +171,8 @@
     "projects_list": "Projects",
     "payers_list": "Payers / INN",
     "elba": "Elba",
-    "bank_linked": "Bank"
+    "bank_linked": "Bank",
+    "agreement_name": "Agreement"
   },
   "fields": {
     "name": "Name",
