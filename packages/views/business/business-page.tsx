@@ -202,6 +202,7 @@ interface FilterToggle {
   key: string;
   label: string;
   checked: boolean;
+  defaultChecked?: boolean;
   onToggle: () => void;
 }
 
@@ -213,7 +214,7 @@ function FilterMenu({ label, clearLabel, sections, toggles, onClear }: {
   onClear: () => void;
 }) {
   const activeCount = sections.reduce((sum, section) => sum + section.selected.length, 0)
-    + (toggles ?? []).filter((toggle) => toggle.checked).length;
+    + (toggles ?? []).filter((toggle) => toggle.checked !== (toggle.defaultChecked ?? false)).length;
   const hasActive = activeCount > 0;
   return (
     <DropdownMenu>
@@ -475,6 +476,8 @@ export function BusinessPage() {
     for (const row of filteredReceivables) {
       const monthKey = String(row.due_on ?? row.invoice_on ?? row.period_start ?? "").slice(0, 7) || "—";
       if (!monthKey.startsWith(periodPrefix)) continue;
+      const status = String(row.status);
+      if ((status === "skipped" || status === "written_off") && !receivableStatuses.includes(status)) continue;
       const planned = Number(row.planned_amount_rub ?? 0);
       const paid = Number(row.paid_amount_rub ?? 0);
       const meta = agreementMeta.get(String(row.agreement_id));
@@ -495,10 +498,12 @@ export function BusinessPage() {
         planned_amount_rub: planned > 0 ? row.planned_amount_rub : (estimated > 0 ? estimated : row.planned_amount_rub),
         by_tasks: estimated > 0,
       });
-      entry.planned += planned > 0 ? planned : estimated;
-      entry.paid += paid;
-      entry.estimated += estimated;
-      if (isTruthyFlag(row.is_overdue)) entry.overdue += 1;
+      if (status !== "skipped" && status !== "written_off") {
+        entry.planned += planned > 0 ? planned : estimated;
+        entry.paid += paid;
+        entry.estimated += estimated;
+        if (isTruthyFlag(row.is_overdue)) entry.overdue += 1;
+      }
       groups.set(monthKey, entry);
     }
     return [...groups.entries()]
@@ -511,7 +516,7 @@ export function BusinessPage() {
         overdue: entry.overdue,
         estimated: entry.estimated,
       }));
-  }, [filteredReceivables, hideZeroReceivables, agreementMeta, billingByClientMonth, periodPrefix]);
+  }, [filteredReceivables, hideZeroReceivables, agreementMeta, billingByClientMonth, periodPrefix, receivableStatuses]);
 
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
@@ -649,7 +654,7 @@ export function BusinessPage() {
           toggles: [
             { key: "review", label: t(($) => $.filters.only_review), checked: receivableReviewOnly, onToggle: () => setReceivableReviewOnly(!receivableReviewOnly) },
             { key: "overdue", label: t(($) => $.filters.only_overdue), checked: receivableOverdueOnly, onToggle: () => setReceivableOverdueOnly(!receivableOverdueOnly) },
-            { key: "zero", label: t(($) => $.filters.hide_empty), checked: hideZeroReceivables, onToggle: () => setHideZeroReceivables(!hideZeroReceivables) },
+            { key: "zero", label: t(($) => $.filters.hide_empty), checked: hideZeroReceivables, defaultChecked: true, onToggle: () => setHideZeroReceivables(!hideZeroReceivables) },
           ],
         };
       case "bank":
@@ -870,7 +875,8 @@ export function BusinessPage() {
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <h3 className="text-sm font-medium">{monthLabel(group.monthKey, locale)}</h3>
                     <span className="text-xs tabular-nums text-muted-foreground">
-                      {t(($) => $.metrics.expected)}: <span className="font-medium text-foreground">{rub(group.planned)}</span>
+                      {tt("columns.expected_rub", { defaultValue: "План" })}: <span className="font-medium text-foreground">{rub(group.planned)}</span>
+                      {group.estimated > 0 && <> ({"≈"} {rub(group.estimated)} {t(($) => $.money.estimated)})</>}
                       {" · "}{t(($) => $.metrics.receivable_paid)}: <span className="font-medium text-foreground">{rub(group.paid)}</span>
                       {group.overdue > 0 && <>{" · "}<span className="font-medium text-destructive">{t(($) => $.metrics.overdue)}: {group.overdue}</span></>}
                     </span>
