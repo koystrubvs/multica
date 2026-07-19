@@ -50,7 +50,7 @@ import {
 } from "@multica/ui/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { cn } from "@multica/ui/lib/utils";
-import { AlertTriangle, Building2, ChevronLeft, ChevronRight, Filter, RefreshCw, Search, Upload, X } from "lucide-react";
+import { AlertTriangle, Building2, ChevronLeft, ChevronRight, Filter, Search, Upload, X } from "lucide-react";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
@@ -222,19 +222,20 @@ function FilterMenu({ label, clearLabel, sections, toggles, onClear }: {
           <Button
             variant={hasActive ? "default" : "outline"}
             size="sm"
+            aria-label={label}
             className={hasActive
-              ? "h-8 gap-1 bg-brand px-2.5 text-white hover:bg-brand/90"
-              : "h-8 gap-1 px-2.5 text-muted-foreground"}
+              ? "h-8 w-8 gap-1 bg-brand px-0 text-white hover:bg-brand/90 md:w-auto md:px-2.5"
+              : "h-8 w-8 gap-1 px-0 text-muted-foreground md:w-auto md:px-2.5"}
           >
             <Filter className="size-3.5" />
-            <span>{label}</span>
+            <span className="hidden md:inline">{label}</span>
             {hasActive && <span className="tabular-nums">{activeCount}</span>}
             {hasActive && (
               <span
                 role="button"
                 tabIndex={-1}
                 aria-label={clearLabel}
-                className="-mr-1 ml-0.5 rounded-sm p-0.5 hover:bg-white/20"
+                className="-mr-1 ml-0.5 hidden rounded-sm p-0.5 hover:bg-white/20 md:inline-flex"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -672,8 +673,8 @@ export function BusinessPage() {
           <div className="flex items-center gap-0.5">
             <Button type="button" variant="ghost" size="sm" className="h-8 w-7 px-0 text-muted-foreground" onClick={() => { if (periodMode === "year") { setMonth(`${Number(periodYear) - 1}${month.slice(4)}`); } else { const d = new Date(`${month}-15T00:00:00`); d.setMonth(d.getMonth() - 1); setMonth(d.toISOString().slice(0, 7)); } }}><ChevronLeft className="size-4" /></Button>
             {periodMode === "month"
-              ? <Input className="h-8 w-auto text-sm" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-              : <span className="px-1 text-sm font-medium tabular-nums">{periodYear}</span>}
+              ? <Input className="h-8 w-auto max-w-36 text-xs" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+              : <span className="px-1 text-xs font-medium tabular-nums">{periodYear}</span>}
             <Button type="button" variant="ghost" size="sm" className="h-8 w-7 px-0 text-muted-foreground" onClick={() => { if (periodMode === "year") { setMonth(`${Number(periodYear) + 1}${month.slice(4)}`); } else { const d = new Date(`${month}-15T00:00:00`); d.setMonth(d.getMonth() + 1); setMonth(d.toISOString().slice(0, 7)); } }}><ChevronRight className="size-4" /></Button>
           </div>
           {headerFilter && (
@@ -685,7 +686,6 @@ export function BusinessPage() {
               onClear={headerFilter.onClear}
             />
           )}
-          <Button type="button" size="sm" variant="outline" className="h-8 text-muted-foreground" onClick={() => void Promise.all([snapshot.refetch(), dashboard.refetch()])}><RefreshCw aria-hidden="true" className="size-3.5" /><span className="hidden sm:inline">{t(($) => $.refresh)}</span></Button>
         </div>
       </PageHeader>
 
