@@ -1,0 +1,1 @@
+ALTER TABLE business_compensation_policy ADD CONSTRAINT business_compensation_policy_pkey PRIMARY KEY USING INDEX business_compensation_policy_pkey_idx;

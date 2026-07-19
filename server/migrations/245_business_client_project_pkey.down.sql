@@ -1,0 +1,1 @@
+ALTER TABLE business_client_project DROP CONSTRAINT IF EXISTS business_client_project_pkey;

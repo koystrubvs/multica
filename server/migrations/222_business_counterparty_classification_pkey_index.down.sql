@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_counterparty_classification_pkey_idx;

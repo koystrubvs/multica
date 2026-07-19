@@ -1,0 +1,1 @@
+ALTER TABLE business_receivable_task DROP CONSTRAINT IF EXISTS business_receivable_task_pkey;

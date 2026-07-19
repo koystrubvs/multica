@@ -1,0 +1,1 @@
+ALTER TABLE business_company_cost ADD CONSTRAINT business_company_cost_pkey PRIMARY KEY USING INDEX business_company_cost_pkey_idx;

@@ -1,3 +1,13 @@
 export const COMPOSIO_MCP_APPS_FLAG = "composio_mcp_apps";
 export const AGENT_BUILDER_FLAG = "agents_agent_builder";
 export const RESOURCE_LABELS_FLAG = "settings_resource_labels";
+export const BUSINESS_CONTROL_PLANE_FLAG = "business_control_plane";
+export const BUSINESS_DASHBOARD_FLAG = "business_dashboard";
+export const BUSINESS_CLIENTS_UI_FLAG = "business_clients_ui";
+export const BUSINESS_CALENDAR_FLAG = "business_calendar";
+export const BUSINESS_BANK_IMPORT_FLAG = "business_bank_import";
+export const BUSINESS_TASK_ECONOMICS_SHADOW_FLAG = "business_task_economics_shadow";
+export const BUSINESS_TASK_ECONOMICS_ACCEPT_FLAG = "business_task_economics_accept";
+export const BUSINESS_ACCRUALS_FLAG = "business_accruals";
+export const BUSINESS_PAYOUT_BATCHES_FLAG = "business_payout_batches";
+export const MODULBANK_PAYOUT_DRAFTS_FLAG = "modulbank_payout_drafts";

@@ -1,0 +1,1 @@
+ALTER TABLE business_task_participant DROP CONSTRAINT IF EXISTS business_task_participant_pkey;

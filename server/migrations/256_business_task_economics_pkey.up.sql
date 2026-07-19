@@ -1,0 +1,1 @@
+ALTER TABLE business_task_economics ADD CONSTRAINT business_task_economics_pkey PRIMARY KEY USING INDEX business_task_economics_pkey_idx;

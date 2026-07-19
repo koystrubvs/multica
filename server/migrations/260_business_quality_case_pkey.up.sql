@@ -1,0 +1,1 @@
+ALTER TABLE business_quality_case ADD CONSTRAINT business_quality_case_pkey PRIMARY KEY USING INDEX business_quality_case_pkey_idx;

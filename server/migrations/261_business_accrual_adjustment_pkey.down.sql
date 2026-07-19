@@ -1,0 +1,1 @@
+ALTER TABLE business_accrual_adjustment DROP CONSTRAINT IF EXISTS business_accrual_adjustment_pkey;

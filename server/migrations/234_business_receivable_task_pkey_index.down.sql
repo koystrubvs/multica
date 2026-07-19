@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_receivable_task_pkey_idx;

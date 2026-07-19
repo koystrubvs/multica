@@ -1,0 +1,18 @@
+{
+  "title": "业务",
+  "subtitle": "客户、现金流、任务经济、计提和付款",
+  "unavailable": "此安装未启用业务系统。",
+  "loading": "正在加载业务数据…",
+  "refresh": "刷新",
+  "month": "月份",
+  "tabs": {"overview":"概览","clients":"客户","calendar":"日历","bank":"银行","economics":"任务经济","accruals":"计提","payouts":"付款"},
+  "metrics": {"client_income":"客户收入","overdue":"逾期","payable":"应付团队","reserve":"储备","owner_net":"所有者净收入","target":"目标进度","task_value":"已接受任务价值","unknown":"未知入账"},
+  "sections": {"clients":"客户登记","projects":"项目映射","receivables":"应收款","transactions":"交易","workers":"工作人员","tasks":"任务经济","accruals":"不可变计提","reserve":"储备台账","payouts":"付款批次"},
+  "actions": {"add_client":"添加客户","map_project":"映射项目","add_agreement":"添加协议","generate_receivables":"生成应收款","import_statement":"导入对账单","add_transaction":"添加交易","add_worker":"添加工作人员","draft_economics":"创建经济草稿","accept":"接受","add_reserve":"添加储备记录","build_payout":"生成付款","approve":"批准","submit_draft":"创建银行草稿"},
+  "fields": {"name":"名称","client":"客户","project":"项目","workspace_id":"工作区 ID","project_id":"项目 ID","issue_id":"任务 ID","service_type":"服务类型","amount":"金额，RUB","date":"日期","counterparty":"交易对手","purpose":"用途","direction":"方向","worker":"工作人员","role":"角色","percent":"百分比","period":"期间","reason":"原因","file":"CSV 或 XLSX 对账单"},
+  "empty": "暂无记录",
+  "success": "已保存",
+  "bank_draft_note": "仅创建草稿。最终签署仍在银行完成。",
+  "vitmax_note": "VitMax 过账和自有账户转账不计入收入。",
+  "no_penalties_note": "质量调整由所有者手动决定；不实施自动处罚。"
+}

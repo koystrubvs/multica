@@ -1,0 +1,1 @@
+ALTER TABLE business_agreement ADD CONSTRAINT business_agreement_pkey PRIMARY KEY USING INDEX business_agreement_pkey_idx;

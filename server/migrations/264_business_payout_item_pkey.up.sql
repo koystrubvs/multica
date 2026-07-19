@@ -1,0 +1,1 @@
+ALTER TABLE business_payout_item ADD CONSTRAINT business_payout_item_pkey PRIMARY KEY USING INDEX business_payout_item_pkey_idx;

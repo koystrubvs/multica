@@ -1,0 +1,1 @@
+ALTER TABLE business_task_economics DROP CONSTRAINT IF EXISTS business_task_economics_pkey;

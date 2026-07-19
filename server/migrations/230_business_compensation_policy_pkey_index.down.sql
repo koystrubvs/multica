@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_compensation_policy_pkey_idx;

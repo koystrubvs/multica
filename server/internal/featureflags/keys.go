@@ -20,8 +20,19 @@ const (
 	// Issue labels remain available while this release flag is off.
 	ResourceLabels = "settings_resource_labels"
 	// BusinessControlPlane gates the W1 owner-only business account registry.
-	// It is server-only in W1: there is no business UI until a later wave.
-	BusinessControlPlane = "business_control_plane"
+	// W2-W7 build on this parent switch and remain independently reversible.
+	BusinessControlPlane        = "business_control_plane"
+	BusinessClientsUI           = "business_clients_ui"
+	BusinessCalendar            = "business_calendar"
+	BusinessBankImport          = "business_bank_import"
+	BusinessBankAPISync         = "business_bank_api_sync"
+	BusinessTaskEconomicsShadow = "business_task_economics_shadow"
+	BusinessTaskEconomicsAccept = "business_task_economics_accept"
+	BusinessAccruals            = "business_accruals"
+	BusinessPayoutBatches       = "business_payout_batches"
+	ModulbankPayoutDrafts       = "modulbank_payout_drafts"
+	BusinessDashboard           = "business_dashboard"
+	BusinessAgentSummary        = "business_agent_summary"
 	// agentSkillTogglesCompat is no longer a release flag. Keep publishing the
 	// key as enabled so installed v0.4.0 desktop clients, which still gate the
 	// switch on this config decision, receive the permanently enabled behavior.
@@ -32,6 +43,16 @@ var frontendPublicFlags = []string{
 	ComposioMCPApps,
 	AgentBuilder,
 	ResourceLabels,
+	BusinessControlPlane,
+	BusinessClientsUI,
+	BusinessCalendar,
+	BusinessBankImport,
+	BusinessTaskEconomicsShadow,
+	BusinessTaskEconomicsAccept,
+	BusinessAccruals,
+	BusinessPayoutBatches,
+	ModulbankPayoutDrafts,
+	BusinessDashboard,
 }
 
 func ComposioMCPAppsEnabled(ctx context.Context, flags *featureflag.Service) bool {
@@ -48,6 +69,10 @@ func ResourceLabelsEnabled(ctx context.Context, flags *featureflag.Service) bool
 
 func BusinessControlPlaneEnabled(ctx context.Context, flags *featureflag.Service) bool {
 	return flags.IsEnabled(ctx, BusinessControlPlane, false)
+}
+
+func BusinessFeatureEnabled(ctx context.Context, flags *featureflag.Service, key string) bool {
+	return BusinessControlPlaneEnabled(ctx, flags) && flags.IsEnabled(ctx, key, false)
 }
 
 func EvaluateFrontendPublicFlags(ctx context.Context, flags *featureflag.Service) map[string]bool {

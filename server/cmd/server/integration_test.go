@@ -21,6 +21,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/auth"
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/realtime"
+	"github.com/multica-ai/multica/server/pkg/featureflag"
 )
 
 var (
@@ -71,7 +72,13 @@ func TestMain(m *testing.M) {
 
 	bus := events.New()
 	registerListeners(bus, hub)
-	router := NewRouter(pool, hub, bus, analytics.NoopClient{}, nil)
+	flags, err := featureflag.NewServiceFromEnv()
+	if err != nil {
+		fmt.Printf("Failed to initialize feature flags: %v\n", err)
+		pool.Close()
+		os.Exit(1)
+	}
+	router, _ := NewRouterWithOptions(pool, hub, bus, analytics.NoopClient{}, nil, RouterOptions{FeatureFlags: flags})
 	testServer = httptest.NewServer(router)
 
 	// Generate a JWT token directly for the test user

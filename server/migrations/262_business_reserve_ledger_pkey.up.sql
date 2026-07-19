@@ -1,0 +1,1 @@
+ALTER TABLE business_reserve_ledger ADD CONSTRAINT business_reserve_ledger_pkey PRIMARY KEY USING INDEX business_reserve_ledger_pkey_idx;

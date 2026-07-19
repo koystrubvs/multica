@@ -1,0 +1,18 @@
+{
+  "title": "비즈니스",
+  "subtitle": "고객, 현금 흐름, 작업 경제, 발생액 및 지급",
+  "unavailable": "이 설치에서는 비즈니스 시스템이 활성화되지 않았습니다.",
+  "loading": "비즈니스 데이터를 불러오는 중…",
+  "refresh": "새로고침",
+  "month": "월",
+  "tabs": {"overview":"개요","clients":"고객","calendar":"달력","bank":"은행","economics":"작업 경제","accruals":"발생액","payouts":"지급"},
+  "metrics": {"client_income":"고객 수입","overdue":"연체","payable":"팀 지급액","reserve":"준비금","owner_net":"소유자 순수입","target":"목표 진행률","task_value":"승인된 작업 가치","unknown":"미확인 입금"},
+  "sections": {"clients":"고객 등록부","projects":"프로젝트 연결","receivables":"미수금","transactions":"거래","workers":"작업자","tasks":"작업 경제","accruals":"불변 발생액","reserve":"준비금 원장","payouts":"지급 배치"},
+  "actions": {"add_client":"고객 추가","map_project":"프로젝트 연결","add_agreement":"계약 추가","generate_receivables":"미수금 생성","import_statement":"명세서 가져오기","add_transaction":"거래 추가","add_worker":"작업자 추가","draft_economics":"경제 초안 생성","accept":"승인","add_reserve":"준비금 항목 추가","build_payout":"지급 생성","approve":"승인","submit_draft":"은행 초안 생성"},
+  "fields": {"name":"이름","client":"고객","project":"프로젝트","workspace_id":"워크스페이스 ID","project_id":"프로젝트 ID","issue_id":"작업 ID","service_type":"서비스 유형","amount":"금액, RUB","date":"날짜","counterparty":"거래 상대방","purpose":"목적","direction":"방향","worker":"작업자","role":"역할","percent":"퍼센트","period":"기간","reason":"사유","file":"CSV 또는 XLSX 명세서"},
+  "empty": "아직 기록이 없습니다",
+  "success": "저장됨",
+  "bank_draft_note": "초안만 생성됩니다. 최종 서명은 은행에서 진행합니다.",
+  "vitmax_note": "VitMax 경유금과 본인 계좌 이체는 수익에서 제외됩니다.",
+  "no_penalties_note": "품질 조정은 소유자가 수동으로 결정하며 자동 벌점은 없습니다."
+}

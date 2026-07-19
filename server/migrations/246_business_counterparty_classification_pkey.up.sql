@@ -1,0 +1,1 @@
+ALTER TABLE business_counterparty_classification ADD CONSTRAINT business_counterparty_classification_pkey PRIMARY KEY USING INDEX business_counterparty_classification_pkey_idx;

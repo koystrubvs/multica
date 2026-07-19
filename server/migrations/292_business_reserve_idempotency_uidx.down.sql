@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_reserve_idempotency_uidx;

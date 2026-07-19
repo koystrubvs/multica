@@ -1,0 +1,1 @@
+ALTER TABLE business_client_alias ADD CONSTRAINT business_client_alias_pkey PRIMARY KEY USING INDEX business_client_alias_pkey_idx;

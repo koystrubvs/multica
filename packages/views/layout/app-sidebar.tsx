@@ -36,6 +36,7 @@ import {
   X,
   Zap,
   Users,
+  Building2,
 } from "lucide-react";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
@@ -79,6 +80,7 @@ import { useChatStore } from "@multica/core/chat";
 import { api, ApiError } from "@multica/core/api";
 import { useModalStore } from "@multica/core/modals";
 import { useConfigStore } from "@multica/core/config";
+import { BUSINESS_CONTROL_PLANE_FLAG, BUSINESS_DASHBOARD_FLAG } from "@multica/core/feature-flags";
 import { pinListOptions } from "@multica/core/pins/queries";
 import { useDeletePin, useReorderPins } from "@multica/core/pins/mutations";
 import { issueDetailOptions } from "@multica/core/issues/queries";
@@ -127,7 +129,8 @@ type NavKey =
   | "usage"
   | "runtimes"
   | "skills"
-  | "settings";
+  | "settings"
+  | "business";
 
 // Static schema (key + icon) — labels resolved at render via useT("layout").
 type NavLabelKey =
@@ -157,6 +160,7 @@ const workspaceNav: { key: NavKey; labelKey: NavLabelKey; icon: typeof Inbox }[]
   { key: "agents", labelKey: "agents", icon: Bot },
   { key: "squads", labelKey: "squads", icon: Users },
   { key: "usage", labelKey: "usage", icon: BarChart3 },
+  { key: "business", labelKey: "projects", icon: Building2 },
 ];
 
 const configureNav: { key: NavKey; labelKey: NavLabelKey; icon: typeof Inbox }[] = [
@@ -357,6 +361,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }: AppSidebarProps = {}) {
   const { t } = useT("layout");
+  const { t: businessT } = useT("business");
   const { pathname, push } = useNavigation();
   const user = useAuthStore((s) => s.user);
   const userId = useAuthStore((s) => s.user?.id);
@@ -366,6 +371,9 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   const { data: workspaces = EMPTY_WORKSPACES } = useQuery(workspaceListOptions());
   const { data: myInvitations = EMPTY_INVITATIONS } = useQuery(myInvitationListOptions());
   const workspaceCreationDisabled = useConfigStore((s) => s.workspaceCreationDisabled);
+  const businessEnabled = useConfigStore((s) =>
+    Boolean(s.featureFlags[BUSINESS_CONTROL_PLANE_FLAG] && s.featureFlags[BUSINESS_DASHBOARD_FLAG]),
+  );
 
   const wsId = workspace?.id;
   const { data: inboxItems = EMPTY_INBOX } = useQuery({
@@ -742,6 +750,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
                 {workspaceNav.map((item) => {
+                  if (item.key === "business" && !businessEnabled) return null;
                   const href = p[item.key]();
                   const isActive = !isActivePinnedRoute && isNavActive(pathname, href);
                   return (
@@ -752,7 +761,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                         className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
                       >
                         <item.icon />
-                        <span>{t(($) => $.nav[item.labelKey])}</span>
+                        <span>{item.key === "business" ? businessT(($) => $.title) : t(($) => $.nav[item.labelKey])}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

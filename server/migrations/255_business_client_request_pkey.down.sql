@@ -1,0 +1,1 @@
+ALTER TABLE business_client_request DROP CONSTRAINT IF EXISTS business_client_request_pkey;

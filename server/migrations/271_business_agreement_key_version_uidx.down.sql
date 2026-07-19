@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_agreement_key_version_uidx;

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS business_counterparty_classification_pkey_idx ON business_counterparty_classification (id);

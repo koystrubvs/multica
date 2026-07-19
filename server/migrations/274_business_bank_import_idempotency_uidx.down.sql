@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_bank_import_idempotency_uidx;

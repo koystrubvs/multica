@@ -1,0 +1,1 @@
+ALTER TABLE business_transaction_match ADD CONSTRAINT business_transaction_match_pkey PRIMARY KEY USING INDEX business_transaction_match_pkey_idx;

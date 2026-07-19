@@ -1,0 +1,1 @@
+ALTER TABLE business_bank_transaction DROP CONSTRAINT IF EXISTS business_bank_transaction_pkey;

@@ -16,6 +16,23 @@ func TestReleaseFlagsDefaultToOff(t *testing.T) {
 	if BusinessControlPlaneEnabled(ctx, nil) {
 		t.Fatal("business control plane release flag must default to off")
 	}
+	for _, key := range []string{
+		BusinessClientsUI,
+		BusinessCalendar,
+		BusinessBankImport,
+		BusinessBankAPISync,
+		BusinessTaskEconomicsShadow,
+		BusinessTaskEconomicsAccept,
+		BusinessAccruals,
+		BusinessPayoutBatches,
+		ModulbankPayoutDrafts,
+		BusinessDashboard,
+		BusinessAgentSummary,
+	} {
+		if BusinessFeatureEnabled(ctx, nil, key) {
+			t.Fatalf("business feature %q must default to off", key)
+		}
+	}
 }
 
 func TestAgentSkillTogglesCompatDecisionStaysEnabled(t *testing.T) {

@@ -860,9 +860,71 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Use(handler.RequireBusinessControlPlane(opts.FeatureFlags))
 			r.Get("/", h.ListBusinessAccounts)
 			r.Route("/{businessId}", func(r chi.Router) {
-				r.Use(middleware.RequireBusinessRoleFromURL(queries, "businessId", "owner"))
-				r.Get("/", h.GetBusinessAccount)
-				r.Get("/workspaces", h.ListBusinessWorkspaces)
+				// Personal compensation is visible to the linked worker only. This
+				// authorizes fresh business membership without granting workspace access.
+				r.With(
+					middleware.RequireBusinessRoleFromURL(queries, "businessId"),
+					handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessAccruals),
+				).Get("/me/compensation", h.GetMyBusinessCompensation)
+
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireBusinessRoleFromURL(queries, "businessId", "owner"))
+					r.Get("/", h.GetBusinessAccount)
+					r.Get("/workspaces", h.ListBusinessWorkspaces)
+
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/snapshot", h.GetBusinessSnapshot)
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/dashboard", h.GetBusinessDashboard)
+
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessClientsUI))
+						r.Post("/clients", h.CreateBusinessClient)
+						r.Patch("/clients/{clientId}", h.UpdateBusinessClient)
+						r.Post("/clients/{clientId}/payers", h.CreateBusinessPayer)
+						r.Put("/clients/{clientId}/projects", h.MapBusinessClientProject)
+						r.Post("/counterparties/{classificationId}/classify", h.ClassifyBusinessCounterparty)
+					})
+
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessCalendar))
+						r.Post("/agreements", h.CreateBusinessAgreement)
+						r.Post("/receivables/generate", h.GenerateBusinessReceivables)
+					})
+
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessBankImport))
+						r.Post("/bank/imports", h.ImportBusinessBankFile)
+						r.Post("/bank/transactions", h.CreateBusinessBankTransaction)
+						r.Post("/bank/transactions/{transactionId}/classify", h.ClassifyBusinessBankTransaction)
+						r.Post("/bank/transactions/{transactionId}/matches", h.CreateBusinessTransactionMatch)
+						r.Post("/costs", h.CreateBusinessCompanyCost)
+					})
+
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessTaskEconomicsShadow))
+						r.Post("/workers", h.CreateBusinessWorker)
+						r.Post("/client-requests", h.CreateBusinessClientRequest)
+						r.Post("/task-economics", h.CreateBusinessTaskEconomics)
+					})
+					r.With(
+						handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessTaskEconomicsAccept),
+						handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessAccruals),
+					).Post("/task-economics/{economicsId}/accept", h.AcceptBusinessTaskEconomics)
+
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessAccruals))
+						r.Post("/receivable-tasks", h.LinkBusinessReceivableTask)
+						r.Post("/reserve/entries", h.CreateBusinessReserveEntry)
+						r.Post("/quality-cases", h.CreateBusinessQualityCase)
+						r.Post("/accrual-adjustments", h.CreateBusinessAccrualAdjustment)
+					})
+
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessPayoutBatches))
+						r.Post("/payouts", h.BuildBusinessPayoutBatch)
+						r.Post("/payouts/{batchId}/approve", h.ApproveBusinessPayoutBatch)
+						r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.ModulbankPayoutDrafts)).Post("/payouts/{batchId}/submit-draft", h.SubmitBusinessPayoutDraft)
+					})
+				})
 			})
 		})
 

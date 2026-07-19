@@ -1,0 +1,1 @@
+ALTER TABLE business_counterparty_classification DROP CONSTRAINT IF EXISTS business_counterparty_classification_pkey;

@@ -1,0 +1,733 @@
+package handler
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/csv"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/xuri/excelize/v2"
+)
+
+const businessBankFileLimit = 20 << 20
+
+type businessBankRow struct {
+	Account      string
+	BookedOn     time.Time
+	Counterparty string
+	INN          string
+	Inflow       int64
+	Outflow      int64
+	Purpose      string
+	Raw          map[string]string
+}
+
+type businessBankImportResult struct {
+	BatchID         string `json:"batch_id"`
+	Status          string `json:"status"`
+	RowsTotal       int    `json:"rows_total"`
+	RowsInserted    int    `json:"rows_inserted"`
+	RowsDuplicate   int    `json:"rows_duplicate"`
+	RowsInvalid     int    `json:"rows_invalid"`
+	AlreadyImported bool   `json:"already_imported"`
+}
+
+func (h *Handler) ImportBusinessBankFile(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, businessBankFileLimit+(1<<20))
+	if err := r.ParseMultipartForm(businessBankFileLimit); err != nil {
+		writeError(w, http.StatusBadRequest, "bank file must be a multipart upload up to 20 MB")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+	content, err := io.ReadAll(io.LimitReader(file, businessBankFileLimit+1))
+	if err != nil || len(content) == 0 || len(content) > businessBankFileLimit {
+		writeError(w, http.StatusBadRequest, "bank file is empty, unreadable, or too large")
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	var rows []businessBankRow
+	var source string
+	switch ext {
+	case ".csv":
+		source = "modulbank_csv"
+		rows, err = parseBusinessBankCSV(content)
+	case ".xlsx":
+		source = "modulbank_xlsx"
+		rows, err = parseBusinessBankXLSX(content)
+	default:
+		err = fmt.Errorf("only .csv and .xlsx are supported")
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	digest := sha256.Sum256(content)
+	sha := hex.EncodeToString(digest[:])
+	result, err := h.persistBusinessBankImport(r.Context(), businessID, userID, source, header.Filename, sha, rows)
+	if err != nil {
+		slog.Error("business bank import failed", "business_id", businessID, "filename", header.Filename, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to import bank file")
+		return
+	}
+	status := http.StatusCreated
+	if result.AlreadyImported {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, result)
+}
+
+func parseBusinessBankCSV(content []byte) ([]businessBankRow, error) {
+	reader := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(content, []byte{0xef, 0xbb, 0xbf})))
+	reader.Comma = ';'
+	reader.FieldsPerRecord = -1
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("invalid CSV file")
+	}
+	return parseBusinessBankRecords(records)
+}
+
+func parseBusinessBankXLSX(content []byte) ([]businessBankRow, error) {
+	book, err := excelize.OpenReader(bytes.NewReader(content))
+	if err != nil {
+		return nil, fmt.Errorf("invalid XLSX file")
+	}
+	defer book.Close()
+	sheets := book.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, fmt.Errorf("XLSX file has no worksheets")
+	}
+	records, err := book.GetRows(sheets[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to read XLSX rows")
+	}
+	return parseBusinessBankRecords(records)
+}
+
+func parseBusinessBankRecords(records [][]string) ([]businessBankRow, error) {
+	if len(records) < 2 {
+		return nil, fmt.Errorf("bank file has no transactions")
+	}
+	headers := make([]string, len(records[0]))
+	for i, value := range records[0] {
+		headers[i] = normalizeBusinessBankHeader(value)
+	}
+	columns := map[string]int{}
+	for i, header := range headers {
+		if canonical := canonicalBusinessBankHeader(header); canonical != "" {
+			columns[canonical] = i
+		}
+	}
+	for _, required := range []string{"date", "counterparty", "inflow", "outflow"} {
+		if _, ok := columns[required]; !ok {
+			return nil, fmt.Errorf("bank file is missing the %s column", required)
+		}
+	}
+	rows := make([]businessBankRow, 0, len(records)-1)
+	for _, record := range records[1:] {
+		if businessBankRecordBlank(record) {
+			continue
+		}
+		raw := map[string]string{}
+		for i, value := range record {
+			if i < len(headers) && headers[i] != "" {
+				raw[headers[i]] = strings.TrimSpace(value)
+			}
+		}
+		bookedOn, dateErr := parseBusinessBankDate(businessBankCell(record, columns["date"]))
+		inflow, inErr := parseBusinessBankMoney(businessBankCell(record, columns["inflow"]))
+		outflow, outErr := parseBusinessBankMoney(businessBankCell(record, columns["outflow"]))
+		if dateErr != nil || inErr != nil || outErr != nil || (inflow <= 0) == (outflow <= 0) {
+			rows = append(rows, businessBankRow{Raw: raw})
+			continue
+		}
+		rows = append(rows, businessBankRow{
+			Account:      businessBankCell(record, columns["account"]),
+			BookedOn:     bookedOn,
+			Counterparty: strings.TrimSpace(businessBankCell(record, columns["counterparty"])),
+			INN:          digitsOnly(businessBankCell(record, columns["inn"])),
+			Inflow:       inflow,
+			Outflow:      outflow,
+			Purpose:      strings.TrimSpace(businessBankCell(record, columns["purpose"])),
+			Raw:          raw,
+		})
+	}
+	return rows, nil
+}
+
+func (h *Handler) persistBusinessBankImport(ctx context.Context, businessID, userID, source, filename, sha string, rows []businessBankRow) (businessBankImportResult, error) {
+	result := businessBankImportResult{Status: "completed", RowsTotal: len(rows)}
+	var existingStatus string
+	err := h.DB.QueryRow(ctx, `
+		SELECT id::text, status, rows_total, rows_inserted, rows_duplicate, rows_invalid
+		FROM business_bank_import_batch
+		WHERE business_id = $1 AND file_sha256 = $2 AND voided_at IS NULL
+	`, businessID, sha).Scan(&result.BatchID, &existingStatus, &result.RowsTotal, &result.RowsInserted, &result.RowsDuplicate, &result.RowsInvalid)
+	if err == nil {
+		result.Status = existingStatus
+		result.AlreadyImported = true
+		return result, nil
+	}
+	if err != pgx.ErrNoRows {
+		return result, err
+	}
+
+	tx, err := h.TxStarter.Begin(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback(ctx)
+	metadata, _ := json.Marshal(map[string]any{"parser": "business_bank_v1", "rows": len(rows)})
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO business_bank_import_batch (
+			business_id, source, filename, file_sha256, idempotency_key, status,
+			rows_total, imported_by, raw_metadata
+		) VALUES ($1,$2,$3,$4,$5,'processing',$6,$7,$8)
+		RETURNING id::text
+	`, businessID, source, strings.TrimSpace(filename), sha, "bank-file:"+sha, len(rows), userID, metadata).Scan(&result.BatchID); err != nil {
+		return result, err
+	}
+
+	for _, row := range rows {
+		if row.BookedOn.IsZero() || row.Counterparty == "" || (row.Inflow <= 0) == (row.Outflow <= 0) {
+			result.RowsInvalid++
+			continue
+		}
+		direction, amount := "inbound", row.Inflow
+		if row.Outflow > 0 {
+			direction, amount = "outbound", row.Outflow
+		}
+		classification, confidence := classifyBusinessBankRow(ctx, tx, businessID, row, direction)
+		dedup := businessBankDedupKey(row, direction, amount)
+		raw, _ := json.Marshal(row.Raw)
+		command, insertErr := tx.Exec(ctx, `
+			INSERT INTO business_bank_transaction (
+				business_id, import_batch_id, source, dedup_key, booked_on, direction,
+				amount_rub, account_mask, counterparty_name, counterparty_inn, purpose,
+				classification, classification_confidence, raw_payload
+			) VALUES ($1,$2,$3,$4,$5,$6,$7::numeric/100,$8,$9,NULLIF($10,''),NULLIF($11,''),$12,$13,$14)
+			ON CONFLICT (business_id, dedup_key) WHERE voided_at IS NULL DO NOTHING
+		`, businessID, result.BatchID, source, dedup, dateOnly(row.BookedOn), direction, amount,
+			maskBusinessAccount(row.Account), row.Counterparty, row.INN, row.Purpose, classification, confidence, raw)
+		if insertErr != nil {
+			return result, insertErr
+		}
+		if command.RowsAffected() == 0 {
+			result.RowsDuplicate++
+		} else {
+			result.RowsInserted++
+		}
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE business_bank_import_batch
+		SET status='completed', rows_inserted=$2, rows_duplicate=$3, rows_invalid=$4,
+		    completed_at=now(), updated_at=now()
+		WHERE business_id=$1 AND id=$5
+	`, businessID, result.RowsInserted, result.RowsDuplicate, result.RowsInvalid, result.BatchID); err != nil {
+		return result, err
+	}
+	resultJSON, _ := json.Marshal(result)
+	if err := h.insertBusinessAudit(ctx, tx, businessID, userID, "bank.import", "business_bank_import_batch", result.BatchID, "bank file import", nil, resultJSON); err != nil {
+		return result, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func classifyBusinessBankRow(ctx context.Context, tx pgx.Tx, businessID string, row businessBankRow, direction string) (string, string) {
+	vitmaxINNs := map[string]bool{"7724010662": true, "5611054231": true, "9203005794": true, "6674136513": true}
+	if vitmaxINNs[row.INN] {
+		return "vitmax_transit", "confirmed"
+	}
+	lower := strings.ToLower(row.Counterparty + " " + row.Purpose)
+	if row.INN == "662607078800" || strings.Contains(lower, "между своими счет") || strings.Contains(lower, "перевод собственных средств") {
+		return "transfer", "confirmed"
+	}
+	if direction == "outbound" && (strings.Contains(lower, "налог") || strings.Contains(lower, "фнс") || strings.Contains(lower, "страхов") || strings.Contains(lower, "взнос")) {
+		return "tax", "suggested"
+	}
+	if direction == "outbound" && (strings.Contains(lower, "комисси") || strings.Contains(lower, "обслуживан")) {
+		return "service", "suggested"
+	}
+	var classification, confidence string
+	err := tx.QueryRow(ctx, `
+		SELECT classification, confidence
+		FROM business_counterparty_classification
+		WHERE business_id=$1 AND source='bank' AND confidence='confirmed'
+		  AND (external_id=$2 OR (NULLIF($3,'') IS NOT NULL AND inn=$3))
+		ORDER BY updated_at DESC LIMIT 1
+	`, businessID, businessBankCounterpartyKey(row), row.INN).Scan(&classification, &confidence)
+	if err == nil {
+		switch classification {
+		case "client_payer":
+			return "client_income", "confirmed"
+		case "worker_payee":
+			return "payroll", "confirmed"
+		case "transit", "ignored":
+			return "transfer", "confirmed"
+		default:
+			return "service", "suggested"
+		}
+	}
+	if direction == "inbound" {
+		var exists bool
+		_ = tx.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM business_client_payer
+				WHERE business_id=$1 AND status='active'
+				  AND (lower(name)=lower($2) OR (NULLIF($3,'') IS NOT NULL AND inn=$3))
+			)
+		`, businessID, row.Counterparty, row.INN).Scan(&exists)
+		if exists {
+			return "client_income", "confirmed"
+		}
+	}
+	return "unknown", "unresolved"
+}
+
+type createBusinessBankTransactionRequest struct {
+	BookedOn         string  `json:"booked_on"`
+	Direction        string  `json:"direction"`
+	AmountRUB        string  `json:"amount_rub"`
+	CounterpartyName string  `json:"counterparty_name"`
+	CounterpartyINN  *string `json:"counterparty_inn"`
+	Purpose          *string `json:"purpose"`
+	Classification   string  `json:"classification"`
+	IdempotencyKey   string  `json:"idempotency_key"`
+}
+
+func (h *Handler) CreateBusinessBankTransaction(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	var request createBusinessBankTransactionRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	bookedOn, err := time.Parse("2006-01-02", request.BookedOn)
+	if err != nil || !containsBusinessString([]string{"inbound", "outbound"}, request.Direction) || strings.TrimSpace(request.CounterpartyName) == "" {
+		writeError(w, http.StatusBadRequest, "booked_on, direction and counterparty_name are invalid")
+		return
+	}
+	amount, err := parseBusinessBankMoney(request.AmountRUB)
+	if err != nil || amount <= 0 || strings.TrimSpace(request.IdempotencyKey) == "" {
+		writeError(w, http.StatusBadRequest, "positive amount_rub and idempotency_key are required")
+		return
+	}
+	if request.Classification == "" {
+		request.Classification = "unknown"
+	}
+	if !containsBusinessString([]string{"client_income", "payroll", "tax", "service", "transfer", "owner_draw", "vitmax_transit", "unknown"}, request.Classification) {
+		writeError(w, http.StatusBadRequest, "classification is invalid")
+		return
+	}
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, 500, "failed to create transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var id string
+	err = tx.QueryRow(r.Context(), `
+		INSERT INTO business_bank_transaction (
+			business_id, source, dedup_key, booked_on, direction, amount_rub,
+			counterparty_name, counterparty_inn, purpose, classification, classification_confidence,
+			raw_payload
+		) VALUES ($1,'manual',$2,$3,$4,$5::numeric/100,$6,NULLIF($7,''),NULLIF($8,''),$9,'confirmed',jsonb_build_object('created_by',$10::text))
+		ON CONFLICT (business_id,dedup_key) WHERE voided_at IS NULL DO UPDATE SET updated_at=now()
+		RETURNING id::text
+	`, businessID, request.IdempotencyKey, dateOnly(bookedOn), request.Direction, amount,
+		strings.TrimSpace(request.CounterpartyName), stringValue(request.CounterpartyINN), stringValue(request.Purpose), request.Classification, userID).Scan(&id)
+	if err != nil {
+		writeError(w, 500, "failed to create transaction")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "bank.transaction.create", "business_bank_transaction", id, "manual bank transaction", nil, nil); err != nil {
+		writeError(w, 500, "failed to create transaction")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, 500, "failed to create transaction")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+type classifyBusinessTransactionRequest struct {
+	Classification string `json:"classification"`
+	Confidence     string `json:"confidence"`
+	Reason         string `json:"reason"`
+}
+
+func (h *Handler) ClassifyBusinessBankTransaction(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	transactionID := chi.URLParam(r, "transactionId")
+	if _, ok := parseUUIDOrBadRequest(w, transactionID, "transaction_id"); !ok {
+		return
+	}
+	var request classifyBusinessTransactionRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if !containsBusinessString([]string{"client_income", "payroll", "tax", "service", "transfer", "owner_draw", "vitmax_transit", "unknown"}, request.Classification) ||
+		!containsBusinessString([]string{"confirmed", "suggested", "unresolved"}, request.Confidence) {
+		writeError(w, 400, "classification or confidence is invalid")
+		return
+	}
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, 500, "failed to classify transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	command, err := tx.Exec(r.Context(), `UPDATE business_bank_transaction SET classification=$3,classification_confidence=$4,updated_at=now() WHERE business_id=$1 AND id=$2 AND voided_at IS NULL`, businessID, transactionID, request.Classification, request.Confidence)
+	if err != nil {
+		writeError(w, 500, "failed to classify transaction")
+		return
+	}
+	if command.RowsAffected() == 0 {
+		writeError(w, 404, "transaction not found")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "bank.transaction.classify", "business_bank_transaction", transactionID, request.Reason, nil, nil); err != nil {
+		writeError(w, 500, "failed to classify transaction")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, 500, "failed to classify transaction")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type createBusinessMatchRequest struct {
+	TargetType     string  `json:"target_type"`
+	TargetID       string  `json:"target_id"`
+	AmountRUB      string  `json:"amount_rub"`
+	Status         string  `json:"status"`
+	IdempotencyKey string  `json:"idempotency_key"`
+	Notes          *string `json:"notes"`
+}
+
+func (h *Handler) CreateBusinessTransactionMatch(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	transactionID := chi.URLParam(r, "transactionId")
+	if _, ok := parseUUIDOrBadRequest(w, transactionID, "transaction_id"); !ok {
+		return
+	}
+	var request createBusinessMatchRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if _, ok := parseUUIDOrBadRequest(w, request.TargetID, "target_id"); !ok {
+		return
+	}
+	amount, err := parseBusinessBankMoney(request.AmountRUB)
+	if err != nil || amount <= 0 || !containsBusinessString([]string{"receivable", "billing_period", "payout", "company_cost"}, request.TargetType) || strings.TrimSpace(request.IdempotencyKey) == "" {
+		writeError(w, 400, "match fields are invalid")
+		return
+	}
+	if request.Status == "" {
+		request.Status = "confirmed"
+	}
+	if !containsBusinessString([]string{"suggested", "confirmed"}, request.Status) {
+		writeError(w, 400, "status is invalid")
+		return
+	}
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, 500, "failed to create match")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var transactionAmount int64
+	var direction string
+	if err := tx.QueryRow(r.Context(), `SELECT round(amount_rub*100)::bigint,direction FROM business_bank_transaction WHERE business_id=$1 AND id=$2 AND voided_at IS NULL FOR UPDATE`, businessID, transactionID).Scan(&transactionAmount, &direction); err != nil {
+		writeError(w, 404, "transaction not found")
+		return
+	}
+	if (containsBusinessString([]string{"receivable", "billing_period"}, request.TargetType) && direction != "inbound") ||
+		(containsBusinessString([]string{"payout", "company_cost"}, request.TargetType) && direction != "outbound") {
+		writeError(w, 409, "transaction direction does not match the target")
+		return
+	}
+	var matched int64
+	if err := tx.QueryRow(r.Context(), `SELECT COALESCE(round(sum(amount_rub)*100),0)::bigint FROM business_transaction_match WHERE business_id=$1 AND transaction_id=$2 AND status IN ('suggested','confirmed')`, businessID, transactionID).Scan(&matched); err != nil || matched+amount > transactionAmount {
+		writeError(w, 409, "match total exceeds transaction amount")
+		return
+	}
+	if !businessMatchTargetExists(r.Context(), tx, businessID, request.TargetType, request.TargetID) {
+		writeError(w, 400, "match target is outside this business")
+		return
+	}
+	var id string
+	confirmed := request.Status == "confirmed"
+	err = tx.QueryRow(r.Context(), `INSERT INTO business_transaction_match (business_id,transaction_id,target_type,target_id,amount_rub,status,suggested_by,confirmed_by,confirmed_at,idempotency_key,notes) VALUES ($1,$2,$3,$4,$5::numeric/100,$6,$7,CASE WHEN $8 THEN $7::uuid END,CASE WHEN $8 THEN now() END,$9,NULLIF($10,'')) ON CONFLICT (business_id,idempotency_key) DO UPDATE SET updated_at=now() RETURNING id::text`, businessID, transactionID, request.TargetType, request.TargetID, amount, request.Status, userID, confirmed, request.IdempotencyKey, stringValue(request.Notes)).Scan(&id)
+	if err != nil {
+		writeError(w, 500, "failed to create match")
+		return
+	}
+	if confirmed && request.TargetType == "receivable" {
+		if err := recalculateBusinessReceivableFunding(r.Context(), tx, businessID, request.TargetID); err != nil {
+			writeError(w, 500, "failed to update receivable funding")
+			return
+		}
+	}
+	if confirmed && request.TargetType == "payout" {
+		if err := recalculateBusinessPayoutPayment(r.Context(), tx, businessID, request.TargetID); err != nil {
+			writeError(w, 500, "failed to update payout payment")
+			return
+		}
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "bank.match.create", "business_transaction_match", id, "bank reconciliation", nil, nil); err != nil {
+		writeError(w, 500, "failed to create match")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, 500, "failed to create match")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+}
+
+type createBusinessCostRequest struct {
+	TransactionID *string `json:"transaction_id"`
+	Category      string  `json:"category"`
+	AmountRUB     string  `json:"amount_rub"`
+	WorkspaceID   *string `json:"workspace_id"`
+	ClientID      *string `json:"client_id"`
+	ProjectID     *string `json:"project_id"`
+	IncurredOn    string  `json:"incurred_on"`
+	Notes         *string `json:"notes"`
+}
+
+func (h *Handler) CreateBusinessCompanyCost(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	var request createBusinessCostRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	amount, err := parseBusinessBankMoney(request.AmountRUB)
+	incurred, derr := time.Parse("2006-01-02", request.IncurredOn)
+	if err != nil || derr != nil || amount <= 0 || !containsBusinessString([]string{"tax", "bank", "ai", "service", "infrastructure", "contractor", "other"}, request.Category) {
+		writeError(w, 400, "cost fields are invalid")
+		return
+	}
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, 500, "failed to create cost")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	if request.WorkspaceID != nil && !businessWorkspaceExists(r.Context(), tx, businessID, *request.WorkspaceID) {
+		writeError(w, 400, "workspace is outside this business")
+		return
+	}
+	var id string
+	err = tx.QueryRow(r.Context(), `INSERT INTO business_company_cost (business_id,transaction_id,category,amount_rub,workspace_id,client_id,project_id,incurred_on,notes,created_by) VALUES ($1,NULLIF($2,'')::uuid,$3,$4::numeric/100,NULLIF($5,'')::uuid,NULLIF($6,'')::uuid,NULLIF($7,'')::uuid,$8,NULLIF($9,''),$10) RETURNING id::text`, businessID, stringValue(request.TransactionID), request.Category, amount, stringValue(request.WorkspaceID), stringValue(request.ClientID), stringValue(request.ProjectID), dateOnly(incurred), stringValue(request.Notes), userID).Scan(&id)
+	if err != nil {
+		writeError(w, 500, "failed to create cost")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "cost.create", "business_company_cost", id, "company cost", nil, nil); err != nil {
+		writeError(w, 500, "failed to create cost")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, 500, "failed to create cost")
+		return
+	}
+	writeJSON(w, 201, map[string]string{"id": id})
+}
+
+func businessMatchTargetExists(ctx context.Context, tx pgx.Tx, businessID, targetType, targetID string) bool {
+	queries := map[string]string{
+		"receivable":     `SELECT EXISTS(SELECT 1 FROM business_receivable WHERE business_id=$1 AND id=$2 AND status NOT IN ('skipped','written_off'))`,
+		"billing_period": `SELECT EXISTS(SELECT 1 FROM client_billing_period cbp JOIN client_billing_config cbc ON cbc.id=cbp.client_billing_config_id JOIN business_workspace bw ON bw.workspace_id=cbc.workspace_id WHERE bw.business_id=$1 AND cbp.id=$2)`,
+		"payout":         `SELECT EXISTS(SELECT 1 FROM business_payout_batch WHERE business_id=$1 AND id=$2)`,
+		"company_cost":   `SELECT EXISTS(SELECT 1 FROM business_company_cost WHERE business_id=$1 AND id=$2 AND voided_at IS NULL)`,
+	}
+	var exists bool
+	q, ok := queries[targetType]
+	if !ok {
+		return false
+	}
+	return tx.QueryRow(ctx, q, businessID, targetID).Scan(&exists) == nil && exists
+}
+
+func recalculateBusinessReceivableFunding(ctx context.Context, tx pgx.Tx, businessID, receivableID string) error {
+	_, err := tx.Exec(ctx, `
+		WITH funding AS (
+			SELECT COALESCE(sum(amount_rub),0) AS paid FROM business_transaction_match
+			WHERE business_id=$1 AND target_type='receivable' AND target_id=$2 AND status='confirmed'
+		), updated AS (
+			UPDATE business_receivable r SET paid_amount_rub=least(r.planned_amount_rub,f.paid),
+				status=CASE WHEN f.paid>=r.planned_amount_rub THEN 'paid' WHEN f.paid>0 THEN 'partially_paid' ELSE r.status END,
+				updated_at=now()
+			FROM funding f WHERE r.business_id=$1 AND r.id=$2 RETURNING r.planned_amount_rub,r.paid_amount_rub
+		), task_funding AS (
+			UPDATE business_receivable_task rt SET funded_rub=least(rt.allocated_value_rub,
+				CASE WHEN u.planned_amount_rub=0 THEN 0 ELSE u.paid_amount_rub*rt.allocated_value_rub/u.planned_amount_rub END),updated_at=now()
+			FROM updated u WHERE rt.business_id=$1 AND rt.receivable_id=$2 RETURNING rt.task_economics_id,rt.service_value_rub,rt.funded_rub
+		), ratios AS (
+			SELECT task_economics_id,LEAST(1,COALESCE(sum(funded_rub)/NULLIF(max(service_value_rub),0),0)) ratio FROM task_funding GROUP BY task_economics_id
+		)
+		UPDATE business_accrual a SET funded_rub=round(a.original_amount_rub*r.ratio,2),
+			status=CASE WHEN r.ratio>=1 THEN 'payable' WHEN r.ratio>0 THEN 'partially_payable' ELSE 'accrued' END,
+			client_funded_at=CASE WHEN r.ratio>0 THEN COALESCE(a.client_funded_at,now()) END,
+			payable_at=CASE WHEN r.ratio>=1 THEN COALESCE(a.payable_at,now()) END,updated_at=now()
+		FROM ratios r WHERE a.business_id=$1 AND a.task_economics_id=r.task_economics_id AND a.status NOT IN ('in_payout','paid')
+	`, businessID, receivableID)
+	return err
+}
+
+func recalculateBusinessPayoutPayment(ctx context.Context, tx pgx.Tx, businessID, payoutID string) error {
+	var total, matched int64
+	if err := tx.QueryRow(ctx, `SELECT round(total_rub*100)::bigint FROM business_payout_batch WHERE business_id=$1 AND id=$2 FOR UPDATE`, businessID, payoutID).Scan(&total); err != nil {
+		return err
+	}
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(round(sum(amount_rub)*100),0)::bigint FROM business_transaction_match WHERE business_id=$1 AND target_type='payout' AND target_id=$2 AND status='confirmed'`, businessID, payoutID).Scan(&matched); err != nil {
+		return err
+	}
+	if total <= 0 || matched < total {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `
+		WITH paid_items AS (
+			UPDATE business_payout_item SET status='paid',updated_at=now()
+			WHERE business_id=$1 AND payout_batch_id=$2 AND status='submitted'
+			RETURNING accrual_id,amount_rub
+		)
+		UPDATE business_accrual a SET paid_rub=LEAST(a.original_amount_rub,a.paid_rub+i.amount_rub),
+			status='paid',paid_at=now(),updated_at=now()
+		FROM paid_items i WHERE a.business_id=$1 AND a.id=i.accrual_id
+	`, businessID, payoutID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE business_payout_batch SET status='paid',paid_at=now(),updated_at=now() WHERE business_id=$1 AND id=$2 AND status='submitted'`, businessID, payoutID)
+	return err
+}
+
+func normalizeBusinessBankHeader(value string) string {
+	value = strings.TrimSpace(strings.ToLower(strings.TrimPrefix(value, "\ufeff")))
+	return strings.Join(strings.Fields(value), " ")
+}
+func canonicalBusinessBankHeader(value string) string {
+	compact := strings.NewReplacer(" ", "", "_", "", "-", "").Replace(value)
+	switch compact {
+	case "account", "счет", "счёт", "номерсчета", "расчетныйсчет":
+		return "account"
+	case "date", "дата", "датапроводки", "датаоперации":
+		return "date"
+	case "counterparty", "контрагент", "наименованиеконтрагента", "плательщик", "получатель":
+		return "counterparty"
+	case "inn", "инн", "иннконтрагента":
+		return "inn"
+	case "inflow", "приход", "поступление", "кредит":
+		return "inflow"
+	case "outflow", "расход", "списание", "дебет":
+		return "outflow"
+	case "purpose", "назначение", "назначениеплатежа":
+		return "purpose"
+	}
+	return ""
+}
+func businessBankCell(record []string, index int) string {
+	if index < 0 || index >= len(record) {
+		return ""
+	}
+	return strings.TrimSpace(record[index])
+}
+func businessBankRecordBlank(record []string) bool {
+	for _, v := range record {
+		if strings.TrimSpace(v) != "" {
+			return false
+		}
+	}
+	return true
+}
+func parseBusinessBankDate(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	for _, layout := range []string{"2006-01-02", "02.01.2006", "02/01/2006", "2006-01-02 15:04:05", "02.01.2006 15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid date")
+}
+func parseBusinessBankMoney(value string) (int64, error) {
+	clean := strings.NewReplacer("\u00a0", "", " ", "", "₽", "", "руб.", "", "руб", "", ",", ".").Replace(strings.TrimSpace(value))
+	if clean == "" || clean == "-" {
+		return 0, nil
+	}
+	number, err := strconv.ParseFloat(clean, 64)
+	if err != nil {
+		return 0, err
+	}
+	if number < 0 {
+		number = -number
+	}
+	return int64(number*100 + 0.5), nil
+}
+func digitsOnly(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsDigit(r) {
+			return r
+		}
+		return -1
+	}, value)
+}
+func maskBusinessAccount(value string) string {
+	value = digitsOnly(value)
+	if len(value) <= 8 {
+		return value
+	}
+	return value[:4] + "…" + value[len(value)-4:]
+}
+func businessBankCounterpartyKey(row businessBankRow) string {
+	if row.INN != "" {
+		return "inn:" + row.INN
+	}
+	return "name:" + strings.ToLower(strings.Join(strings.Fields(row.Counterparty), " "))
+}
+func businessBankDedupKey(row businessBankRow, direction string, amount int64) string {
+	normalized := fmt.Sprintf("%s|%s|%d|%s|%s|%s|%s", row.BookedOn.Format("2006-01-02"), direction, amount, strings.ToLower(strings.Join(strings.Fields(row.Counterparty), " ")), row.INN, strings.ToLower(strings.Join(strings.Fields(row.Purpose), " ")), digitsOnly(row.Account))
+	digest := sha256.Sum256([]byte(normalized))
+	return hex.EncodeToString(digest[:])
+}

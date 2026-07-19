@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_task_participant_pkey_idx;

@@ -66,6 +66,10 @@ import type {
   ContractorPeriodGroup,
   ContractorInvoiceResult,
   ElbaEntity,
+  BusinessAccount,
+  BusinessDashboard,
+  BusinessSnapshot,
+  BusinessBankImportResult,
   RuntimeHourlyActivity,
   RuntimeUsageByAgent,
   RuntimeUsageByHour,
@@ -3037,5 +3041,44 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify({ token }),
     });
+  }
+
+  // Internal business system. These endpoints are business-member scoped and
+  // deliberately do not send or infer a workspace header as authorization.
+  async listBusinessAccounts(): Promise<BusinessAccount[]> {
+    return this.fetch(`/api/businesses/`);
+  }
+
+  async getBusinessDashboard(businessId: string, month: string): Promise<BusinessDashboard> {
+    const search = new URLSearchParams();
+    if (month) search.set("month", month);
+    return this.fetch(`/api/businesses/${businessId}/dashboard?${search.toString()}`);
+  }
+
+  async getBusinessSnapshot(businessId: string): Promise<BusinessSnapshot> {
+    return this.fetch(`/api/businesses/${businessId}/snapshot`);
+  }
+
+  async businessAction<T = Record<string, unknown>>(
+    businessId: string,
+    path: string,
+    body?: unknown,
+    method: "POST" | "PUT" | "PATCH" = "POST",
+  ): Promise<T> {
+    const suffix = path.replace(/^\/+/, "");
+    return this.fetch(`/api/businesses/${businessId}/${suffix}`, {
+      method,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  }
+
+  async importBusinessBankFile(businessId: string, file: File): Promise<BusinessBankImportResult> {
+    const form = new FormData();
+    form.set("file", file);
+    const res = await this.fetchRaw(`/api/businesses/${businessId}/bank/imports`, {
+      method: "POST",
+      body: form,
+    });
+    return res.json() as Promise<BusinessBankImportResult>;
   }
 }

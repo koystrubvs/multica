@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_bank_outbox_idempotency_uidx;

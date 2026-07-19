@@ -1,0 +1,1 @@
+ALTER TABLE business_bank_import_batch DROP CONSTRAINT IF EXISTS business_bank_import_batch_pkey;

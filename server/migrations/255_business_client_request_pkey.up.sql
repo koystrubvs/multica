@@ -1,0 +1,1 @@
+ALTER TABLE business_client_request ADD CONSTRAINT business_client_request_pkey PRIMARY KEY USING INDEX business_client_request_pkey_idx;

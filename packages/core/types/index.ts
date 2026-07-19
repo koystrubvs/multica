@@ -211,6 +211,14 @@ export type {
 } from "./billing";
 
 export type {
+  BusinessAccount,
+  BusinessDashboard,
+  BusinessRow,
+  BusinessSnapshot,
+  BusinessBankImportResult,
+} from "./business";
+
+export type {
   ClientBillingMode,
   ClientBillingChargeStatus,
   ClientBillingConfig,

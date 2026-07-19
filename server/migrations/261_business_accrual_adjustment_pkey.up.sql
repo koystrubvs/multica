@@ -1,0 +1,1 @@
+ALTER TABLE business_accrual_adjustment ADD CONSTRAINT business_accrual_adjustment_pkey PRIMARY KEY USING INDEX business_accrual_adjustment_pkey_idx;

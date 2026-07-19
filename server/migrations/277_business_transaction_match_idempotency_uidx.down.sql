@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_transaction_match_idempotency_uidx;

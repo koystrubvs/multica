@@ -1,0 +1,1 @@
+ALTER TABLE business_receivable_task ADD CONSTRAINT business_receivable_task_pkey PRIMARY KEY USING INDEX business_receivable_task_pkey_idx;

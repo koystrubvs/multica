@@ -1,0 +1,1 @@
+ALTER TABLE business_compensation_policy DROP CONSTRAINT IF EXISTS business_compensation_policy_pkey;

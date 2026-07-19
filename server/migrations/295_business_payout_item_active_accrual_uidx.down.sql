@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_payout_item_active_accrual_uidx;

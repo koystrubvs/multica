@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_payout_batch_idempotency_uidx;

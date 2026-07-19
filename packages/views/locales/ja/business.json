@@ -1,0 +1,18 @@
+{
+  "title": "ビジネス",
+  "subtitle": "顧客、キャッシュフロー、タスク経済、発生額、支払",
+  "unavailable": "この環境ではビジネスシステムが有効ではありません。",
+  "loading": "ビジネスデータを読み込み中…",
+  "refresh": "更新",
+  "month": "月",
+  "tabs": {"overview":"概要","clients":"顧客","calendar":"カレンダー","bank":"銀行","economics":"タスク経済","accruals":"発生額","payouts":"支払"},
+  "metrics": {"client_income":"顧客収入","overdue":"期限超過","payable":"チームへの支払額","reserve":"準備金","owner_net":"所有者純利益","target":"目標進捗","task_value":"承認済みタスク価値","unknown":"未確認入金"},
+  "sections": {"clients":"顧客台帳","projects":"プロジェクト対応","receivables":"売掛金","transactions":"取引","workers":"担当者","tasks":"タスク経済","accruals":"不変の発生額","reserve":"準備金台帳","payouts":"支払バッチ"},
+  "actions": {"add_client":"顧客を追加","map_project":"プロジェクトを対応","add_agreement":"契約を追加","generate_receivables":"売掛金を生成","import_statement":"明細を取り込む","add_transaction":"取引を追加","add_worker":"担当者を追加","draft_economics":"経済草案を作成","accept":"承認","add_reserve":"準備金項目を追加","build_payout":"支払を作成","approve":"承認","submit_draft":"銀行草案を作成"},
+  "fields": {"name":"名前","client":"顧客","project":"プロジェクト","workspace_id":"ワークスペース ID","project_id":"プロジェクト ID","issue_id":"タスク ID","service_type":"サービスタイプ","amount":"金額、RUB","date":"日付","counterparty":"取引先","purpose":"目的","direction":"方向","worker":"担当者","role":"役割","percent":"割合","period":"期間","reason":"理由","file":"CSV または XLSX 明細"},
+  "empty": "記録はまだありません",
+  "success": "保存しました",
+  "bank_draft_note": "草案のみ作成します。最終署名は銀行で行います。",
+  "vitmax_note": "VitMax の通過資金と自己口座間振替は収益から除外されます。",
+  "no_penalties_note": "品質調整は所有者が手動で決定し、自動ペナルティはありません。"
+}

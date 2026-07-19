@@ -1,208 +1,216 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
+	"mime/multipart"
 	"net/http"
-	"net/http/httptest"
 	"testing"
-
-	"github.com/multica-ai/multica/server/internal/analytics"
-	"github.com/multica-ai/multica/server/internal/events"
-	"github.com/multica-ai/multica/server/internal/featureflags"
-	"github.com/multica-ai/multica/server/internal/realtime"
-	"github.com/multica-ai/multica/server/pkg/featureflag"
+	"time"
 )
 
-func TestBusinessControlPlaneW1(t *testing.T) {
-	ctx := context.Background()
-
-	// The release toggle defaults off even when the schema and code are present.
-	resp := authRequest(t, http.MethodGet, "/api/businesses", nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("flag-off status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-
-	var businessID string
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO business_account (name, owner_user_id)
-		VALUES ('Integration Test Business', $1)
-		RETURNING id
-	`, testUserID).Scan(&businessID); err != nil {
-		t.Fatalf("insert business account: %v", err)
-	}
-
-	if _, err := testPool.Exec(ctx, `
-		INSERT INTO business_account_member (business_id, user_id, role)
-		VALUES ($1, $2, 'owner')
-	`, businessID, testUserID); err != nil {
-		t.Fatalf("insert business owner: %v", err)
-	}
-	if _, err := testPool.Exec(ctx, `
-		INSERT INTO business_workspace (
-			business_id, workspace_id, kind,
-			include_in_portfolio, include_revenue, include_costs
-		)
-		VALUES ($1, $2, 'operational', true, true, true)
-	`, businessID, testWorkspaceID); err != nil {
-		t.Fatalf("insert business workspace: %v", err)
-	}
-
-	var viewerBusinessID string
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO business_account (name, owner_user_id)
-		VALUES ('Viewer-only Integration Business', $1)
-		RETURNING id
-	`, testUserID).Scan(&viewerBusinessID); err != nil {
-		t.Fatalf("insert viewer business: %v", err)
-	}
-	if _, err := testPool.Exec(ctx, `
-		INSERT INTO business_account_member (business_id, user_id, role)
-		VALUES ($1, $2, 'viewer')
-	`, viewerBusinessID, testUserID); err != nil {
-		t.Fatalf("insert viewer membership: %v", err)
-	}
-
-	foreignEmail := "business-w1-foreign@multica.ai"
-	var foreignUserID, foreignBusinessID string
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO "user" (name, email)
-		VALUES ('Business W1 Foreign Owner', $1)
-		RETURNING id
-	`, foreignEmail).Scan(&foreignUserID); err != nil {
-		t.Fatalf("insert foreign user: %v", err)
-	}
-	if err := testPool.QueryRow(ctx, `
-		INSERT INTO business_account (name, owner_user_id)
-		VALUES ('Foreign Integration Business', $1)
-		RETURNING id
-	`, foreignUserID).Scan(&foreignBusinessID); err != nil {
-		t.Fatalf("insert foreign business: %v", err)
-	}
-	if _, err := testPool.Exec(ctx, `
-		INSERT INTO business_account_member (business_id, user_id, role)
-		VALUES ($1, $2, 'owner')
-	`, foreignBusinessID, foreignUserID); err != nil {
-		t.Fatalf("insert foreign owner: %v", err)
-	}
-
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM business_workspace WHERE business_id = $1`, businessID)
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM business_account_member WHERE business_id IN ($1, $2, $3)`, businessID, viewerBusinessID, foreignBusinessID)
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM business_account WHERE id IN ($1, $2, $3)`, businessID, viewerBusinessID, foreignBusinessID)
-		_, _ = testPool.Exec(context.Background(), `DELETE FROM "user" WHERE id = $1`, foreignUserID)
-	})
-
-	provider := featureflag.NewStaticProvider()
-	provider.Set(featureflags.BusinessControlPlane, featureflag.Rule{Default: true})
-	flags := featureflag.NewService(provider)
-	hub := realtime.NewHub()
-	go hub.Run()
-	bus := events.New()
-	registerListeners(bus, hub)
-	router, _ := NewRouterWithOptions(testPool, hub, bus, analytics.NoopClient{}, nil, RouterOptions{FeatureFlags: flags})
-	enabledServer := httptest.NewServer(router)
-	defer enabledServer.Close()
-
-	resp = requestBusinessAPI(t, enabledServer.URL, "", "/api/businesses")
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
-	}
-
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/businesses")
-	var accounts []struct {
-		ID                          string `json:"id"`
-		Role                        string `json:"role"`
-		MonthlyOwnerIncomeTargetRUB string `json:"monthly_owner_income_target_rub"`
-	}
-	decodeBusinessResponse(t, resp, http.StatusOK, &accounts)
-	if len(accounts) != 1 || accounts[0].ID != businessID || accounts[0].Role != "owner" {
-		t.Fatalf("owner account list = %#v, want only %s", accounts, businessID)
-	}
-	if accounts[0].MonthlyOwnerIncomeTargetRUB != "1000000.00" {
-		t.Fatalf("monthly target = %q, want 1000000.00", accounts[0].MonthlyOwnerIncomeTargetRUB)
-	}
-
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/businesses/"+businessID)
-	var account struct {
-		ID       string `json:"id"`
-		Currency string `json:"currency"`
-		Timezone string `json:"timezone"`
-	}
-	decodeBusinessResponse(t, resp, http.StatusOK, &account)
-	if account.ID != businessID || account.Currency != "RUB" || account.Timezone != "Asia/Yekaterinburg" {
-		t.Fatalf("business account = %#v", account)
-	}
-
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/businesses/"+businessID+"/workspaces")
-	var workspaces []struct {
-		WorkspaceID        string `json:"workspace_id"`
-		Kind               string `json:"kind"`
-		IncludeInPortfolio bool   `json:"include_in_portfolio"`
-		IncludeRevenue     bool   `json:"include_revenue"`
-		IncludeCosts       bool   `json:"include_costs"`
-	}
-	decodeBusinessResponse(t, resp, http.StatusOK, &workspaces)
-	if len(workspaces) != 1 || workspaces[0].WorkspaceID != testWorkspaceID || workspaces[0].Kind != "operational" {
-		t.Fatalf("business workspace list = %#v", workspaces)
-	}
-	if !workspaces[0].IncludeInPortfolio || !workspaces[0].IncludeRevenue || !workspaces[0].IncludeCosts {
-		t.Fatalf("operational workspace flags = %#v", workspaces[0])
-	}
-
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/businesses/not-a-uuid")
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("malformed business id status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/businesses/"+viewerBusinessID)
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("viewer status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/businesses/"+foreignBusinessID)
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("foreign business status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-
-	// Enabling the business surface does not alter native workspace routes.
-	resp = requestBusinessAPI(t, enabledServer.URL, testToken, "/api/workspaces")
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("existing workspace route status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-}
-
-func requestBusinessAPI(t *testing.T, baseURL, token, path string) *http.Response {
+func importBusinessCSV(t *testing.T, businessID, content string, want int) map[string]any {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, baseURL+path, nil)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", "statement.csv")
 	if err != nil {
-		t.Fatalf("create request: %v", err)
+		t.Fatal(err)
 	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if _, err := part.Write([]byte(content)); err != nil {
+		t.Fatal(err)
 	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, testServer.URL+"/api/businesses/"+businessID+"/bank/imports", &body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+testToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("request %s: %v", path, err)
+		t.Fatal(err)
 	}
-	return resp
+	defer resp.Body.Close()
+	if resp.StatusCode != want {
+		t.Fatalf("bank import: expected %d, got %d", want, resp.StatusCode)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	return result
 }
 
-func decodeBusinessResponse(t *testing.T, resp *http.Response, wantStatus int, dst any) {
+func businessRequest(t *testing.T, method, businessID, path string, body any, want int) map[string]any {
 	t.Helper()
+	resp := authRequest(t, method, "/api/businesses/"+businessID+path, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != wantStatus {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, wantStatus, body)
+	if resp.StatusCode != want {
+		var failure any
+		_ = json.NewDecoder(resp.Body).Decode(&failure)
+		t.Fatalf("%s %s: expected %d, got %d: %v", method, path, want, resp.StatusCode, failure)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode %s %s: %v", method, path, err)
+	}
+	return result
+}
+
+func cleanupBusinessIntegrationFixture(ctx context.Context, t *testing.T, businessID string) {
+	t.Helper()
+	for _, table := range []string{
+		"business_bank_outbox", "business_payout_item", "business_payout_batch", "business_reserve_ledger",
+		"business_accrual_adjustment", "business_quality_case", "business_accrual", "business_receivable_task",
+		"business_task_participant", "business_task_economics", "business_client_request", "business_compensation_policy",
+		"business_worker", "business_company_cost", "business_transaction_match", "business_bank_transaction",
+		"business_bank_import_batch", "business_receivable", "business_agreement", "business_counterparty_classification",
+		"business_client_project", "business_client_payer", "business_client_alias", "business_client",
+		"business_audit_event", "business_workspace", "business_account_member",
+	} {
+		if _, err := testPool.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE business_id=$1", table), businessID); err != nil {
+			t.Errorf("cleanup %s: %v", table, err)
+		}
+	}
+	if _, err := testPool.Exec(ctx, `DELETE FROM business_account WHERE id=$1`, businessID); err != nil {
+		t.Errorf("cleanup business_account: %v", err)
+	}
+}
+
+func TestBusinessSystemLifecycle(t *testing.T) {
+	ctx := context.Background()
+	var businessID, projectID, issueID string
+	if err := testPool.QueryRow(ctx, `INSERT INTO business_account(name,owner_user_id) VALUES ('Integration Business',$1) RETURNING id`, testUserID).Scan(&businessID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cleanupBusinessIntegrationFixture(context.Background(), t, businessID) })
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_account_member(business_id,user_id,role) VALUES ($1,$2,'owner')`, businessID, testUserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_workspace(business_id,workspace_id,kind) VALUES ($1,$2,'operational')`, businessID, testWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `INSERT INTO project(workspace_id,title,status) VALUES ($1,'Business lifecycle','in_progress') RETURNING id`, testWorkspaceID).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `INSERT INTO issue(workspace_id,title,creator_type,creator_id,project_id) VALUES ($1,'Billable lifecycle','member',$2,$3) RETURNING id`, testWorkspaceID, testUserID, projectID).Scan(&issueID); err != nil {
+		t.Fatal(err)
+	}
+
+	list := authRequest(t, http.MethodGet, "/api/businesses/", nil)
+	if list.StatusCode != http.StatusOK {
+		list.Body.Close()
+		t.Fatalf("list businesses: %d", list.StatusCode)
+	}
+	list.Body.Close()
+
+	client := businessRequest(t, http.MethodPost, businessID, "/clients", map[string]any{
+		"canonical_name": "Integration Client", "status": "active", "primary_payment_channel": "bank",
+	}, http.StatusCreated)
+	clientID := client["id"].(string)
+	businessRequest(t, http.MethodPut, businessID, "/clients/"+clientID+"/projects", map[string]any{
+		"workspace_id": testWorkspaceID, "project_id": projectID, "service_type": "development", "billable": true,
+	}, http.StatusOK)
+	businessRequest(t, http.MethodPost, businessID, "/clients/"+clientID+"/payers", map[string]any{
+		"name": "Integration Payer", "inn": "1234567890", "status": "active", "payment_channel": "bank",
+	}, http.StatusCreated)
+	csv := "account;date;counterparty;inn;inflow;outflow;purpose\n" +
+		"40817810000000000001;19.07.2026;УФК КБ85;7724010662;1000;;транзит VitMax\n" +
+		"40817810000000000001;19.07.2026;Неизвестный плательщик;9999999999;500;;проверка inbox\n"
+	firstImport := importBusinessCSV(t, businessID, csv, http.StatusCreated)
+	if firstImport["rows_inserted"] != float64(2) {
+		t.Fatalf("expected two imported rows, got %v", firstImport)
+	}
+	secondImport := importBusinessCSV(t, businessID, csv, http.StatusOK)
+	if secondImport["already_imported"] != true {
+		t.Fatalf("expected duplicate import to be idempotent, got %v", secondImport)
+	}
+	var importedClassification string
+	if err := testPool.QueryRow(ctx, `SELECT classification FROM business_bank_transaction WHERE business_id=$1 AND source='modulbank_csv' AND counterparty_inn='7724010662'`, businessID).Scan(&importedClassification); err != nil {
+		t.Fatal(err)
+	}
+	if importedClassification != "vitmax_transit" {
+		t.Fatalf("expected VitMax transit classification, got %s", importedClassification)
+	}
+
+	month := time.Now().UTC().Format("2006-01")
+	start := month + "-01"
+	agreement := businessRequest(t, http.MethodPost, businessID, "/agreements", map[string]any{
+		"client_id": clientID, "project_id": projectID, "service_type": "development",
+		"agreement_key": "integration-fixed", "version": 1, "name": "Integration fixed",
+		"model": "fixed", "amount_rub": "1000", "invoice_day": 1, "due_days": 7,
+		"period_months": 1, "payment_channel": "bank", "effective_from": start,
+		"status": "active", "terms": map[string]any{},
+	}, http.StatusCreated)
+	if agreement["id"] == nil {
+		t.Fatal("agreement id missing")
+	}
+	businessRequest(t, http.MethodPost, businessID, "/receivables/generate", map[string]any{"from_month": month, "months": 1}, http.StatusOK)
+
+	worker := businessRequest(t, http.MethodPost, businessID, "/workers", map[string]any{
+		"user_id": testUserID, "name": "Integration Worker", "engagement_format": "self_employed",
+	}, http.StatusCreated)
+	workerID := worker["id"].(string)
+	economics := businessRequest(t, http.MethodPost, businessID, "/task-economics", map[string]any{
+		"workspace_id": testWorkspaceID, "project_id": projectID, "issue_id": issueID, "client_id": clientID,
+		"service_type": "development", "service_value_rub": "1000", "source": "manual_override",
+		"billing_disposition": "normal", "idempotency_key": "integration-economics",
+		"participants": []map[string]any{{"worker_id": workerID, "role": "executor", "pool": "execution", "percent": "25"}},
+	}, http.StatusCreated)
+	economicsID := economics["id"].(string)
+	businessRequest(t, http.MethodPost, businessID, "/task-economics/"+economicsID+"/accept", map[string]any{"reason": "integration acceptance"}, http.StatusOK)
+
+	var receivableID string
+	if err := testPool.QueryRow(ctx, `SELECT id FROM business_receivable WHERE business_id=$1 AND agreement_id=$2`, businessID, agreement["id"]).Scan(&receivableID); err != nil {
+		t.Fatal(err)
+	}
+	businessRequest(t, http.MethodPost, businessID, "/receivable-tasks", map[string]any{
+		"receivable_id": receivableID, "task_economics_id": economicsID, "allocated_value_rub": "1000",
+	}, http.StatusCreated)
+
+	transaction := businessRequest(t, http.MethodPost, businessID, "/bank/transactions", map[string]any{
+		"booked_on": time.Now().UTC().Format("2006-01-02"), "direction": "inbound", "amount_rub": "1000",
+		"counterparty_name": "Integration Payer", "counterparty_inn": "1234567890", "classification": "client_income",
+		"idempotency_key": "integration-bank-income",
+	}, http.StatusCreated)
+	transactionID := transaction["id"].(string)
+	businessRequest(t, http.MethodPost, businessID, "/bank/transactions/"+transactionID+"/matches", map[string]any{
+		"target_type": "receivable", "target_id": receivableID, "amount_rub": "1000", "status": "confirmed", "idempotency_key": "integration-match",
+	}, http.StatusCreated)
+
+	payout := businessRequest(t, http.MethodPost, businessID, "/payouts", map[string]any{"period_key": month, "idempotency_key": "integration-payout"}, http.StatusCreated)
+	payoutID := payout["id"].(string)
+	businessRequest(t, http.MethodPost, businessID, "/payouts/"+payoutID+"/approve", nil, http.StatusOK)
+	businessRequest(t, http.MethodPost, businessID, "/payouts/"+payoutID+"/submit-draft", nil, http.StatusAccepted)
+	payoutTransaction := businessRequest(t, http.MethodPost, businessID, "/bank/transactions", map[string]any{
+		"booked_on": time.Now().UTC().Format("2006-01-02"), "direction": "outbound", "amount_rub": "250",
+		"counterparty_name": "Integration Worker", "classification": "payroll", "idempotency_key": "integration-bank-payout",
+	}, http.StatusCreated)
+	businessRequest(t, http.MethodPost, businessID, "/bank/transactions/"+payoutTransaction["id"].(string)+"/matches", map[string]any{
+		"target_type": "payout", "target_id": payoutID, "amount_rub": "250", "status": "confirmed", "idempotency_key": "integration-payout-match",
+	}, http.StatusCreated)
+
+	for _, path := range []string{"/snapshot", "/dashboard?month=" + month, "/me/compensation"} {
+		resp := authRequest(t, http.MethodGet, "/api/businesses/"+businessID+path, nil)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s: expected 200, got %d", path, resp.StatusCode)
+		}
+	}
+
+	var accrualStatus string
+	if err := testPool.QueryRow(ctx, `SELECT status FROM business_accrual WHERE business_id=$1 AND task_economics_id=$2`, businessID, economicsID).Scan(&accrualStatus); err != nil {
+		t.Fatal(err)
+	}
+	if accrualStatus != "paid" {
+		t.Fatalf("expected accrual paid, got %s", accrualStatus)
 	}
 }

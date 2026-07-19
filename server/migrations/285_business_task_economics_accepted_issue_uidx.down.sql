@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_task_economics_accepted_issue_uidx;

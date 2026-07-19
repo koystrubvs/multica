@@ -1,0 +1,1 @@
+ALTER TABLE business_bank_import_batch ADD CONSTRAINT business_bank_import_batch_pkey PRIMARY KEY USING INDEX business_bank_import_batch_pkey_idx;

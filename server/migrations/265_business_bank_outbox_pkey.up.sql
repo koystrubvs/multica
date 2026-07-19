@@ -1,0 +1,1 @@
+ALTER TABLE business_bank_outbox ADD CONSTRAINT business_bank_outbox_pkey PRIMARY KEY USING INDEX business_bank_outbox_pkey_idx;

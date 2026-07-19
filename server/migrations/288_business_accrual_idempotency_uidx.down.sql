@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_accrual_idempotency_uidx;
