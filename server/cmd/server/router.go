@@ -852,6 +852,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		// workspace context.
 		r.Get("/api/attachments/{id}/download", h.DownloadAttachment)
 
+		// W1 Business Control Plane. Business membership is an independent,
+		// DB-backed authorization layer over the workspace registry; it grants
+		// no implicit access to workspace-scoped endpoints.
+		r.Route("/api/businesses", func(r chi.Router) {
+			r.Use(handler.RequireHumanActor)
+			r.Use(handler.RequireBusinessControlPlane(opts.FeatureFlags))
+			r.Get("/", h.ListBusinessAccounts)
+			r.Route("/{businessId}", func(r chi.Router) {
+				r.Use(middleware.RequireBusinessRoleFromURL(queries, "businessId", "owner"))
+				r.Get("/", h.GetBusinessAccount)
+				r.Get("/workspaces", h.ListBusinessWorkspaces)
+			})
+		})
+
 		r.Route("/api/workspaces", func(r chi.Router) {
 			r.Get("/", h.ListWorkspaces)
 			r.Post("/", h.CreateWorkspace)

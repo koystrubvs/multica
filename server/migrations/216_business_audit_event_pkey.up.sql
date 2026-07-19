@@ -1,0 +1,1 @@
+ALTER TABLE business_audit_event ADD CONSTRAINT business_audit_event_pkey PRIMARY KEY USING INDEX business_audit_event_pkey;

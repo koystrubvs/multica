@@ -208,6 +208,15 @@ longer gates the write endpoint. `/api/config` still reports
 switch; this is a client-compatibility decision, not an operator-controlled
 flag.
 
+### Business Control Plane W1
+
+`business_control_plane` is a server-only release flag for the read-only W1
+business account and workspace registry. It defaults to `false`; disabled
+routes return `404`, and rollback leaves the additive `business_*` tables in
+place. Enable it with `FF_BUSINESS_CONTROL_PLANE=true` only after the schema,
+owner membership, and workspace seed have been verified. Business membership
+is checked in PostgreSQL on every request and never grants workspace access.
+
 ### Security note: never rely on the frontend alone
 
 A frontend feature flag controls what the user *sees*. It does NOT enforce access. Any API route exposing the same capability MUST evaluate the matching backend flag independently. The two flags can share a key but they live in two `Service` instances and the backend value is the source of truth.

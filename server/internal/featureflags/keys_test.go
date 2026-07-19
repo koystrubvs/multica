@@ -13,6 +13,9 @@ func TestReleaseFlagsDefaultToOff(t *testing.T) {
 	if ResourceLabelsEnabled(ctx, nil) {
 		t.Fatal("resource labels release flag must default to off")
 	}
+	if BusinessControlPlaneEnabled(ctx, nil) {
+		t.Fatal("business control plane release flag must default to off")
+	}
 }
 
 func TestAgentSkillTogglesCompatDecisionStaysEnabled(t *testing.T) {

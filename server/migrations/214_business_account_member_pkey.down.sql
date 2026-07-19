@@ -1,0 +1,1 @@
+ALTER TABLE business_account_member DROP CONSTRAINT IF EXISTS business_account_member_pkey;

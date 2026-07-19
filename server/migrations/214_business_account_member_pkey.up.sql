@@ -1,0 +1,1 @@
+ALTER TABLE business_account_member ADD CONSTRAINT business_account_member_pkey PRIMARY KEY USING INDEX business_account_member_pkey;

@@ -1,0 +1,1 @@
+ALTER TABLE business_workspace ADD CONSTRAINT business_workspace_pkey PRIMARY KEY USING INDEX business_workspace_pkey;

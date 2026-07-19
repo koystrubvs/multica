@@ -19,6 +19,9 @@ const (
 	// ResourceLabels controls the agent- and skill-scoped label namespaces.
 	// Issue labels remain available while this release flag is off.
 	ResourceLabels = "settings_resource_labels"
+	// BusinessControlPlane gates the W1 owner-only business account registry.
+	// It is server-only in W1: there is no business UI until a later wave.
+	BusinessControlPlane = "business_control_plane"
 	// agentSkillTogglesCompat is no longer a release flag. Keep publishing the
 	// key as enabled so installed v0.4.0 desktop clients, which still gate the
 	// switch on this config decision, receive the permanently enabled behavior.
@@ -41,6 +44,10 @@ func AgentBuilderEnabled(ctx context.Context, flags *featureflag.Service) bool {
 
 func ResourceLabelsEnabled(ctx context.Context, flags *featureflag.Service) bool {
 	return flags.IsEnabled(ctx, ResourceLabels, false)
+}
+
+func BusinessControlPlaneEnabled(ctx context.Context, flags *featureflag.Service) bool {
+	return flags.IsEnabled(ctx, BusinessControlPlane, false)
 }
 
 func EvaluateFrontendPublicFlags(ctx context.Context, flags *featureflag.Service) map[string]bool {

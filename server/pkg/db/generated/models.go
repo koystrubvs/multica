@@ -260,6 +260,52 @@ type AutopilotTrigger struct {
 	PublishedByID pgtype.UUID `json:"published_by_id"`
 }
 
+type BusinessAccount struct {
+	ID                          pgtype.UUID        `json:"id"`
+	Name                        string             `json:"name"`
+	OwnerUserID                 pgtype.UUID        `json:"owner_user_id"`
+	Currency                    string             `json:"currency"`
+	Timezone                    string             `json:"timezone"`
+	MonthlyOwnerIncomeTargetRub pgtype.Numeric     `json:"monthly_owner_income_target_rub"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BusinessAccountMember struct {
+	BusinessID pgtype.UUID        `json:"business_id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Role       string             `json:"role"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type BusinessAuditEvent struct {
+	ID          pgtype.UUID        `json:"id"`
+	BusinessID  pgtype.UUID        `json:"business_id"`
+	ActorUserID pgtype.UUID        `json:"actor_user_id"`
+	ActorType   string             `json:"actor_type"`
+	Action      string             `json:"action"`
+	EntityType  string             `json:"entity_type"`
+	EntityID    pgtype.UUID        `json:"entity_id"`
+	RequestID   pgtype.Text        `json:"request_id"`
+	Reason      pgtype.Text        `json:"reason"`
+	BeforeData  []byte             `json:"before_data"`
+	AfterData   []byte             `json:"after_data"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type BusinessWorkspace struct {
+	BusinessID         pgtype.UUID        `json:"business_id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	Kind               string             `json:"kind"`
+	IncludeInPortfolio bool               `json:"include_in_portfolio"`
+	IncludeRevenue     bool               `json:"include_revenue"`
+	IncludeCosts       bool               `json:"include_costs"`
+	ClientID           pgtype.UUID        `json:"client_id"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ChannelBindingToken struct {
 	TokenHash      string             `json:"token_hash"`
 	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
