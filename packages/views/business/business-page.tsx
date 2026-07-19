@@ -293,7 +293,7 @@ function Section({ title, actions, children }: { title: string; actions?: React.
 }
 
 function Metric({ label, value, hint, warning }: { label: string; value: string; hint?: string; warning?: boolean }) {
-  return <div className={cn("flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3", warning && "border-warning/50 bg-warning/5")}><div className="truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground" title={label}>{label}</div><div className="break-words text-lg font-semibold leading-tight tabular-nums">{value}</div>{hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}</div>;
+  return <div className={cn("flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3", warning && "border-warning/50 bg-warning/5")}><div className="truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground" title={label}>{label}</div><div className="break-words text-base font-semibold leading-tight tabular-nums @3xl:text-lg">{value}</div>{hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}</div>;
 }
 
 function formData(event: FormEvent<HTMLFormElement>): FormData {
@@ -480,6 +480,50 @@ export function BusinessPage() {
     setter(current.includes(value) ? [] : [value]);
   };
 
+  const headerFilter = ((): { sections: FilterSection[]; toggles?: FilterToggle[]; onClear: () => void } | null => {
+    switch (tab) {
+      case "overview":
+        return {
+          onClear: () => { setScopeClient([]); setScopeProject([]); setScopeService([]); },
+          sections: [
+            { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: scopeClient, onToggle: single(setScopeClient, scopeClient) },
+            { key: "project", label: t(($) => $.filters.project), options: projectOptions, selected: scopeProject, onToggle: single(setScopeProject, scopeProject) },
+            { key: "service", label: t(($) => $.filters.service), options: serviceOptions, selected: scopeService, onToggle: single(setScopeService, scopeService) },
+          ],
+        };
+      case "clients":
+        return {
+          onClear: () => { setClientStatuses([]); setCounterpartyClasses([]); },
+          sections: [
+            { key: "status", label: t(($) => $.filters.status), options: CLIENT_STATUSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: clientStatuses, onToggle: (value) => setClientStatuses(toggleValue(clientStatuses, value)) },
+            { key: "class", label: t(($) => $.filters.classification), options: COUNTERPARTY_CLASSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: counterpartyClasses, onToggle: (value) => setCounterpartyClasses(toggleValue(counterpartyClasses, value)) },
+          ],
+        };
+      case "calendar":
+        return {
+          onClear: () => { setReceivableStatuses([]); setReceivableClients([]); setReceivableReviewOnly(false); setReceivableOverdueOnly(false); },
+          sections: [
+            { key: "status", label: t(($) => $.filters.status), options: RECEIVABLE_STATUSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: receivableStatuses, onToggle: (value) => setReceivableStatuses(toggleValue(receivableStatuses, value)) },
+            { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: receivableClients, onToggle: (value) => setReceivableClients(toggleValue(receivableClients, value)) },
+          ],
+          toggles: [
+            { key: "review", label: t(($) => $.filters.only_review), checked: receivableReviewOnly, onToggle: () => setReceivableReviewOnly(!receivableReviewOnly) },
+            { key: "overdue", label: t(($) => $.filters.only_overdue), checked: receivableOverdueOnly, onToggle: () => setReceivableOverdueOnly(!receivableOverdueOnly) },
+          ],
+        };
+      case "bank":
+        return {
+          onClear: () => { setTxClasses([]); setTxDirections([]); },
+          sections: [
+            { key: "class", label: t(($) => $.filters.classification), options: CLASSIFICATIONS.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: txClasses, onToggle: (value) => setTxClasses(toggleValue(txClasses, value)) },
+            { key: "direction", label: t(($) => $.filters.direction), options: [{ value: "inbound", label: t(($) => $.values.inbound) }, { value: "outbound", label: t(($) => $.values.outbound) }], selected: txDirections, onToggle: (value) => setTxDirections(toggleValue(txDirections, value)) },
+          ],
+        };
+      default:
+        return null;
+    }
+  })();
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader className="h-auto min-h-12 flex-wrap justify-between gap-2 px-5 py-2">
@@ -493,12 +537,21 @@ export function BusinessPage() {
               {accounts.data.map((account) => <NativeSelectOption key={account.id} value={account.id}>{account.name}</NativeSelectOption>)}
             </NativeSelect>
           )}
-          <label className="flex items-center gap-2 text-xs text-muted-foreground"><span>{t(($) => $.month)}</span><Input className="h-8 w-auto text-sm" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
-          <Button type="button" size="sm" variant="outline" className="h-8 text-muted-foreground" onClick={() => void Promise.all([snapshot.refetch(), dashboard.refetch()])}><RefreshCw aria-hidden="true" className="size-3.5" />{t(($) => $.refresh)}</Button>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground"><span className="hidden sm:inline">{t(($) => $.month)}</span><Input className="h-8 w-auto text-sm" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>
+          {headerFilter && (
+            <FilterMenu
+              label={t(($) => $.filters.filter)}
+              clearLabel={t(($) => $.actions.clear_filters)}
+              sections={headerFilter.sections}
+              toggles={headerFilter.toggles}
+              onClear={headerFilter.onClear}
+            />
+          )}
+          <Button type="button" size="sm" variant="outline" className="h-8 text-muted-foreground" onClick={() => void Promise.all([snapshot.refetch(), dashboard.refetch()])}><RefreshCw aria-hidden="true" className="size-3.5" /><span className="hidden sm:inline">{t(($) => $.refresh)}</span></Button>
         </div>
       </PageHeader>
 
-      <div data-testid="business-scroll-container" className="min-h-0 flex-1 overflow-y-auto">
+      <div data-testid="business-scroll-container" className="min-h-0 flex-1 overflow-y-auto @container">
         <div className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-5">
 
       {(error || message) && <div className={cn("rounded-lg border p-3 text-sm", error ? "border-destructive/40 bg-destructive/5 text-destructive" : "border-emerald-500/40 bg-emerald-500/5 text-emerald-700")}>{error || message}</div>}
@@ -510,22 +563,10 @@ export function BusinessPage() {
       </Tabs>
 
       {tab === "overview" && <div className="space-y-5">
-        <Toolbar>
-          <span className="text-xs text-muted-foreground">{t(($) => $.subtitle)}</span>
-          <FilterMenu
-            label={t(($) => $.filters.filter)}
-            clearLabel={t(($) => $.actions.clear_filters)}
-            onClear={() => { setScopeClient([]); setScopeProject([]); setScopeService([]); }}
-            sections={[
-              { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: scopeClient, onToggle: single(setScopeClient, scopeClient) },
-              { key: "project", label: t(($) => $.filters.project), options: projectOptions, selected: scopeProject, onToggle: single(setScopeProject, scopeProject) },
-              { key: "service", label: t(($) => $.filters.service), options: serviceOptions, selected: scopeService, onToggle: single(setScopeService, scopeService) },
-            ]}
-          />
-        </Toolbar>
+        <p className="text-xs text-muted-foreground">{t(($) => $.subtitle)}</p>
 
         <Section title={t(($) => $.metric_groups.calendar)}>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-3 @5xl:grid-cols-5">
             <Metric label={t(($) => $.metrics.expected)} value={rub(metrics.expected_rub)} />
             <Metric label={t(($) => $.metrics.invoiced)} value={rub(metrics.invoiced_rub)} />
             <Metric label={t(($) => $.metrics.receivable_paid)} value={rub(metrics.receivable_paid_rub)} />
@@ -535,7 +576,7 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.bank)}>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.client_income)} value={rub(metrics.bank_client_income_rub)} />
             <Metric label={t(($) => $.metrics.unknown)} value={rub(metrics.unknown_inbound_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.unmatched_count ?? 0}`} warning={(metrics.unmatched_count ?? 0) > 0} />
             <Metric label={t(($) => $.values.vitmax)} value={rub(metrics.vitmax_transit_rub)} />
@@ -544,7 +585,7 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.economics)}>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.task_value)} value={rub(metrics.task_value_rub)} />
             <Metric label={t(($) => $.metrics.participant_accrued)} value={rub(metrics.participant_accrued_rub)} />
             <Metric label={t(($) => $.metrics.company_pool)} value={rub(metrics.company_target_pool_rub)} hint={`${t(($) => $.metrics.company_costs)}: ${rub(metrics.company_costs_rub)}`} />
@@ -553,7 +594,7 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.team)}>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.payable)} value={rub(metrics.payable_rub)} />
             <Metric label={t(($) => $.metrics.paid_workers)} value={rub(metrics.paid_to_workers_rub)} />
             <Metric label={t(($) => $.metrics.reserve)} value={rub(metrics.reserve_balance_rub)} warning={Number(metrics.reserve_deficit_rub) > 0} />
@@ -562,7 +603,7 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.summary)}>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-3">
             <Metric label={t(($) => $.metrics.owner_net)} value={rub(metrics.owner_net_income_rub)} />
             <Metric label={t(($) => $.metrics.target)} value={`${metrics.owner_target_progress_pct}%`} hint={rub(metrics.owner_income_target_rub)} />
             <Metric label={t(($) => $.metrics.company_costs)} value={rub(metrics.company_costs_rub)} />
@@ -573,7 +614,7 @@ export function BusinessPage() {
           <RowTable tt={tt} locale={locale} rows={clientBreakdown as unknown as BusinessRow[]} columns={[{ key: "client_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "overdue" }]} empty={t(($) => $.empty)} />
         </Section>}
 
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="grid gap-2 @3xl:grid-cols-2">
           <div className="rounded-lg border p-3 text-xs text-muted-foreground"><AlertTriangle className="mr-1.5 inline size-3.5 text-warning"/>{t(($) => $.vitmax_note)}</div>
           <div className="rounded-lg border p-3 text-xs text-muted-foreground">{t(($) => $.no_penalties_note)}</div>
         </div>
@@ -587,15 +628,6 @@ export function BusinessPage() {
               <Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($) => $.fields.name)}/>
               <Button size="sm" className="h-8" disabled={busy!==""}>{t(($) => $.actions.add_client)}</Button>
             </form>
-            <FilterMenu
-              label={t(($) => $.filters.filter)}
-              clearLabel={t(($) => $.actions.clear_filters)}
-              onClear={() => { setClientStatuses([]); setCounterpartyClasses([]); }}
-              sections={[
-                { key: "status", label: t(($) => $.filters.status), options: CLIENT_STATUSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: clientStatuses, onToggle: (value) => setClientStatuses(toggleValue(clientStatuses, value)) },
-                { key: "class", label: t(($) => $.filters.classification), options: COUNTERPARTY_CLASSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: counterpartyClasses, onToggle: (value) => setCounterpartyClasses(toggleValue(counterpartyClasses, value)) },
-              ]}
-            />
           </div>
         </Toolbar>
         <Section title={t(($) => $.sections.clients)}>
@@ -628,19 +660,6 @@ export function BusinessPage() {
               <Input name="months" type="number" min="1" max="24" defaultValue="3" className="h-8 w-16 text-sm"/>
               <Button size="sm" variant="outline" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.generate_receivables)}</Button>
             </form>
-            <FilterMenu
-              label={t(($) => $.filters.filter)}
-              clearLabel={t(($) => $.actions.clear_filters)}
-              onClear={() => { setReceivableStatuses([]); setReceivableClients([]); setReceivableReviewOnly(false); setReceivableOverdueOnly(false); }}
-              sections={[
-                { key: "status", label: t(($) => $.filters.status), options: RECEIVABLE_STATUSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: receivableStatuses, onToggle: (value) => setReceivableStatuses(toggleValue(receivableStatuses, value)) },
-                { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: receivableClients, onToggle: (value) => setReceivableClients(toggleValue(receivableClients, value)) },
-              ]}
-              toggles={[
-                { key: "review", label: t(($) => $.filters.only_review), checked: receivableReviewOnly, onToggle: () => setReceivableReviewOnly(!receivableReviewOnly) },
-                { key: "overdue", label: t(($) => $.filters.only_overdue), checked: receivableOverdueOnly, onToggle: () => setReceivableOverdueOnly(!receivableOverdueOnly) },
-              ]}
-            />
           </div>
         </Toolbar>
         <Section title={t(($)=>$.sections.receivables)}>
@@ -669,15 +688,6 @@ export function BusinessPage() {
             <ResultCount shown={filteredTransactions.length} total={(data.transactions ?? []).length} />
             <span className="hidden text-xs tabular-nums text-muted-foreground lg:inline">{t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span> · {t(($) => $.values.outbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.outbound)}</span></span>
           </div>
-          <FilterMenu
-            label={t(($) => $.filters.filter)}
-            clearLabel={t(($) => $.actions.clear_filters)}
-            onClear={() => { setTxClasses([]); setTxDirections([]); }}
-            sections={[
-              { key: "class", label: t(($) => $.filters.classification), options: CLASSIFICATIONS.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: txClasses, onToggle: (value) => setTxClasses(toggleValue(txClasses, value)) },
-              { key: "direction", label: t(($) => $.filters.direction), options: [{ value: "inbound", label: t(($) => $.values.inbound) }, { value: "outbound", label: t(($) => $.values.outbound) }], selected: txDirections, onToggle: (value) => setTxDirections(toggleValue(txDirections, value)) },
-            ]}
-          />
         </Toolbar>
         <Section title={t(($)=>$.sections.transactions)}>
           <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
