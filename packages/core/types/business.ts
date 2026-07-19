@@ -82,6 +82,7 @@ export interface BusinessSnapshot {
   payout_items: BusinessRow[];
   bank_outbox: BusinessRow[];
   billing_candidates: BusinessRow[];
+  billing_month_client_totals: BusinessRow[];
   generated_at: string;
 }
 

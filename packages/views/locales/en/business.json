@@ -177,7 +177,8 @@
     "elba": "Elba",
     "bank_linked": "Bank",
     "agreement_name": "Agreement",
-    "price_rub": "Estimate"
+    "price_rub": "Estimate",
+    "by_tasks": "From tasks"
   },
   "fields": {
     "name": "Name",
@@ -283,7 +284,12 @@
   "money": {
     "incoming": "Incoming",
     "on_review": "Needs review",
-    "received": "Received"
+    "received": "Received",
+    "estimated": "from tasks (billing estimate)",
+    "split": "Split estimate",
+    "team": "team ≤35%",
+    "company": "company pool 15%",
+    "owner": "owner ≥50%"
   },
   "card": {
     "details": "Client details",

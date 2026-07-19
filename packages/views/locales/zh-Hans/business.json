@@ -177,7 +177,8 @@
     "elba": "Elba",
     "bank_linked": "银行",
     "agreement_name": "协议",
-    "price_rub": "评估额"
+    "price_rub": "评估额",
+    "by_tasks": "按任务"
   },
   "fields": {
     "name": "名称",
@@ -283,7 +284,12 @@
   "money": {
     "incoming": "待入账",
     "on_review": "待复核",
-    "received": "已入账"
+    "received": "已入账",
+    "estimated": "按任务（计费估算）",
+    "split": "分配估算",
+    "team": "团队 ≤35%",
+    "company": "公司池 15%",
+    "owner": "所有者 ≥50%"
   },
   "card": {
     "details": "客户信息",

@@ -426,8 +426,21 @@ export function BusinessPage() {
     && (!receivableOverdueOnly || isTruthyFlag(row.is_overdue))
   ), [data?.receivables, receivableStatuses, receivableClients, receivableReviewOnly, receivableOverdueOnly]);
 
+  const agreementMeta = useMemo(() => {
+    const map = new Map<string, { name: string; model: string; cap: number }>();
+    for (const row of data?.agreements ?? []) map.set(String(row.id), { name: String(row.name ?? ""), model: String(row.model ?? ""), cap: Number(row.cap_rub ?? 0) });
+    return map;
+  }, [data?.agreements]);
+
+  const billingByClientMonth = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of data?.billing_month_client_totals ?? []) map.set(`${String(row.client_id)}|${String(row.month)}`, Number(row.billed_rub ?? 0));
+    return map;
+  }, [data?.billing_month_client_totals]);
+
   const moneyTotals = useMemo(() => {
-    const totals = { incoming: 0, review: 0, received: 0, overdue: 0 };
+    const totals = { incoming: 0, review: 0, received: 0, overdue: 0, estimated: 0 };
+    const estimateUsed = new Set<string>();
     for (const row of data?.receivables ?? []) {
       const monthKey = String(row.due_on ?? row.invoice_on ?? row.period_start ?? "").slice(0, 7);
       if (!monthKey.startsWith(periodPrefix)) continue;
@@ -440,22 +453,51 @@ export function BusinessPage() {
       if (isTruthyFlag(row.needs_review)) totals.review += rest;
       else totals.incoming += rest;
       if (isTruthyFlag(row.is_overdue)) totals.overdue += rest;
+      if (planned === 0 && paid === 0) {
+        const meta = agreementMeta.get(String(row.agreement_id));
+        const estKey = `${String(row.client_id)}|${monthKey}`;
+        if (meta && (meta.model === "time_material" || meta.model === "cap") && !estimateUsed.has(estKey)) {
+          const billed = billingByClientMonth.get(estKey) ?? 0;
+          const estimated = meta.cap > 0 ? Math.min(billed, meta.cap) : billed;
+          if (estimated > 0) {
+            totals.estimated += estimated;
+            estimateUsed.add(estKey);
+          }
+        }
+      }
     }
     return totals;
-  }, [data?.receivables, periodPrefix]);
+  }, [data?.receivables, periodPrefix, agreementMeta, billingByClientMonth]);
 
   const calendarGroups = useMemo(() => {
-    const agreementNames = new Map<string, string>();
-    for (const row of data?.agreements ?? []) agreementNames.set(String(row.id), String(row.name ?? ""));
-    const groups = new Map<string, { rows: BusinessRow[]; planned: number; paid: number; overdue: number }>();
+    const groups = new Map<string, { rows: BusinessRow[]; planned: number; paid: number; overdue: number; estimated: number }>();
+    const estimateUsed = new Set<string>();
     for (const row of filteredReceivables) {
-      if (hideZeroReceivables && Number(row.planned_amount_rub ?? 0) === 0 && Number(row.paid_amount_rub ?? 0) === 0) continue;
       const monthKey = String(row.due_on ?? row.invoice_on ?? row.period_start ?? "").slice(0, 7) || "—";
       if (!monthKey.startsWith(periodPrefix)) continue;
-      const entry = groups.get(monthKey) ?? { rows: [], planned: 0, paid: 0, overdue: 0 };
-      entry.rows.push({ ...row, agreement_name: agreementNames.get(String(row.agreement_id)) || String(row.project_title ?? row.period_key ?? "") });
-      entry.planned += Number(row.planned_amount_rub ?? 0);
-      entry.paid += Number(row.paid_amount_rub ?? 0);
+      const planned = Number(row.planned_amount_rub ?? 0);
+      const paid = Number(row.paid_amount_rub ?? 0);
+      const meta = agreementMeta.get(String(row.agreement_id));
+      let estimated = 0;
+      if (planned === 0 && paid === 0 && meta && (meta.model === "time_material" || meta.model === "cap")) {
+        const estKey = `${String(row.client_id)}|${monthKey}`;
+        if (!estimateUsed.has(estKey)) {
+          const billed = billingByClientMonth.get(estKey) ?? 0;
+          estimated = meta.cap > 0 ? Math.min(billed, meta.cap) : billed;
+          if (estimated > 0) estimateUsed.add(estKey);
+        }
+      }
+      if (hideZeroReceivables && planned === 0 && paid === 0 && estimated === 0) continue;
+      const entry = groups.get(monthKey) ?? { rows: [], planned: 0, paid: 0, overdue: 0, estimated: 0 };
+      entry.rows.push({
+        ...row,
+        agreement_name: meta?.name || String(row.project_title ?? row.period_key ?? ""),
+        planned_amount_rub: planned > 0 ? row.planned_amount_rub : (estimated > 0 ? estimated : row.planned_amount_rub),
+        by_tasks: estimated > 0,
+      });
+      entry.planned += planned > 0 ? planned : estimated;
+      entry.paid += paid;
+      entry.estimated += estimated;
       if (isTruthyFlag(row.is_overdue)) entry.overdue += 1;
       groups.set(monthKey, entry);
     }
@@ -467,8 +509,9 @@ export function BusinessPage() {
         planned: entry.planned,
         paid: entry.paid,
         overdue: entry.overdue,
+        estimated: entry.estimated,
       }));
-  }, [filteredReceivables, hideZeroReceivables, data?.agreements, periodPrefix]);
+  }, [filteredReceivables, hideZeroReceivables, agreementMeta, billingByClientMonth, periodPrefix]);
 
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
@@ -801,11 +844,22 @@ export function BusinessPage() {
 
       {tab === "calendar" && calendarEnabled && <div className="space-y-6">
         <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
-          <Metric label={t(($) => $.money.incoming)} value={rub(moneyTotals.incoming)} />
+          <Metric label={t(($) => $.money.incoming)} value={rub(moneyTotals.incoming)} hint={moneyTotals.estimated > 0 ? `+ ≈ ${rub(moneyTotals.estimated)} ${t(($) => $.money.estimated)}` : undefined} />
           <Metric label={t(($) => $.money.on_review)} value={rub(moneyTotals.review)} warning={moneyTotals.review > 0} />
           <Metric label={t(($) => $.money.received)} value={rub(moneyTotals.received)} />
           <Metric label={t(($) => $.metrics.overdue)} value={rub(moneyTotals.overdue)} warning={moneyTotals.overdue > 0} />
         </div>
+        {(() => {
+          const base = moneyTotals.incoming + moneyTotals.review + moneyTotals.estimated + moneyTotals.received;
+          if (base <= 0) return null;
+          return (
+            <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+              {t(($) => $.money.split)} ({rub(base)}): {t(($) => $.money.team)} ≈ <span className="font-medium text-foreground">{rub(base * 0.35)}</span>
+              {" · "}{t(($) => $.money.company)} ≈ <span className="font-medium text-foreground">{rub(base * 0.15)}</span>
+              {" · "}{t(($) => $.money.owner)} ≈ <span className="font-medium text-foreground">{rub(base * 0.5)}</span>
+            </div>
+          );
+        })()}
         <Section title={t(($)=>$.sections.receivables)}>
           {calendarGroups.length === 0 ? (
             <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</div>
@@ -821,7 +875,7 @@ export function BusinessPage() {
                       {group.overdue > 0 && <>{" · "}<span className="font-medium text-destructive">{t(($) => $.metrics.overdue)}: {group.overdue}</span></>}
                     </span>
                   </div>
-                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($) => $.empty)} />
+                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($) => $.empty)} />
                 </div>
               ))}
             </div>

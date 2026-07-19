@@ -46,6 +46,7 @@ type BusinessSnapshotResponse struct {
 	PayoutItems        json.RawMessage `json:"payout_items"`
 	BankOutbox         json.RawMessage `json:"bank_outbox"`
 	BillingCandidates  json.RawMessage `json:"billing_candidates"`
+	BillingMonthTotals json.RawMessage `json:"billing_month_client_totals"`
 	GeneratedAt        string          `json:"generated_at"`
 }
 
@@ -260,6 +261,15 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			  AND NOT EXISTS (SELECT 1 FROM business_task_economics e WHERE e.business_id = $1 AND e.issue_id = c.issue_id AND e.status <> 'superseded')
 			ORDER BY c.created_at DESC LIMIT 200
 		) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.month, q.client_id), '[]'::jsonb) FROM (
+			SELECT bcp.client_id, to_char(COALESCE(per.starts_on, c.created_at::date), 'YYYY-MM') AS month,
+			       sum(c.price_rub) AS billed_rub, count(DISTINCT c.issue_id) AS issue_count
+			FROM client_billing_charge c
+			LEFT JOIN client_billing_period per ON per.id = c.period_id
+			JOIN business_client_project bcp ON bcp.project_id = c.project_id AND bcp.business_id = $1
+			WHERE c.status <> 'void'
+			GROUP BY bcp.client_id, to_char(COALESCE(per.starts_on, c.created_at::date), 'YYYY-MM')
+		) q`},
 	}
 
 	response := BusinessSnapshotResponse{GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
@@ -270,7 +280,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		&response.Policies, &response.ClientRequests, &response.TaskEconomics, &response.TaskParticipants,
 		&response.ReceivableTasks, &response.Accruals, &response.QualityCases, &response.AccrualAdjustments,
 		&response.ReserveLedger, &response.PayoutBatches, &response.PayoutItems, &response.BankOutbox,
-		&response.BillingCandidates,
+		&response.BillingCandidates, &response.BillingMonthTotals,
 	}
 	for index := range queries {
 		queries[index].dst = destinations[index]

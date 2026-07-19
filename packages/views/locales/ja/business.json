@@ -177,7 +177,8 @@
     "elba": "Elba",
     "bank_linked": "銀行",
     "agreement_name": "契約",
-    "price_rub": "見積額"
+    "price_rub": "見積額",
+    "by_tasks": "タスク由来"
   },
   "fields": {
     "name": "名前",
@@ -283,7 +284,12 @@
   "money": {
     "incoming": "入金予定",
     "on_review": "要確認",
-    "received": "入金済み"
+    "received": "入金済み",
+    "estimated": "タスクから（課金見積）",
+    "split": "配分の目安",
+    "team": "チーム ≤35%",
+    "company": "会社プール 15%",
+    "owner": "所有者 ≥50%"
   },
   "card": {
     "details": "顧客情報",

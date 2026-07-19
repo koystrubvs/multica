@@ -177,7 +177,8 @@
     "elba": "Elba",
     "bank_linked": "은행",
     "agreement_name": "계약",
-    "price_rub": "평가액"
+    "price_rub": "평가액",
+    "by_tasks": "작업 기준"
   },
   "fields": {
     "name": "이름",
@@ -283,7 +284,12 @@
   "money": {
     "incoming": "입금 예정",
     "on_review": "검토 필요",
-    "received": "입금됨"
+    "received": "입금됨",
+    "estimated": "작업 기준(청구 추정)",
+    "split": "배분 추정",
+    "team": "팀 ≤35%",
+    "company": "회사 풀 15%",
+    "owner": "소유자 ≥50%"
   },
   "card": {
     "details": "고객 정보",
