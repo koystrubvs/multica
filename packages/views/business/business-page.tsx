@@ -42,6 +42,13 @@ import {
   TableRow,
 } from "@multica/ui/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@multica/ui/components/ui/chart";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { cn } from "@multica/ui/lib/utils";
 import { AlertTriangle, Building2, Filter, RefreshCw, Search, Upload, X } from "lucide-react";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
@@ -345,6 +352,11 @@ export function BusinessPage() {
   const [txDirections, setTxDirections] = useState<string[]>([]);
   const [txSearch, setTxSearch] = useState("");
   const [econWorker, setEconWorker] = useState("");
+  const [accrualWorkers, setAccrualWorkers] = useState<string[]>([]);
+  const [accrualStatuses, setAccrualStatuses] = useState<string[]>([]);
+  const [econStatuses, setEconStatuses] = useState<string[]>([]);
+  const [econClients, setEconClients] = useState<string[]>([]);
+  const [payoutStatuses, setPayoutStatuses] = useState<string[]>([]);
 
   const accounts = useQuery({ queryKey: ["business", "accounts"], queryFn: () => api.listBusinessAccounts(), enabled });
   const businessID = selectedBusiness || accounts.data?.[0]?.id || "";
@@ -358,6 +370,8 @@ export function BusinessPage() {
     enabled: enabled && !!businessID,
   });
   const snapshot = useQuery({ queryKey: ["business", businessID, "snapshot"], queryFn: () => api.getBusinessSnapshot(businessID), enabled: enabled && !!businessID });
+  const seriesFrom = `${month.slice(0, 4)}-01`;
+  const series = useQuery({ queryKey: ["business", businessID, "series", seriesFrom], queryFn: () => api.getBusinessDashboardSeries(businessID, seriesFrom, 12), enabled: enabled && !!businessID });
 
   const execute = async (key: string, action: () => Promise<unknown>) => {
     setBusy(key); setError(""); setMessage("");
@@ -373,14 +387,6 @@ export function BusinessPage() {
   };
 
   const data = snapshot.data;
-
-  const clientNameByID = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const row of data?.clients ?? []) map.set(String(row.id), String(row.canonical_name ?? row.id));
-    return map;
-  }, [data?.clients]);
-
-  const enrichedPayers = useMemo(() => (data?.payers ?? []).map((row) => ({ ...row, client_name: clientNameByID.get(String(row.client_id)) ?? String(row.client_id) })), [data?.payers, clientNameByID]);
 
   const filteredClients = useMemo(() => (data?.clients ?? []).filter((row) => clientStatuses.length === 0 || clientStatuses.includes(String(row.status))), [data?.clients, clientStatuses]);
 
@@ -452,6 +458,42 @@ export function BusinessPage() {
     });
   }, [data?.payout_items, data?.payout_batches]);
 
+  const bankInns = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of data?.transactions ?? []) {
+      const inn = String(row.counterparty_inn ?? "");
+      if (inn) set.add(inn);
+    }
+    return set;
+  }, [data?.transactions]);
+
+  const clientRows = useMemo(() => filteredClients.map((client) => {
+    const id = String(client.id);
+    const projects = (data?.projects ?? []).filter((row) => String(row.client_id) === id);
+    const payers = (data?.payers ?? []).filter((row) => String(row.client_id) === id);
+    return {
+      ...client,
+      projects_list: projects.map((row) => String(row.project_title ?? "")).filter(Boolean).join(", "),
+      payers_list: payers.map((row) => `${String(row.name)}${row.inn ? ` · ${String(row.inn)}` : ""}`).join("; "),
+      elba: payers.some((row) => Boolean(row.elba_contractor_id)),
+      bank_linked: payers.some((row) => Boolean(row.inn) && bankInns.has(String(row.inn))),
+    };
+  }), [filteredClients, data?.projects, data?.payers, bankInns]);
+
+  const filteredAccruals = useMemo(() => (data?.accruals ?? []).filter((row) =>
+    (accrualWorkers.length === 0 || accrualWorkers.includes(String(row.worker_id)))
+    && (accrualStatuses.length === 0 || accrualStatuses.includes(String(row.status)))
+  ), [data?.accruals, accrualWorkers, accrualStatuses]);
+
+  const filteredEconomics = useMemo(() => (data?.task_economics ?? []).filter((row) =>
+    (econStatuses.length === 0 || econStatuses.includes(String(row.status)))
+    && (econClients.length === 0 || econClients.includes(String(row.client_id)))
+  ), [data?.task_economics, econStatuses, econClients]);
+
+  const filteredBatches = useMemo(() => (data?.payout_batches ?? []).filter((row) =>
+    payoutStatuses.length === 0 || payoutStatuses.includes(String(row.status))
+  ), [data?.payout_batches, payoutStatuses]);
+
   const enrichedParticipants = useMemo(() => {
     const economics = new Map<string, BusinessRow>();
     for (const row of data?.task_economics ?? []) economics.set(String(row.id), row);
@@ -513,16 +555,53 @@ export function BusinessPage() {
         };
       case "bank":
         return {
-          onClear: () => { setTxClasses([]); setTxDirections([]); },
+          onClear: () => { setTxClasses([]); setTxDirections([]); setCounterpartyClasses([]); },
           sections: [
             { key: "class", label: t(($) => $.filters.classification), options: CLASSIFICATIONS.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: txClasses, onToggle: (value) => setTxClasses(toggleValue(txClasses, value)) },
             { key: "direction", label: t(($) => $.filters.direction), options: [{ value: "inbound", label: t(($) => $.values.inbound) }, { value: "outbound", label: t(($) => $.values.outbound) }], selected: txDirections, onToggle: (value) => setTxDirections(toggleValue(txDirections, value)) },
+            { key: "cp", label: t(($) => $.sections.counterparties), options: COUNTERPARTY_CLASSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: counterpartyClasses, onToggle: (value) => setCounterpartyClasses(toggleValue(counterpartyClasses, value)) },
+          ],
+        };
+      case "economics":
+        return {
+          onClear: () => { setEconStatuses([]); setEconClients([]); },
+          sections: [
+            { key: "status", label: t(($) => $.filters.status), options: ["draft", "accepted", "superseded"].map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: econStatuses, onToggle: (value) => setEconStatuses(toggleValue(econStatuses, value)) },
+            { key: "client", label: t(($) => $.filters.client), options: clientOptions, selected: econClients, onToggle: (value) => setEconClients(toggleValue(econClients, value)) },
+          ],
+        };
+      case "accruals":
+        return {
+          onClear: () => { setAccrualWorkers([]); setAccrualStatuses([]); },
+          sections: [
+            { key: "worker", label: t(($) => $.fields.worker), options: (data.workers ?? []).map((row) => ({ value: String(row.id), label: String(row.name) })), selected: accrualWorkers, onToggle: (value) => setAccrualWorkers(toggleValue(accrualWorkers, value)) },
+            { key: "status", label: t(($) => $.filters.status), options: ["accrued", "partially_payable", "payable", "in_payout", "paid", "adjusted"].map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: accrualStatuses, onToggle: (value) => setAccrualStatuses(toggleValue(accrualStatuses, value)) },
+          ],
+        };
+      case "payouts":
+        return {
+          onClear: () => setPayoutStatuses([]),
+          sections: [
+            { key: "status", label: t(($) => $.filters.status), options: ["draft", "approved", "submitted", "paid", "failed", "reconciled"].map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: payoutStatuses, onToggle: (value) => setPayoutStatuses(toggleValue(payoutStatuses, value)) },
           ],
         };
       default:
         return null;
     }
   })();
+
+  const seriesPoints = series.data?.points ?? [];
+  const chartConfig = {
+    plan: { label: t(($) => $.metrics.expected), color: "var(--chart-1)" },
+    fact: { label: t(($) => $.metrics.client_income), color: "var(--chart-2)" },
+    paid: { label: t(($) => $.metrics.receivable_paid), color: "var(--chart-3)" },
+  } satisfies ChartConfig;
+  const chartData = seriesPoints.map((point) => ({
+    label: point.month.slice(5),
+    plan: Number(point.expected_rub),
+    fact: Number(point.bank_income_rub),
+    paid: Number(point.receivable_paid_rub),
+  }));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -610,6 +689,27 @@ export function BusinessPage() {
           </div>
         </Section>
 
+        <Section title={t(($) => $.sections.year_dynamics)}>
+          <div className="space-y-2">
+            {chartData.length > 0 && (
+              <div className="rounded-lg border p-3">
+                <ChartContainer config={chartConfig} className="aspect-[5/2] w-full @3xl:aspect-[3/1]">
+                  <BarChart data={chartData} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={4} width={64} tickFormatter={(value: number) => new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(value)} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => `${rub(Number(value))} · ${String(chartConfig[name as keyof typeof chartConfig]?.label ?? name)}`} />} />
+                    <Bar dataKey="plan" fill="var(--color-plan)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="fact" fill="var(--color-fact)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="paid" fill="var(--color-paid)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
+            )}
+            <RowTable tt={tt} locale={locale} rows={seriesPoints as unknown as BusinessRow[]} columns={[{ key: "month" }, { key: "expected_rub", kind: "money" }, { key: "receivable_paid_rub", kind: "money" }, { key: "bank_income_rub", kind: "money" }, { key: "vitmax_transit_rub", kind: "money" }, { key: "unknown_inbound_rub", kind: "money" }]} empty={t(($) => $.empty)} />
+          </div>
+        </Section>
+
         {clientBreakdown.length > 0 && <Section title={t(($) => $.sections.by_client)}>
           <RowTable tt={tt} locale={locale} rows={clientBreakdown as unknown as BusinessRow[]} columns={[{ key: "client_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "paid_amount_rub", kind: "money" }, { key: "overdue" }]} empty={t(($) => $.empty)} />
         </Section>}
@@ -630,21 +730,14 @@ export function BusinessPage() {
             </form>
           </div>
         </Toolbar>
-        <Section title={t(($) => $.sections.clients)}>
-          <RowTable tt={tt} locale={locale} rows={filteredClients} columns={[{ key: "canonical_name" }, { key: "status", kind: "enum" }, { key: "primary_payment_channel", kind: "enum" }, { key: "notes" }]} empty={t(($) => $.empty)} />
-        </Section>
-        <Section title={t(($) => $.sections.payers)}>
-          <RowTable tt={tt} locale={locale} rows={enrichedPayers} columns={[{ key: "client_name" }, { key: "name" }, { key: "inn" }, { key: "payment_channel", kind: "enum" }, { key: "status", kind: "enum" }]} empty={t(($) => $.empty)} />
-        </Section>
-        <Section title={t(($) => $.sections.projects)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));void execute("map",()=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:fd.get("workspace"),project_id:fd.get("project"),service_type:fd.get("service"),billable:true},"PUT"));}}>
+        <Section title={t(($) => $.sections.clients)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));void execute("map",()=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:fd.get("workspace"),project_id:fd.get("project"),service_type:fd.get("service"),billable:true},"PUT"));}}>
           <NativeSelect size="sm" required name="client">{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>
           <Input required name="workspace" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.workspace_id)}/>
           <Input required name="project" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.project_id)}/>
           <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
           <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_project)}</Button>
-        </form>}><RowTable tt={tt} locale={locale} rows={data.projects ?? []} columns={[{ key: "client_name" }, { key: "project_title" }, { key: "workspace_name" }, { key: "service_type", kind: "enum" }, { key: "billable", kind: "bool" }]} empty={t(($)=>$.empty)}/></Section>
-        <Section title={t(($) => $.sections.counterparties)}>
-          <RowTable tt={tt} locale={locale} rows={filteredCounterparties} columns={[{ key: "name" }, { key: "inn" }, { key: "classification", kind: "enum" }, { key: "confidence", kind: "enum" }, { key: "reason" }]} empty={t(($) => $.empty)} />
+        </form>}>
+          <RowTable tt={tt} locale={locale} rows={clientRows as unknown as BusinessRow[]} columns={[{ key: "canonical_name" }, { key: "status", kind: "enum" }, { key: "primary_payment_channel", kind: "enum" }, { key: "projects_list" }, { key: "payers_list" }, { key: "elba", kind: "bool" }, { key: "bank_linked", kind: "bool" }, { key: "notes" }]} empty={t(($) => $.empty)} />
         </Section>
       </div>}
 
@@ -710,6 +803,9 @@ export function BusinessPage() {
             <Input name="purpose" className="h-7 w-44 text-xs" placeholder={t(($)=>$.fields.purpose)}/>
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_transaction)}</Button>
           </form>
+        </Section>
+        <Section title={t(($) => $.sections.counterparties)}>
+          <RowTable tt={tt} locale={locale} rows={filteredCounterparties} columns={[{ key: "name" }, { key: "inn" }, { key: "classification", kind: "enum" }, { key: "confidence", kind: "enum" }, { key: "reason" }]} empty={t(($) => $.empty)} />
         </Section>
       </div>}
 
@@ -780,18 +876,18 @@ export function BusinessPage() {
             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.draft_economics)}</Button>
           </form>
         </Section>
-        <Section title={t(($)=>$.sections.tasks)}><div className="space-y-2"><RowTable tt={tt} locale={locale} rows={data.task_economics ?? []} columns={[{ key: "issue_title" }, { key: "project_title" }, { key: "client_name" }, { key: "service_type", kind: "enum" }, { key: "service_value_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "pm_eligible", kind: "bool" }, { key: "accepted_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-1.5">{acceptEnabled&&accrualsEnabled&&(data.task_economics ?? []).filter((row)=>text(row,"status")==="draft").map((row)=><Button type="button" variant="outline" size="sm" className="h-7 text-xs" key={text(row,"id")} disabled={busy!==""} onClick={()=>void execute("accept",()=>api.businessAction(businessID,`task-economics/${text(row,"id")}/accept`,{reason:"owner acceptance"}))}>{t(($)=>$.actions.accept)} · {text(row,"issue_title") !== "—" ? text(row,"issue_title") : text(row,"issue_id")}</Button>)}</div></div></Section>
+        <Section title={t(($)=>$.sections.tasks)}><div className="space-y-2"><RowTable tt={tt} locale={locale} rows={filteredEconomics} columns={[{ key: "issue_title" }, { key: "project_title" }, { key: "client_name" }, { key: "service_type", kind: "enum" }, { key: "service_value_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "pm_eligible", kind: "bool" }, { key: "accepted_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-1.5">{acceptEnabled&&accrualsEnabled&&(data.task_economics ?? []).filter((row)=>text(row,"status")==="draft").map((row)=><Button type="button" variant="outline" size="sm" className="h-7 text-xs" key={text(row,"id")} disabled={busy!==""} onClick={()=>void execute("accept",()=>api.businessAction(businessID,`task-economics/${text(row,"id")}/accept`,{reason:"owner acceptance"}))}>{t(($)=>$.actions.accept)} · {text(row,"issue_title") !== "—" ? text(row,"issue_title") : text(row,"issue_id")}</Button>)}</div></div></Section>
       </div>}
 
       {tab === "accruals" && accrualsEnabled && <div className="space-y-6">
-        <Section title={t(($)=>$.sections.accruals)}><RowTable tt={tt} locale={locale} rows={data.accruals ?? []} columns={[{ key: "worker_name" }, { key: "role", kind: "enum" }, { key: "original_amount_rub", kind: "money" }, { key: "adjustment_rub", kind: "money" }, { key: "funded_rub", kind: "money" }, { key: "reserve_funded_rub", kind: "money" }, { key: "paid_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "reserve_due_on", kind: "date" }]} empty={t(($)=>$.empty)}/></Section>
+        <Section title={t(($)=>$.sections.accruals)}><RowTable tt={tt} locale={locale} rows={filteredAccruals} columns={[{ key: "worker_name" }, { key: "role", kind: "enum" }, { key: "original_amount_rub", kind: "money" }, { key: "adjustment_rub", kind: "money" }, { key: "funded_rub", kind: "money" }, { key: "reserve_funded_rub", kind: "money" }, { key: "paid_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "reserve_due_on", kind: "date" }]} empty={t(($)=>$.empty)}/></Section>
         <Section title={t(($)=>$.sections.reserve)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("reserve",()=>api.businessAction(businessID,"reserve/entries",{entry_type:"contribution",amount_rub:fd.get("amount"),reason:fd.get("reason"),idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}><Input required name="amount" className="h-7 w-28 text-xs" placeholder={t(($)=>$.fields.amount)}/><Input required name="reason" className="h-7 w-56 text-xs" placeholder={t(($)=>$.fields.reason)}/><Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_reserve)}</Button></form>}><RowTable tt={tt} locale={locale} rows={data.reserve_ledger ?? []} columns={[{ key: "occurred_at", kind: "datetime" }, { key: "entry_type", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "reason" }]} empty={t(($)=>$.empty)}/></Section>
       </div>}
 
       {tab === "payouts" && payoutsEnabled && <div className="space-y-6">
         <div className="rounded-lg border p-3 text-xs text-muted-foreground">{t(($)=>$.bank_draft_note)}</div>
         <Section title={t(($)=>$.sections.payouts)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("payout",()=>api.businessAction(businessID,"payouts",{period_key:fd.get("period"),idempotency_key:`payout:${String(fd.get("period"))}`}));}}><Input required name="period" type="month" defaultValue={month} className="h-8 w-auto text-sm"/><Button size="sm" variant="outline" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.build_payout)}</Button></form>}>
-          <div className="space-y-2"><RowTable tt={tt} locale={locale} rows={data.payout_batches ?? []} columns={[{ key: "period_key" }, { key: "status", kind: "enum" }, { key: "total_rub", kind: "money" }, { key: "worker_count" }, { key: "approved_at", kind: "datetime" }, { key: "submitted_at", kind: "datetime" }, { key: "paid_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-1.5">{(data.payout_batches ?? []).map((row)=>{const status=text(row,"status"),id=text(row,"id");return <div key={id} className="flex gap-1">{status==="draft"&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("approve",()=>api.businessAction(businessID,`payouts/${id}/approve`))}>{t(($)=>$.actions.approve)} · {text(row,"period_key")}</Button>}{status==="approved"&&bankDraftsEnabled&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("submit",()=>api.businessAction(businessID,`payouts/${id}/submit-draft`))}>{t(($)=>$.actions.submit_draft)} · {text(row,"period_key")}</Button>}</div>})}</div></div>
+          <div className="space-y-2"><RowTable tt={tt} locale={locale} rows={filteredBatches} columns={[{ key: "period_key" }, { key: "status", kind: "enum" }, { key: "total_rub", kind: "money" }, { key: "worker_count" }, { key: "approved_at", kind: "datetime" }, { key: "submitted_at", kind: "datetime" }, { key: "paid_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/><div className="flex flex-wrap gap-1.5">{(data.payout_batches ?? []).map((row)=>{const status=text(row,"status"),id=text(row,"id");return <div key={id} className="flex gap-1">{status==="draft"&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("approve",()=>api.businessAction(businessID,`payouts/${id}/approve`))}>{t(($)=>$.actions.approve)} · {text(row,"period_key")}</Button>}{status==="approved"&&bankDraftsEnabled&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("submit",()=>api.businessAction(businessID,`payouts/${id}/submit-draft`))}>{t(($)=>$.actions.submit_draft)} · {text(row,"period_key")}</Button>}</div>})}</div></div>
         </Section>
         <Section title={t(($) => $.sections.payout_items)}>
           <RowTable tt={tt} locale={locale} rows={enrichedPayoutItems} columns={[{ key: "worker_name" }, { key: "period_key" }, { key: "amount_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "external_operation_id" }]} empty={t(($) => $.empty)} />

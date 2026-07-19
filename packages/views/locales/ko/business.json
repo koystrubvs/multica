@@ -58,7 +58,8 @@
     "by_client": "이달의 고객별 내역",
     "worker_months": "월별 발생액",
     "payout_items": "작업자별 지급",
-    "participations": "작업 참여"
+    "participations": "작업 참여",
+    "year_dynamics": "추이: 월별 계획 대 실적"
   },
   "actions": {
     "add_client": "고객 추가",
@@ -160,7 +161,16 @@
     "batch_status": "배치 상태",
     "created_at": "생성일",
     "overdue": "연체 건수",
-    "external_operation_id": "은행 작업"
+    "external_operation_id": "은행 작업",
+    "expected_rub": "계획",
+    "receivable_paid_rub": "입금됨",
+    "bank_income_rub": "실적(은행)",
+    "vitmax_transit_rub": "VitMax 경유",
+    "unknown_inbound_rub": "미분류",
+    "projects_list": "프로젝트",
+    "payers_list": "지불인 / INN",
+    "elba": "Elba",
+    "bank_linked": "은행"
   },
   "fields": {
     "name": "이름",

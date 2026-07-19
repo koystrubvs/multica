@@ -213,6 +213,8 @@ export type {
 export type {
   BusinessAccount,
   BusinessDashboard,
+  BusinessDashboardSeries,
+  BusinessSeriesPoint,
   BusinessRow,
   BusinessSnapshot,
   BusinessBankImportResult,

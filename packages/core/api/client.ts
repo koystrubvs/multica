@@ -68,6 +68,7 @@ import type {
   ElbaEntity,
   BusinessAccount,
   BusinessDashboard,
+  BusinessDashboardSeries,
   BusinessSnapshot,
   BusinessBankImportResult,
   RuntimeHourlyActivity,
@@ -3060,6 +3061,13 @@ export class ApiClient {
       if (value) search.set(key, value);
     }
     return this.fetch(`/api/businesses/${businessId}/dashboard?${search.toString()}`);
+  }
+
+  async getBusinessDashboardSeries(businessId: string, from: string, months = 12): Promise<BusinessDashboardSeries> {
+    const search = new URLSearchParams();
+    if (from) search.set("from", from);
+    search.set("months", String(months));
+    return this.fetch(`/api/businesses/${businessId}/dashboard/series?${search.toString()}`);
   }
 
   async getBusinessSnapshot(businessId: string): Promise<BusinessSnapshot> {

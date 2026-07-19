@@ -58,7 +58,8 @@
     "by_client": "Разрез по клиентам за месяц",
     "worker_months": "Начисления по месяцам",
     "payout_items": "Выплаты по исполнителям",
-    "participations": "Участия в задачах"
+    "participations": "Участия в задачах",
+    "year_dynamics": "Динамика: план и факт по месяцам"
   },
   "actions": {
     "add_client": "Добавить клиента",
@@ -160,7 +161,16 @@
     "batch_status": "Статус пакета",
     "created_at": "Создано",
     "overdue": "Просрочек",
-    "external_operation_id": "Операция банка"
+    "external_operation_id": "Операция банка",
+    "expected_rub": "План",
+    "receivable_paid_rub": "Оплачено",
+    "bank_income_rub": "Факт (банк)",
+    "vitmax_transit_rub": "Транзит VitMax",
+    "unknown_inbound_rub": "Не разобрано",
+    "projects_list": "Проекты",
+    "payers_list": "Плательщики / ИНН",
+    "elba": "Эльба",
+    "bank_linked": "Банк"
   },
   "fields": {
     "name": "Название",

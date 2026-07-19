@@ -39,6 +39,21 @@ export interface BusinessDashboard {
   generated_at: string;
 }
 
+export interface BusinessSeriesPoint {
+  month: string;
+  expected_rub: string;
+  receivable_paid_rub: string;
+  bank_income_rub: string;
+  vitmax_transit_rub: string;
+  unknown_inbound_rub: string;
+}
+
+export interface BusinessDashboardSeries {
+  from: string;
+  months: number;
+  points: BusinessSeriesPoint[];
+}
+
 export type BusinessRow = Record<string, unknown>;
 
 export interface BusinessSnapshot {

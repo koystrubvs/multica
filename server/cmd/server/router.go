@@ -874,6 +874,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/snapshot", h.GetBusinessSnapshot)
 					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/dashboard", h.GetBusinessDashboard)
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/dashboard/series", h.GetBusinessDashboardSeries)
 
 					r.Group(func(r chi.Router) {
 						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessClientsUI))

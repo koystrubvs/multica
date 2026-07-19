@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -417,6 +418,77 @@ SELECT
 	CASE WHEN owner_target > 0 THEN round((bank_income - company_costs - paid_workers) / owner_target * 100, 2) ELSE 0 END::text,
 	unmatched_count, overdue_count
 FROM metrics`
+
+type businessSeriesPoint struct {
+	Month             string `json:"month"`
+	ExpectedRUB       string `json:"expected_rub"`
+	ReceivablePaidRUB string `json:"receivable_paid_rub"`
+	BankIncomeRUB     string `json:"bank_income_rub"`
+	VitmaxTransitRUB  string `json:"vitmax_transit_rub"`
+	UnknownInboundRUB string `json:"unknown_inbound_rub"`
+}
+
+const businessSeriesSQL = `
+WITH months AS (
+	SELECT (date_trunc('month', $2::date) + make_interval(months => g.n))::date AS month_start
+	FROM generate_series(0, $3::int - 1) AS g(n)
+)
+SELECT to_char(m.month_start, 'YYYY-MM'),
+	COALESCE((SELECT sum(r.planned_amount_rub) FROM business_receivable r WHERE r.business_id = $1 AND r.status NOT IN ('skipped','written_off') AND r.period_start >= m.month_start AND r.period_start < (m.month_start + interval '1 month')::date), 0)::text,
+	COALESCE((SELECT sum(r.paid_amount_rub) FROM business_receivable r WHERE r.business_id = $1 AND r.status NOT IN ('skipped','written_off') AND r.period_start >= m.month_start AND r.period_start < (m.month_start + interval '1 month')::date), 0)::text,
+	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.direction = 'inbound' AND t.classification = 'client_income' AND t.booked_on >= m.month_start AND t.booked_on < (m.month_start + interval '1 month')::date), 0)::text,
+	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.classification = 'vitmax_transit' AND t.booked_on >= m.month_start AND t.booked_on < (m.month_start + interval '1 month')::date), 0)::text,
+	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.direction = 'inbound' AND t.classification = 'unknown' AND t.booked_on >= m.month_start AND t.booked_on < (m.month_start + interval '1 month')::date), 0)::text
+FROM months m ORDER BY m.month_start`
+
+func (h *Handler) GetBusinessDashboardSeries(w http.ResponseWriter, r *http.Request) {
+	businessID, _, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	location, err := time.LoadLocation("Asia/Yekaterinburg")
+	if err != nil {
+		location = time.FixedZone("Asia/Yekaterinburg", 5*60*60)
+	}
+	from := r.URL.Query().Get("from")
+	if from == "" {
+		from = time.Now().In(location).Format("2006") + "-01"
+	}
+	parsed, err := time.ParseInLocation("2006-01", from, location)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "from must use YYYY-MM")
+		return
+	}
+	months := 12
+	if raw := r.URL.Query().Get("months"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 24 {
+			writeError(w, http.StatusBadRequest, "months must be between 1 and 24")
+			return
+		}
+		months = value
+	}
+	rows, err := h.DB.Query(r.Context(), businessSeriesSQL, businessID, parsed.Format("2006-01-02"), months)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load business series")
+		return
+	}
+	defer rows.Close()
+	points := make([]businessSeriesPoint, 0, months)
+	for rows.Next() {
+		var point businessSeriesPoint
+		if err := rows.Scan(&point.Month, &point.ExpectedRUB, &point.ReceivablePaidRUB, &point.BankIncomeRUB, &point.VitmaxTransitRUB, &point.UnknownInboundRUB); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load business series")
+			return
+		}
+		points = append(points, point)
+	}
+	if rows.Err() != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load business series")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"from": from, "months": months, "points": points})
+}
 
 func parseBusinessMonth(w http.ResponseWriter, value string) (string, string, string, bool) {
 	location, err := time.LoadLocation("Asia/Yekaterinburg")

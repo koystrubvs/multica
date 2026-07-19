@@ -58,7 +58,8 @@
     "by_client": "本月客户明细",
     "worker_months": "按月计提",
     "payout_items": "按工作人员付款",
-    "participations": "任务参与"
+    "participations": "任务参与",
+    "year_dynamics": "动态：按月计划与实际"
   },
   "actions": {
     "add_client": "添加客户",
@@ -160,7 +161,16 @@
     "batch_status": "批次状态",
     "created_at": "创建时间",
     "overdue": "逾期数",
-    "external_operation_id": "银行操作"
+    "external_operation_id": "银行操作",
+    "expected_rub": "计划",
+    "receivable_paid_rub": "已收",
+    "bank_income_rub": "实际（银行）",
+    "vitmax_transit_rub": "VitMax 过账",
+    "unknown_inbound_rub": "未分类",
+    "projects_list": "项目",
+    "payers_list": "付款方 / INN",
+    "elba": "Elba",
+    "bank_linked": "银行"
   },
   "fields": {
     "name": "名称",

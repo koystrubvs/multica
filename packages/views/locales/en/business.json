@@ -58,7 +58,8 @@
     "by_client": "By client for the month",
     "worker_months": "Accruals by month",
     "payout_items": "Payouts by worker",
-    "participations": "Task participations"
+    "participations": "Task participations",
+    "year_dynamics": "Dynamics: plan vs fact by month"
   },
   "actions": {
     "add_client": "Add client",
@@ -160,7 +161,16 @@
     "batch_status": "Batch status",
     "created_at": "Created",
     "overdue": "Overdue count",
-    "external_operation_id": "Bank operation"
+    "external_operation_id": "Bank operation",
+    "expected_rub": "Plan",
+    "receivable_paid_rub": "Paid",
+    "bank_income_rub": "Fact (bank)",
+    "vitmax_transit_rub": "VitMax transit",
+    "unknown_inbound_rub": "Unclassified",
+    "projects_list": "Projects",
+    "payers_list": "Payers / INN",
+    "elba": "Elba",
+    "bank_linked": "Bank"
   },
   "fields": {
     "name": "Name",

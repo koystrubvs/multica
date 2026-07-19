@@ -58,7 +58,8 @@
     "by_client": "当月の顧客別内訳",
     "worker_months": "月別発生額",
     "payout_items": "担当者別支払",
-    "participations": "タスク参加"
+    "participations": "タスク参加",
+    "year_dynamics": "推移：月別の計画と実績"
   },
   "actions": {
     "add_client": "顧客を追加",
@@ -160,7 +161,16 @@
     "batch_status": "バッチ状態",
     "created_at": "作成日時",
     "overdue": "超過件数",
-    "external_operation_id": "銀行操作"
+    "external_operation_id": "銀行操作",
+    "expected_rub": "計画",
+    "receivable_paid_rub": "入金済み",
+    "bank_income_rub": "実績（銀行）",
+    "vitmax_transit_rub": "VitMax 通過",
+    "unknown_inbound_rub": "未分類",
+    "projects_list": "プロジェクト",
+    "payers_list": "支払者 / INN",
+    "elba": "Elba",
+    "bank_linked": "銀行"
   },
   "fields": {
     "name": "名前",
