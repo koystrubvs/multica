@@ -453,12 +453,12 @@ recurring_charges AS (
 	  AND s.project_id IS NULL AND s.service_type IS NULL
 ),
 recurring_cost_total AS (
-	SELECT COALESCE(sum(
+	SELECT round(COALESCE(sum(
 		CASE WHEN currency = 'RUB' THEN amount ELSE amount * COALESCE((
 			SELECT usd_rub FROM fx_rate_daily
 			WHERE date <= charge_on ORDER BY date DESC LIMIT 1
 		), 90) END
-	), 0) AS amount_rub
+	), 0), 2) AS amount_rub
 	FROM recurring_charges
 ),
 reserve AS (
