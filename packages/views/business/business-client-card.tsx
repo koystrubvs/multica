@@ -18,6 +18,7 @@ import {
   SheetTitle,
 } from "@multica/ui/components/ui/sheet";
 import { cn } from "@multica/ui/lib/utils";
+import { projectBillingState, useElbaDirectory } from "./business-billing-tab";
 import { useT } from "../i18n";
 
 const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
@@ -67,6 +68,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
   const locale = i18n?.language || "ru";
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const { contractors } = useElbaDirectory();
 
   const clientID = client ? String(client.id) : "";
   const agreements = (data.agreements ?? []).filter((row) => String(row.client_id) === clientID);
@@ -188,13 +190,25 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
 
           <CardSection title={t(($) => $.sections.projects)}>
             <div className="space-y-1.5">
-              {projects.map((row) => (
-                <div key={String(row.id)} className="flex items-center gap-2 text-xs">
-                  <span className="min-w-0 flex-1 truncate">{text(row, "project_title")}</span>
-                  <span className="text-muted-foreground">{text(row, "workspace_name")}</span>
-                  <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{tt(`values.${text(row, "service_type")}`, { defaultValue: text(row, "service_type") })}</span>
-                </div>
-              ))}
+              {projects.map((row) => {
+                const clientContractor = text(payers.find((payer) => text(payer, "elba_contractor_id")) ?? {}, "elba_contractor_id");
+                const state = projectBillingState(row, clientContractor);
+                return (
+                  <div key={String(row.id)} className="flex items-center gap-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate">{text(row, "project_title")}</span>
+                    <span className="text-muted-foreground">{text(row, "workspace_name")}</span>
+                    <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{tt(`values.${text(row, "service_type")}`, { defaultValue: text(row, "service_type") })}</span>
+                    <span className={cn(
+                      "inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
+                      state === "linked" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                      state === "mismatch" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      state === "off" && "bg-muted text-muted-foreground",
+                    )}>
+                      {state === "linked" ? t(($) => $.billing.state_linked) : state === "mismatch" ? t(($) => $.billing.state_mismatch) : t(($) => $.billing.state_off)}
+                    </span>
+                  </div>
+                );
+              })}
               <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("map", () => api.businessAction(businessID, `clients/${clientID}/projects`, { workspace_id: fd.get("workspace"), project_id: fd.get("project"), service_type: fd.get("service"), billable: true }, "PUT")); event.currentTarget.reset(); }}>
                 <Input required name="workspace" className="h-7 w-36 text-xs" placeholder={t(($) => $.fields.workspace_id)} />
                 <Input required name="project" className="h-7 w-36 text-xs" placeholder={t(($) => $.fields.project_id)} />
@@ -206,13 +220,29 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
 
           <CardSection title={t(($) => $.sections.payers)}>
             <div className="space-y-1.5">
-              {payers.map((row) => (
-                <div key={String(row.id)} className="flex items-center gap-2 text-xs">
-                  <span className="min-w-0 flex-1 truncate">{text(row, "name")}</span>
-                  {text(row, "inn") && <span className="tabular-nums text-muted-foreground">{tt("columns.inn", { defaultValue: "INN" })} {text(row, "inn")}</span>}
-                  {Boolean(row.elba_contractor_id) && <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{tt("columns.elba", { defaultValue: "Elba" })}</span>}
-                </div>
-              ))}
+              {payers.map((row) => {
+                const id = String(row.id);
+                const bank = text(row, "payment_channel") === "bank";
+                return (
+                  <form key={id} className="flex flex-wrap items-center gap-1.5 text-xs" onSubmit={(event) => { const fd = formData(event); void run(`payer-${id}`, () => api.businessAction(businessID, `payers/${id}`, { elba_contractor_id: fd.get("contractor") || null, apply_contractor_to_projects: true }, "PATCH")); }}>
+                    <span className="min-w-0 flex-1 truncate">{text(row, "name")}</span>
+                    {text(row, "inn") && <span className="tabular-nums text-muted-foreground">{tt("columns.inn", { defaultValue: "INN" })} {text(row, "inn")}</span>}
+                    {bank && (
+                      <>
+                        <NativeSelect size="sm" name="contractor" aria-label={t(($) => $.billing.contractor)} defaultValue={text(row, "elba_contractor_id")}>
+                          <NativeSelectOption value="">{t(($) => $.billing.contractor_empty)}</NativeSelectOption>
+                          {contractors.map((option) => {
+                            const name = typeof option.name === "string" ? option.name : option.id;
+                            const inn = typeof option.inn === "string" ? option.inn : "";
+                            return <NativeSelectOption key={option.id} value={option.id}>{inn ? `${name} · ${inn}` : name}</NativeSelectOption>;
+                          })}
+                        </NativeSelect>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.billing.apply)}</Button>
+                      </>
+                    )}
+                  </form>
+                );
+              })}
               <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("payer", () => api.businessAction(businessID, `clients/${clientID}/payers`, { name: fd.get("name"), inn: fd.get("inn") || null, status: "active", payment_channel: text(client, "primary_payment_channel") || "bank" })); event.currentTarget.reset(); }}>
                 <Input required name="name" className="h-7 w-52 text-xs" placeholder={t(($) => $.fields.name)} />
                 <Input name="inn" inputMode="numeric" className="h-7 w-32 text-xs" placeholder={tt("columns.inn", { defaultValue: "INN" })} />

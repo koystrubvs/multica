@@ -881,6 +881,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 						r.Post("/clients", h.CreateBusinessClient)
 						r.Patch("/clients/{clientId}", h.UpdateBusinessClient)
 						r.Post("/clients/{clientId}/payers", h.CreateBusinessPayer)
+						r.Patch("/payers/{payerId}", h.UpdateBusinessPayer)
 						r.Put("/clients/{clientId}/projects", h.MapBusinessClientProject)
 						r.Post("/counterparties/{classificationId}/classify", h.ClassifyBusinessCounterparty)
 					})

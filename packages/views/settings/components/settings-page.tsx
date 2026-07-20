@@ -11,7 +11,6 @@ import {
   FlaskConical,
   Bell,
   Plug,
-  Wallet,
   MessageCircle,
   Tags,
   Keyboard,
@@ -34,7 +33,6 @@ import { GitHubTab } from "./github-tab";
 import { IntegrationsTab } from "./integrations-tab";
 import { LabsTab } from "./labs-tab";
 import { NotificationsTab } from "./notifications-tab";
-import { BillingTab } from "./billing-tab";
 import { LabelsTab } from "./labels-tab";
 import { PropertiesTab } from "./properties-tab";
 import { KeyboardShortcutsTab } from "./keyboard-shortcuts-tab";
@@ -57,7 +55,6 @@ const WORKSPACE_TAB_KEYS = [
   "github",
   "integrations",
   "labs",
-  "billing",
   "members",
   "labels",
   "properties",
@@ -68,7 +65,6 @@ const WORKSPACE_TAB_VALUES = {
   github: "github",
   integrations: "integrations",
   labs: "labs",
-  billing: "billing",
   members: "members",
   labels: "labels",
   properties: "properties",
@@ -79,7 +75,6 @@ const WORKSPACE_TAB_ICONS = {
   github: GitHubMark,
   integrations: Plug,
   labs: FlaskConical,
-  billing: Wallet,
   members: Users,
   labels: Tags,
   properties: SlidersHorizontal,
@@ -91,9 +86,11 @@ const TAB_QUERY_KEY = "tab";
 // Legacy `?tab=…` values that have been collapsed into another tab. Old
 // bookmarks still land on the correct surface without us preserving a
 // dead TabsContent entry. Lark used to be its own top-level workspace
-// tab; it now lives inside Integrations.
+// tab; it now lives inside Integrations. Billing moved to the Business page
+// (Business -> Billing tab), so old ?tab=billing bookmarks land on General.
 const LEGACY_WORKSPACE_TAB_REDIRECTS: Record<string, string> = {
   lark: "integrations",
+  billing: "workspace",
 };
 
 const SETTINGS_TAB_TRIGGER_CLASS =
@@ -225,7 +222,6 @@ export function SettingsPage({ extraAccountTabs }: SettingsPageProps = {}) {
           <TabsContent value="github"><GitHubTab /></TabsContent>
           <TabsContent value="integrations"><IntegrationsTab /></TabsContent>
           <TabsContent value="labs"><LabsTab /></TabsContent>
-          <TabsContent value="billing"><BillingTab /></TabsContent>
           <TabsContent value="members"><MembersTab /></TabsContent>
           <TabsContent value="labels"><LabelsTab /></TabsContent>
           <TabsContent value="properties"><PropertiesTab /></TabsContent>

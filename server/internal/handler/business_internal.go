@@ -180,11 +180,14 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.name), '[]'::jsonb) FROM (SELECT * FROM business_client_payer WHERE business_id = $1 ORDER BY name) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.project_title), '[]'::jsonb) FROM (
 			SELECT bcp.*, p.title AS project_title, p.status AS project_status, w.name AS workspace_name, w.slug AS workspace_slug,
-			       bc.canonical_name AS client_name
+			       bc.canonical_name AS client_name,
+			       cb.enabled AS billing_enabled, cb.mode AS billing_mode,
+			       cb.elba_contractor_id AS billing_contractor_id, cb.subscription_fee_rub AS billing_subscription_fee_rub
 			FROM business_client_project bcp
 			JOIN project p ON p.id = bcp.project_id AND p.workspace_id = bcp.workspace_id
 			JOIN workspace w ON w.id = bcp.workspace_id
 			JOIN business_client bc ON bc.id = bcp.client_id AND bc.business_id = bcp.business_id
+			LEFT JOIN client_billing_config cb ON cb.project_id = bcp.project_id
 			WHERE bcp.business_id = $1 ORDER BY p.title
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.classification, q.name), '[]'::jsonb) FROM (SELECT * FROM business_counterparty_classification WHERE business_id = $1 ORDER BY classification, name) q`},
@@ -1048,6 +1051,143 @@ func (h *Handler) CreateBusinessPayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, raw)
+}
+
+type updateBusinessPayerRequest struct {
+	Name             *string `json:"name"`
+	INN              *string `json:"inn"`
+	KPP              *string `json:"kpp"`
+	Status           *string `json:"status"`
+	PaymentChannel   *string `json:"payment_channel"`
+	Notes            *string `json:"notes"`
+	ElbaOrgID        *string `json:"elba_org_id"`
+	ElbaContractorID *string `json:"elba_contractor_id"`
+	// When true and the payer ends up with a contractor, every project mapped
+	// to the payer's client gets that contractor in client_billing_config —
+	// existing configs are updated, missing ones are created disabled so the
+	// link is ready the moment billing is switched on.
+	ApplyToProjects bool `json:"apply_contractor_to_projects"`
+}
+
+func (h *Handler) UpdateBusinessPayer(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	payerID := chi.URLParam(r, "payerId")
+	if _, valid := parseUUIDOrBadRequest(w, payerID, "payer_id"); !valid {
+		return
+	}
+	var request updateBusinessPayerRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if request.Name != nil {
+		trimmed := strings.TrimSpace(*request.Name)
+		if trimmed == "" {
+			writeError(w, http.StatusBadRequest, "name cannot be empty")
+			return
+		}
+		request.Name = &trimmed
+	}
+	if request.Status != nil && !containsBusinessString([]string{"active", "inactive", "needs_review"}, *request.Status) {
+		writeError(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+	if request.PaymentChannel != nil && !containsBusinessString([]string{"bank", "personal_card", "cash", "other"}, *request.PaymentChannel) {
+		writeError(w, http.StatusBadRequest, "invalid payment_channel")
+		return
+	}
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	before, err := queryBusinessRowJSON(r.Context(), tx.QueryRow(r.Context(), `SELECT to_jsonb(p) FROM business_client_payer p WHERE id = $1 AND business_id = $2 FOR UPDATE`, payerID, businessID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "payer not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load payer")
+		return
+	}
+	after, err := queryBusinessRowJSON(r.Context(), tx.QueryRow(r.Context(), `
+		UPDATE business_client_payer SET
+			name = COALESCE($3, name),
+			inn = CASE WHEN $4::text IS NULL THEN inn ELSE NULLIF($4, '') END,
+			kpp = CASE WHEN $5::text IS NULL THEN kpp ELSE NULLIF($5, '') END,
+			status = COALESCE($6, status),
+			payment_channel = COALESCE($7, payment_channel),
+			notes = CASE WHEN $8::text IS NULL THEN notes ELSE NULLIF($8, '') END,
+			elba_org_id = CASE WHEN $9::text IS NULL THEN elba_org_id ELSE NULLIF($9, '') END,
+			elba_contractor_id = CASE WHEN $10::text IS NULL THEN elba_contractor_id ELSE NULLIF($10, '') END,
+			updated_at = now()
+		WHERE id = $1 AND business_id = $2
+		RETURNING to_jsonb(business_client_payer)
+	`, payerID, businessID, request.Name, nullableString(request.INN), nullableString(request.KPP),
+		request.Status, request.PaymentChannel, nullableString(request.Notes),
+		nullableString(request.ElbaOrgID), nullableString(request.ElbaContractorID)))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to update payer")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "payer.updated", "business_client_payer", payerID, "", before, after); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to audit payer")
+		return
+	}
+	var billingUpdated, billingCreated int64
+	if request.ApplyToProjects {
+		var payerRow struct {
+			ClientID         string  `json:"client_id"`
+			ElbaContractorID *string `json:"elba_contractor_id"`
+		}
+		_ = json.Unmarshal(after, &payerRow)
+		if payerRow.ElbaContractorID != nil && *payerRow.ElbaContractorID != "" && payerRow.ClientID != "" {
+			updateTag, err := tx.Exec(r.Context(), `
+				UPDATE client_billing_config cb SET elba_contractor_id = $3, updated_at = now()
+				FROM business_client_project bcp
+				WHERE bcp.business_id = $1 AND bcp.client_id = $2 AND cb.project_id = bcp.project_id
+				  AND cb.elba_contractor_id IS DISTINCT FROM $3
+			`, businessID, payerRow.ClientID, *payerRow.ElbaContractorID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to link contractor to projects")
+				return
+			}
+			billingUpdated = updateTag.RowsAffected()
+			insertTag, err := tx.Exec(r.Context(), `
+				INSERT INTO client_billing_config (project_id, enabled, elba_contractor_id)
+				SELECT bcp.project_id, false, $3
+				FROM business_client_project bcp
+				WHERE bcp.business_id = $1 AND bcp.client_id = $2
+				  AND NOT EXISTS (SELECT 1 FROM client_billing_config cb WHERE cb.project_id = bcp.project_id)
+			`, businessID, payerRow.ClientID, *payerRow.ElbaContractorID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to link contractor to projects")
+				return
+			}
+			billingCreated = insertTag.RowsAffected()
+			applied, _ := json.Marshal(map[string]any{
+				"elba_contractor_id": *payerRow.ElbaContractorID,
+				"billing_updated":    billingUpdated,
+				"billing_created":    billingCreated,
+			})
+			if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "payer.contractor_applied", "business_client_payer", payerID, "", nil, applied); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to audit payer")
+				return
+			}
+		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update payer")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"payer":           json.RawMessage(after),
+		"billing_updated": billingUpdated,
+		"billing_created": billingCreated,
+	})
 }
 
 type mapBusinessProjectRequest struct {

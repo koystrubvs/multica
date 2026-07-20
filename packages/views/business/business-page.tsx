@@ -54,9 +54,10 @@ import { AlertTriangle, Building2, ChevronLeft, ChevronRight, Filter, Search, Up
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
+import { BusinessBillingTab } from "./business-billing-tab";
 import { BusinessClientCard } from "./business-client-card";
 
-type Tab = "overview" | "calendar" | "clients" | "bank" | "economics" | "team";
+type Tab = "overview" | "calendar" | "clients" | "billing" | "bank" | "economics" | "team";
 
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 const CLASSIFICATIONS = ["client_income", "payroll", "tax", "service", "transfer", "owner_draw", "vitmax_transit", "unknown"] as const;
@@ -618,7 +619,8 @@ export function BusinessPage() {
   const effPercent = econPercent !== "" ? econPercent : (econWorkerRow?.default_percent ? String(Number(econWorkerRow.default_percent)) : "25");
   const tabs: { key: Tab; enabled: boolean }[] = [
     { key: "overview", enabled: true }, { key: "calendar", enabled: calendarEnabled }, { key: "clients", enabled: clientsEnabled },
-    { key: "bank", enabled: bankEnabled }, { key: "economics", enabled: economicsEnabled }, { key: "team", enabled: economicsEnabled },
+    { key: "billing", enabled: clientsEnabled }, { key: "bank", enabled: bankEnabled },
+    { key: "economics", enabled: economicsEnabled }, { key: "team", enabled: economicsEnabled },
   ];
   const openClientRow = (data.clients ?? []).find((row) => String(row.id) === openClientID) ?? null;
   const single = (setter: (next: string[]) => void, current: string[]) => (value: string) => {
@@ -846,6 +848,10 @@ export function BusinessPage() {
           </div>
         </Section>
       </div>}
+
+      {tab === "billing" && clientsEnabled && (
+        <BusinessBillingTab businessID={businessID} data={data} onChanged={() => snapshot.refetch()} />
+      )}
 
       {tab === "calendar" && calendarEnabled && <div className="space-y-6">
         <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">

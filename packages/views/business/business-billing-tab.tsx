@@ -1,0 +1,472 @@
+"use client";
+
+// Business billing tab: everything that used to live in Settings -> Billing,
+// re-anchored on business entities. A client's payer links to an Elba
+// contractor (auto-suggested by INN) and the link is applied to every project
+// mapped to that client, so the счёт/акт always targets the right legal
+// entity. Workspace pricing defaults and the consolidated invoice action live
+// here too.
+
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { api, ApiError } from "@multica/core/api";
+import type { BusinessRow, BusinessSnapshot, ContractorPeriodGroup } from "@multica/core/types";
+import { Button } from "@multica/ui/components/ui/button";
+import { Input } from "@multica/ui/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@multica/ui/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@multica/ui/components/ui/table";
+import { cn } from "@multica/ui/lib/utils";
+import { useT } from "../i18n";
+
+export const businessBillingKeys = {
+  wsConfig: () => ["client-billing", "workspace-config"] as const,
+  contractors: (orgId: string) => ["client-billing", "elba-contractors", orgId] as const,
+  accounts: (orgId: string) => ["client-billing", "elba-bank-accounts", orgId] as const,
+  orgs: () => ["client-billing", "elba-orgs"] as const,
+  contractorConfigs: () => ["client-billing", "contractor-configs"] as const,
+  invoiceable: () => ["client-billing", "invoiceable-groups"] as const,
+};
+
+type ElbaRow = { id: string; [key: string]: unknown };
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function contractorLabel(row: ElbaRow): string {
+  const name = str(row.name) || str(row.fullName) || str(row.shortName);
+  const inn = str(row.inn);
+  if (name) return inn ? `${name} · ${inn}` : name;
+  return inn || row.id;
+}
+
+function rub(value: unknown): string {
+  const amount = Number(value ?? 0);
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function text(row: BusinessRow, key: string): string {
+  const value = row[key];
+  if (value === null || value === undefined) return "";
+  return String(value);
+}
+
+// Shared Elba directory (workspace org + contractors). The business page runs
+// in the workspace that owns the Elba wiring, so workspace-scoped billing
+// endpoints are correct here; project links are still written server-side via
+// the business API to stay cross-workspace safe.
+export function useElbaDirectory() {
+  const wsConfig = useQuery({ queryKey: businessBillingKeys.wsConfig(), queryFn: () => api.getWorkspaceBillingConfig() });
+  const orgId = wsConfig.data?.elba_org_id ?? "";
+  const contractors = useQuery({
+    queryKey: businessBillingKeys.contractors(orgId),
+    queryFn: () => api.getElbaContractors(orgId),
+    enabled: !!orgId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  return {
+    wsConfig: wsConfig.data,
+    orgId,
+    contractors: (contractors.data ?? []) as ElbaRow[],
+    unavailable: contractors.isError && contractors.error instanceof ApiError && contractors.error.status === 503,
+  };
+}
+
+type ProjectBillingState = "linked" | "mismatch" | "off";
+
+export function projectBillingState(row: BusinessRow, contractorId: string): ProjectBillingState {
+  const enabled = row.billing_enabled === true || row.billing_enabled === "t" || row.billing_enabled === "true";
+  const linked = String(row.billing_contractor_id ?? "");
+  if (enabled && contractorId && linked === contractorId) return "linked";
+  if (enabled) return "mismatch";
+  return "off";
+}
+
+export function BusinessBillingTab({ businessID, data, onChanged }: {
+  businessID: string;
+  data: BusinessSnapshot;
+  onChanged: () => Promise<unknown>;
+}) {
+  const { t } = useT("business");
+  const tt = t as unknown as (key: string, options?: { defaultValue?: string }) => string;
+  const qc = useQueryClient();
+  const { wsConfig, orgId, contractors, unavailable } = useElbaDirectory();
+
+  const configs = useQuery({ queryKey: businessBillingKeys.contractorConfigs(), queryFn: () => api.listContractorBillingConfigs() });
+  const groups = useQuery({ queryKey: businessBillingKeys.invoiceable(), queryFn: () => api.listInvoiceableContractorGroups() });
+
+  const clientName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of data.clients ?? []) map.set(String(row.id), String(row.canonical_name ?? ""));
+    return map;
+  }, [data.clients]);
+
+  const projectsByClient = useMemo(() => {
+    const map = new Map<string, BusinessRow[]>();
+    for (const row of data.projects ?? []) {
+      const key = String(row.client_id);
+      const list = map.get(key) ?? [];
+      list.push(row);
+      map.set(key, list);
+    }
+    return map;
+  }, [data.projects]);
+
+  const contractorByINN = useMemo(() => {
+    const map = new Map<string, ElbaRow>();
+    for (const row of contractors) {
+      const inn = str(row.inn);
+      if (inn) map.set(inn, row);
+    }
+    return map;
+  }, [contractors]);
+
+  const payers = useMemo(() =>
+    [...(data.payers ?? [])].sort((a, b) =>
+      (clientName.get(String(a.client_id)) ?? "").localeCompare(clientName.get(String(b.client_id)) ?? "", "ru")
+      || text(a, "name").localeCompare(text(b, "name"), "ru"),
+    ), [data.payers, clientName]);
+
+  // Per-payer drafts: contractor + billing mode/fee. Seeded lazily from the
+  // saved link, the INN auto-match, and the saved contractor config.
+  const [drafts, setDrafts] = useState<Record<string, { contractor: string; mode: string; fee: string }>>({});
+  const draftFor = (payer: BusinessRow): { contractor: string; mode: string; fee: string; suggested: boolean } => {
+    const id = String(payer.id);
+    const saved = text(payer, "elba_contractor_id");
+    const suggestion = !saved ? contractorByINN.get(text(payer, "inn"))?.id ?? "" : "";
+    const existing = drafts[id];
+    const contractor = existing?.contractor ?? (saved || suggestion);
+    const cfg = (configs.data ?? []).find((row) => row.elba_contractor_id === contractor);
+    return {
+      contractor,
+      mode: existing?.mode ?? (cfg?.mode ?? "postpaid"),
+      fee: existing?.fee ?? (cfg?.subscription_fee_rub ? String(cfg.subscription_fee_rub) : ""),
+      suggested: !saved && !existing?.contractor && !!suggestion,
+    };
+  };
+  const setDraft = (payer: BusinessRow, patch: Partial<{ contractor: string; mode: string; fee: string }>) => {
+    const id = String(payer.id);
+    const current = draftFor(payer);
+    setDrafts((prev) => ({ ...prev, [id]: { contractor: current.contractor, mode: current.mode, fee: current.fee, ...patch } }));
+  };
+
+  const saveMut = useMutation({
+    mutationFn: async (input: { payerID: string; contractor: string; contractorName: string; mode: string; fee: string }) => {
+      const result = await api.businessAction<{ billing_updated?: number; billing_created?: number }>(
+        businessID,
+        `payers/${input.payerID}`,
+        { elba_contractor_id: input.contractor || null, apply_contractor_to_projects: true },
+        "PATCH",
+      );
+      if (input.contractor) {
+        await api.upsertContractorBillingConfig({
+          elba_contractor_id: input.contractor,
+          name: input.contractorName,
+          mode: input.mode === "subscription" ? "subscription" : "postpaid",
+          subscription_fee_rub: input.fee.trim() === "" ? 0 : Number(input.fee),
+        });
+      }
+      return result;
+    },
+    onSuccess: async (result) => {
+      const linked = Number(result?.billing_updated ?? 0) + Number(result?.billing_created ?? 0);
+      toast.success(t(($) => $.billing.saved_toast, { linked }));
+      qc.invalidateQueries({ queryKey: businessBillingKeys.contractorConfigs() });
+      qc.invalidateQueries({ queryKey: businessBillingKeys.invoiceable() });
+      await onChanged();
+    },
+    onError: (cause) => toast.error(cause instanceof Error ? cause.message : String(cause)),
+  });
+
+  const invoiceMut = useMutation({
+    mutationFn: (group: ContractorPeriodGroup) => api.invoiceContractorPeriod(group.elba_contractor_id, group.starts_on, group.ends_on),
+    onSuccess: (result) => {
+      toast.success(t(($) => $.billing.invoice_done_toast, { amount: result.bill_rub.toLocaleString("ru-RU") }));
+      qc.invalidateQueries({ queryKey: businessBillingKeys.invoiceable() });
+    },
+    onError: (cause) => toast.error(cause instanceof Error ? cause.message : String(cause)),
+  });
+
+  const contractorDisplay = (id: string): string => {
+    const fromElba = contractors.find((row) => row.id === id);
+    if (fromElba) return contractorLabel(fromElba);
+    const cfg = (configs.data ?? []).find((row) => row.elba_contractor_id === id);
+    return cfg?.name || id;
+  };
+  const payerByContractor = useMemo(() => {
+    const map = new Map<string, BusinessRow>();
+    for (const row of payers) {
+      const id = text(row, "elba_contractor_id");
+      if (id && !map.has(id)) map.set(id, row);
+    }
+    return map;
+  }, [payers]);
+
+  const fmtDate = (value: string) => value.slice(0, 10).split("-").reverse().join(".");
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-1.5">
+        <h2 className="text-sm font-medium">{t(($) => $.billing.contractors_title)}</h2>
+        <p className="text-[11px] text-muted-foreground">{t(($) => $.billing.contractors_hint)}</p>
+        {unavailable && <p className="text-xs text-muted-foreground">{t(($) => $.billing.elba_unavailable)}</p>}
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="h-8 text-xs">{t(($) => $.filters.client)}</TableHead>
+                <TableHead className="h-8 text-xs">{t(($) => $.billing.payer)}</TableHead>
+                <TableHead className="h-8 text-xs">{t(($) => $.billing.contractor)}</TableHead>
+                <TableHead className="h-8 text-xs">{t(($) => $.billing.mode)}</TableHead>
+                <TableHead className="h-8 text-xs">{t(($) => $.billing.fee)}</TableHead>
+                <TableHead className="h-8 text-xs">{t(($) => $.billing.linked_projects)}</TableHead>
+                <TableHead className="h-8 text-xs" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payers.length === 0 && (
+                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>
+              )}
+              {payers.map((payer) => {
+                const id = String(payer.id);
+                const channel = text(payer, "payment_channel");
+                const bank = channel === "bank";
+                const draft = draftFor(payer);
+                const clientProjects = projectsByClient.get(String(payer.client_id)) ?? [];
+                return (
+                  <TableRow key={id}>
+                    <TableCell className="py-1.5 text-xs font-medium whitespace-nowrap">{clientName.get(String(payer.client_id)) ?? "—"}</TableCell>
+                    <TableCell className="py-1.5 text-xs whitespace-nowrap">
+                      <div>{text(payer, "name")}</div>
+                      {text(payer, "inn") && <div className="tabular-nums text-[11px] text-muted-foreground">{text(payer, "inn")}</div>}
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      {bank ? (
+                        <div className="flex items-center gap-1.5">
+                          <NativeSelect size="sm" aria-label={t(($) => $.billing.contractor)} value={draft.contractor} onChange={(event) => setDraft(payer, { contractor: event.target.value })}>
+                            <NativeSelectOption value="">{t(($) => $.billing.contractor_empty)}</NativeSelectOption>
+                            {contractors.map((row) => <NativeSelectOption key={row.id} value={row.id}>{contractorLabel(row)}</NativeSelectOption>)}
+                            {draft.contractor && !contractors.some((row) => row.id === draft.contractor) && (
+                              <NativeSelectOption value={draft.contractor}>{contractorDisplay(draft.contractor)}</NativeSelectOption>
+                            )}
+                          </NativeSelect>
+                          {draft.suggested && <span className="whitespace-nowrap rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">{t(($) => $.billing.match_by_inn)}</span>}
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground">{tt(`values.${channel}`, { defaultValue: channel })}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      {bank && (
+                        <NativeSelect size="sm" aria-label={t(($) => $.billing.mode)} value={draft.mode} onChange={(event) => setDraft(payer, { mode: event.target.value })}>
+                          <NativeSelectOption value="postpaid">{t(($) => $.billing.mode_postpaid)}</NativeSelectOption>
+                          <NativeSelectOption value="subscription">{t(($) => $.billing.mode_subscription)}</NativeSelectOption>
+                        </NativeSelect>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      {bank && draft.mode === "subscription" && (
+                        <Input inputMode="decimal" className="h-7 w-24 text-xs" value={draft.fee} onChange={(event) => setDraft(payer, { fee: event.target.value })} />
+                      )}
+                    </TableCell>
+                    <TableCell className="py-1.5">
+                      <div className="flex max-w-64 flex-wrap gap-1">
+                        {clientProjects.length === 0 && <span className="text-[11px] text-muted-foreground/60">—</span>}
+                        {clientProjects.map((project) => {
+                          const state = projectBillingState(project, draft.contractor);
+                          return (
+                            <span
+                              key={String(project.id)}
+                              title={state === "linked" ? t(($) => $.billing.state_linked) : state === "mismatch" ? t(($) => $.billing.state_mismatch) : t(($) => $.billing.state_off)}
+                              className={cn(
+                                "inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
+                                state === "linked" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                                state === "mismatch" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                                state === "off" && "bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {text(project, "project_title")}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-1.5 text-right">
+                      {bank && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={saveMut.isPending}
+                          onClick={() => saveMut.mutate({
+                            payerID: id,
+                            contractor: draft.contractor,
+                            contractorName: draft.contractor ? contractorDisplay(draft.contractor) : "",
+                            mode: draft.mode,
+                            fee: draft.fee,
+                          })}
+                        >
+                          {t(($) => $.billing.apply)}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
+
+      <section className="space-y-1.5">
+        <h2 className="text-sm font-medium">{t(($) => $.billing.invoiceable_title)}</h2>
+        {(groups.data ?? []).length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{t(($) => $.billing.invoiceable_empty)}</div>
+        ) : (
+          <div className="space-y-2">
+            {(groups.data ?? []).map((group) => {
+              const payer = payerByContractor.get(group.elba_contractor_id);
+              const client = payer ? clientName.get(String(payer.client_id)) : undefined;
+              return (
+                <div key={`${group.elba_contractor_id}-${group.starts_on}`} className="rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-medium">
+                      {client || contractorDisplay(group.elba_contractor_id)}
+                      <span className="ml-2 font-normal tabular-nums text-muted-foreground">{fmtDate(group.starts_on)} — {fmtDate(group.ends_on)}</span>
+                    </div>
+                    <Button size="sm" className="h-7 text-xs" disabled={invoiceMut.isPending} onClick={() => invoiceMut.mutate(group)}>
+                      {t(($) => $.billing.invoice_for, { amount: group.total_rub.toLocaleString("ru-RU") })}
+                    </Button>
+                  </div>
+                  <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
+                    {group.projects.map((project) => (
+                      <li key={project.period_id} className="flex justify-between gap-3">
+                        <span className="truncate">{project.project_title}</span>
+                        <span className="tabular-nums">{rub(project.total_rub)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <BillingDefaults wsConfig={wsConfig} orgId={orgId} />
+    </div>
+  );
+}
+
+// Workspace-level pricing defaults + Elba organization wiring, formerly the
+// top half of Settings -> Billing.
+function BillingDefaults({ wsConfig, orgId }: {
+  wsConfig: ReturnType<typeof useElbaDirectory>["wsConfig"];
+  orgId: string;
+}) {
+  const { t } = useT("business");
+  const qc = useQueryClient();
+
+  const [markup, setMarkup] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [rounding, setRounding] = useState("");
+  const [fxMarkup, setFxMarkup] = useState("");
+  const [org, setOrg] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+
+  useEffect(() => {
+    if (!wsConfig) return;
+    setMarkup(String(wsConfig.markup));
+    setMinPrice(String(wsConfig.min_price_rub));
+    setRounding(String(wsConfig.rounding_rub));
+    setFxMarkup(String(wsConfig.fx_markup_percent));
+    setOrg(wsConfig.elba_org_id ?? "");
+    setBankAccount(wsConfig.elba_bank_account_id ?? "");
+  }, [wsConfig]);
+
+  const orgs = useQuery({ queryKey: businessBillingKeys.orgs(), queryFn: () => api.getElbaOrganizations(), staleTime: 5 * 60_000, retry: false });
+  const accounts = useQuery({
+    queryKey: businessBillingKeys.accounts(org || orgId),
+    queryFn: () => api.getElbaBankAccounts(org || orgId),
+    enabled: !!(org || orgId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const num = (value: string, fallback: number): number => {
+        const parsed = Number(value);
+        return value.trim() !== "" && Number.isFinite(parsed) ? parsed : fallback;
+      };
+      return api.putWorkspaceBillingConfig({
+        markup: num(markup, 3),
+        min_price_rub: num(minPrice, 500),
+        rounding_rub: num(rounding, 50),
+        fx_markup_percent: num(fxMarkup, 5),
+        elba_org_id: org,
+        elba_bank_account_id: bankAccount,
+      });
+    },
+    onSuccess: () => {
+      toast.success(t(($) => $.success));
+      qc.invalidateQueries({ queryKey: businessBillingKeys.wsConfig() });
+    },
+    onError: (cause) => toast.error(cause instanceof Error ? cause.message : String(cause)),
+  });
+
+  const field = (label: string, value: string, onChange: (next: string) => void) => (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <Input inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} className="h-7 text-xs" />
+    </label>
+  );
+
+  return (
+    <section className="space-y-1.5">
+      <h2 className="text-sm font-medium">{t(($) => $.billing.defaults_title)}</h2>
+      <p className="text-[11px] text-muted-foreground">{t(($) => $.billing.defaults_hint)}</p>
+      <div className="rounded-lg border p-3">
+        <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
+          {field(t(($) => $.billing.markup), markup, setMarkup)}
+          {field(t(($) => $.billing.fx_markup), fxMarkup, setFxMarkup)}
+          {field(t(($) => $.billing.min_price), minPrice, setMinPrice)}
+          {field(t(($) => $.billing.rounding), rounding, setRounding)}
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-muted-foreground">{t(($) => $.billing.org)}</span>
+            <NativeSelect size="sm" aria-label={t(($) => $.billing.org)} value={org} onChange={(event) => { setOrg(event.target.value); setBankAccount(""); }}>
+              <NativeSelectOption value="">{t(($) => $.billing.org_empty)}</NativeSelectOption>
+              {((orgs.data ?? []) as ElbaRow[]).map((row) => <NativeSelectOption key={row.id} value={row.id}>{str(row.name) || (str(row.inn) ? `ИНН ${str(row.inn)}` : row.id)}</NativeSelectOption>)}
+            </NativeSelect>
+          </label>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-muted-foreground">{t(($) => $.billing.bank_account)}</span>
+            <NativeSelect size="sm" aria-label={t(($) => $.billing.bank_account)} value={bankAccount} onChange={(event) => setBankAccount(event.target.value)} disabled={!(org || orgId)}>
+              <NativeSelectOption value="">{t(($) => $.billing.account_empty)}</NativeSelectOption>
+              {((accounts.data ?? []) as ElbaRow[]).map((row) => {
+                const acc = str(row.accountNumber);
+                const bankName = (row.bank as { name?: string } | undefined)?.name;
+                return <NativeSelectOption key={row.id} value={row.id}>{acc ? (bankName ? `${acc} · ${bankName}` : acc) : str(row.name) || row.id}</NativeSelectOption>;
+              })}
+            </NativeSelect>
+          </label>
+        </div>
+        <Button size="sm" className="mt-3 h-7 text-xs" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+          {t(($) => $.actions.save)}
+        </Button>
+      </div>
+    </section>
+  );
+}
