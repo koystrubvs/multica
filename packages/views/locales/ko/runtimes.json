@@ -426,5 +426,14 @@
     "table_cache_r": "캐시 R",
     "table_cache_w": "캐시 W",
     "no_data": "아직 사용량 데이터가 없습니다"
+  },
+  "last_seen": {
+    "never": "없음",
+    "just_now": "방금 전",
+    "ago": "전",
+    "unit_s": "초",
+    "unit_m": "분",
+    "unit_h": "시간",
+    "unit_d": "일"
   }
 }

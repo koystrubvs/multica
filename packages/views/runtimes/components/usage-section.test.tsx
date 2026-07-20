@@ -29,6 +29,10 @@ vi.mock("../../common/use-viewing-timezone", () => ({
 vi.mock("@multica/core/runtimes/queries", () => ({
   runtimeUsageOptions,
   runtimeUsageByAgentOptions,
+  // useFxResolver (fork RUB pricing) pulls daily FX rates; the useQuery mock
+  // routes unknown kinds to an empty array, which the resolver treats as
+  // "no rates yet" and falls back gracefully.
+  fxDailyOptions: () => ({ kind: "fx" as const }),
 }));
 
 vi.mock("@multica/core/workspace/queries", () => ({
@@ -166,7 +170,9 @@ describe("UsageSection — Viewing timezone wiring", () => {
     render(<UsageSection runtime={RUNTIME} />, { wrapper: Wrapper });
 
     const flows = Array.from(document.querySelectorAll("number-flow-react"));
-    expect(flows).toHaveLength(3);
+    // Fork: cost KPIs render as formatted RUB text (CBR rate), so only the
+    // token tile animates with NumberFlow.
+    expect(flows).toHaveLength(1);
     expect(flows.at(-1)).toHaveAttribute("aria-label", "3K");
     expect(
       flows.every(

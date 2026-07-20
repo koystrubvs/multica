@@ -150,9 +150,11 @@ describe("DashboardPage — viewing timezone drives the query key", () => {
       container.querySelectorAll("number-flow-react"),
     );
 
-    expect(flows).toHaveLength(5);
+    // Fork: the cost KPI renders as formatted RUB text (formatRub), not a
+    // NumberFlow, so only the token and task tiles animate.
+    expect(flows).toHaveLength(2);
     expect(flows.map((flow) => flow.getAttribute("aria-label"))).toEqual(
-      expect.arrayContaining(["$0.03", "3K", "12"]),
+      expect.arrayContaining(["3K", "12"]),
     );
     expect(container).toHaveTextContent("3h 17m");
     expect(

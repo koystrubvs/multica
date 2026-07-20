@@ -128,7 +128,8 @@
     "local_web_path_placeholder": "守护进程机器上的 /绝对/路径",
     "local_web_submit": "附加文件夹",
     "local_web_hint": "路径在守护进程机器上解析，而不是在浏览器中。",
-    "local_web_offline_badge": "离线"
+    "local_web_offline_badge": "离线",
+    "local_daemon_offline_tooltip": "守护进程“{{name}}”已离线 — 重新连接后代理将打开此目录。"
   },
   "delete_dialog": {
     "title": "删除项目",

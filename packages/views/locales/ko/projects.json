@@ -128,7 +128,8 @@
     "local_web_path_placeholder": "데몬 머신의 /절대/경로",
     "local_web_submit": "폴더 연결",
     "local_web_hint": "경로는 브라우저가 아니라 데몬 머신에서 확인됩니다.",
-    "local_web_offline_badge": "오프라인"
+    "local_web_offline_badge": "오프라인",
+    "local_daemon_offline_tooltip": "데몬 “{{name}}”이(가) 오프라인입니다 — 다시 연결되면 에이전트가 이 디렉터리를 엽니다."
   },
   "delete_dialog": {
     "title": "프로젝트 삭제",
@@ -235,5 +236,50 @@
     "direction_desc": "내림차순",
     "section_columns": "열",
     "view": "보기"
+  },
+  "siteping": {
+    "section_title": "SitePing 위젯",
+    "description": "이 스니펫을 사이트의 <head> 안이나 </body> 바로 앞에 넣으세요. 페이지 위젯으로 접수된 피드백이 이 프로젝트의 이슈로 등록됩니다.",
+    "copy_button": "스니펫 복사",
+    "copied_button": "복사됨",
+    "copied_toast": "스니펫이 클립보드에 복사되었습니다",
+    "copy_failed_toast": "스니펫 복사에 실패했습니다",
+    "docs_link": "GitHub의 SitePing",
+    "share": {
+      "title": "공유 링크",
+      "subtitle": "클라이언트별 링크를 생성합니다. 위젯은 링크로 접속한 방문자에게만 표시됩니다.",
+      "new_button": "새 링크",
+      "name_placeholder": "클라이언트 이름(필수)",
+      "email_placeholder": "클라이언트 이메일(선택)",
+      "label_placeholder": "내부 라벨, 예: \"QA 팀 — 스프린트 12\"",
+      "cancel": "취소",
+      "create": "링크 만들기",
+      "creating": "생성 중…",
+      "created_toast": "링크가 생성되었습니다",
+      "create_failed": "링크 생성에 실패했습니다",
+      "revoke": "회수",
+      "revoke_confirm": "이 링크를 회수할까요? 클라이언트에게 더 이상 위젯이 표시되지 않습니다.",
+      "revoked_toast": "링크가 회수되었습니다",
+      "revoke_failed": "회수에 실패했습니다",
+      "copy_link": "링크 복사",
+      "link_copied": "링크가 복사되었습니다 — your-site.com을 실제 사이트 URL로 바꾸세요",
+      "loading": "불러오는 중…",
+      "empty": "공유 링크가 아직 없습니다.",
+      "uses_count_other": "{{count}}회 사용",
+      "last_used": "마지막 사용",
+      "site_url_label": "사이트 URL(스니펫 설치 위치)",
+      "save": "저장",
+      "saving": "저장 중…",
+      "site_url_saved": "사이트 URL이 저장되었습니다",
+      "site_url_save_failed": "사이트 URL 저장에 실패했습니다",
+      "guest_select_label": "프로젝트 게스트",
+      "guest_select_placeholder": "게스트 선택…",
+      "guest_hint_empty": "먼저 위 People 섹션에서 게스트를 만드세요.",
+      "created_from_people_hint": "링크는 멤버별로 생성됩니다 — 위 People 섹션에서 멤버 옆의 링크 아이콘을 사용하세요.",
+      "open_as_admin": "관리자로 사이트 열기",
+      "admin_opening": "여는 중…",
+      "admin_no_site_url": "먼저 사이트 URL을 설정하세요",
+      "admin_open_failed": "사이트를 열지 못했습니다"
+    }
   }
 }

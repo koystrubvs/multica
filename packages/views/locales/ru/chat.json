@@ -27,7 +27,6 @@
     "failed_after": "Ошибка через {{elapsed}}",
     "finished_in": "Завершено за {{elapsed}}",
     "no_response": "Агент завершил ход без текстового ответа.",
-    "task_failed_fallback": "Task завершился ошибкой",
     "tools_one": "{{count}} инструмент",
     "tools_few": "{{count}} инструмента",
     "tools_many": "{{count}} инструментов",
@@ -75,8 +74,7 @@
     "row_subtitle": {
       "working": "В работе",
       "completed": "Завершено",
-      "new_reply": "Новый ответ",
-      "archived_label": "В архиве"
+      "new_reply": "Новый ответ"
     },
     "stop_dialog": {
       "title": "Остановить запуск?",
@@ -101,11 +99,6 @@
     "my_agents": "Мои агенты",
     "others": "Другие",
     "no_agents": "Нет агентов",
-    "active_group": "Активные",
-    "archived_group_one": "{{count}} архивный чат",
-    "archived_group_few": "{{count}} архивных чата",
-    "archived_group_many": "{{count}} архивных чатов",
-    "archived_group_other": "{{count}} архивных чата",
     "history_group": "История чатов",
     "agent_filter_placeholder": "Поиск агентов..."
   },

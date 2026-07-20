@@ -426,5 +426,14 @@
     "table_cache_r": "缓存读",
     "table_cache_w": "缓存写",
     "no_data": "还没有使用数据"
+  },
+  "last_seen": {
+    "never": "从未",
+    "just_now": "刚刚",
+    "ago": "前",
+    "unit_s": "秒",
+    "unit_m": "分",
+    "unit_h": "时",
+    "unit_d": "天"
   }
 }
