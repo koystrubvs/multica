@@ -51,6 +51,8 @@ export interface BusinessSeriesPoint {
 export interface BusinessDashboardSeries {
   from: string;
   months: number;
+  periods?: number;
+  granularity?: "month" | "day";
   points: BusinessSeriesPoint[];
 }
 
@@ -61,6 +63,8 @@ export interface BusinessSnapshot {
   aliases: BusinessRow[];
   payers: BusinessRow[];
   projects: BusinessRow[];
+  available_workspaces: BusinessRow[];
+  available_projects: BusinessRow[];
   counterparties: BusinessRow[];
   agreements: BusinessRow[];
   receivables: BusinessRow[];
@@ -84,6 +88,7 @@ export interface BusinessSnapshot {
   bank_outbox: BusinessRow[];
   billing_candidates: BusinessRow[];
   billing_month_client_totals: BusinessRow[];
+  billing_tasks: BusinessRow[];
   generated_at: string;
 }
 

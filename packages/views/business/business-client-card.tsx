@@ -209,11 +209,16 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                   </div>
                 );
               })}
-              <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("map", () => api.businessAction(businessID, `clients/${clientID}/projects`, { workspace_id: fd.get("workspace"), project_id: fd.get("project"), service_type: fd.get("service"), billable: true }, "PUT")); event.currentTarget.reset(); }}>
-                <Input required name="workspace" className="h-7 w-36 text-xs" placeholder={t(($) => $.fields.workspace_id)} />
-                <Input required name="project" className="h-7 w-36 text-xs" placeholder={t(($) => $.fields.project_id)} />
+              <form className="flex flex-wrap items-start gap-1.5" onSubmit={(event) => { const fd = formData(event); const workspace = String(fd.get("workspace") ?? ""); const selected = fd.getAll("project").map(String).filter(Boolean); const candidates = selected.length > 0 ? (data.available_projects ?? []).filter((row) => selected.includes(String(row.project_id))) : (data.available_projects ?? []).filter((row) => workspace && String(row.workspace_id) === workspace); void run("map", () => Promise.all(candidates.map((row) => api.businessAction(businessID, `clients/${clientID}/projects`, { workspace_id: row.workspace_id, project_id: row.project_id, service_type: fd.get("service"), billable: true }, "PUT")))); event.currentTarget.reset(); }}>
+                <NativeSelect size="sm" name="workspace" aria-label={t(($) => $.fields.workspace)}>
+                  <NativeSelectOption value="">{t(($) => $.fields.choose_projects)}</NativeSelectOption>
+                  {(data.available_workspaces ?? []).map((row) => <NativeSelectOption key={text(row, "workspace_id")} value={text(row, "workspace_id")}>{t(($) => $.fields.entire_workspace)}: {text(row, "workspace_name")}</NativeSelectOption>)}
+                </NativeSelect>
+                <select multiple name="project" aria-label={t(($) => $.fields.projects)} className="min-h-20 min-w-64 rounded-md border bg-background px-2 py-1 text-xs">
+                  {(data.available_projects ?? []).map((row) => <option key={text(row, "project_id")} value={text(row, "project_id")}>{text(row, "workspace_name")} · {text(row, "project_title")}</option>)}
+                </select>
                 <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.map_project)}</Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.map_projects)}</Button>
               </form>
             </div>
           </CardSection>

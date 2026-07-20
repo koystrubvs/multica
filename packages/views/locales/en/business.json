@@ -59,6 +59,7 @@
     "target": "Target progress",
     "task_value": "Accepted task value",
     "unknown": "Unclassified inbound",
+    "unmatched": "Unmatched receipts",
     "expected": "Expected",
     "invoiced": "Invoiced",
     "receivable_paid": "Paid",
@@ -71,11 +72,11 @@
     "reserve_obligation": "Reserve obligations"
   },
   "metric_groups": {
-    "calendar": "Payment calendar for the month",
-    "bank": "Bank for the month",
+    "calendar": "Payment calendar for the selected period",
+    "bank": "Bank for the selected period",
     "economics": "Task economics",
     "team": "Team and reserve",
-    "summary": "Month summary"
+    "summary": "Selected period summary"
   },
   "sections": {
     "clients": "Client registry",
@@ -95,11 +96,14 @@
     "payout_items": "Payouts by worker",
     "participations": "Task participations",
     "year_dynamics": "Dynamics: plan vs fact by month",
+    "month_dynamics": "Dynamics: plan vs fact by day",
+    "task_calculation": "Task calculation",
     "billing_candidates": "Billed tasks ready to estimate"
   },
   "actions": {
     "add_client": "Add client",
     "map_project": "Link project",
+    "map_projects": "Link selected",
     "add_agreement": "Add agreement",
     "generate_receivables": "Generate receivables",
     "import_statement": "Import statement",
@@ -113,6 +117,9 @@
     "submit_draft": "Create bank draft",
     "save": "Save",
     "classify": "Classification",
+    "resolve": "Resolve",
+    "choose_receivable": "Choose receivable",
+    "match_receipt": "Match",
     "clear_filters": "Clear filters",
     "skip": "Skip",
     "add_payer": "Add payer",
@@ -130,6 +137,7 @@
     "all": "All",
     "only_review": "Needs review only",
     "only_overdue": "Overdue only",
+    "only_unmatched": "Unmatched only",
     "rows": "Rows",
     "hide_empty": "Hide zero rows (T&M)"
   },
@@ -213,12 +221,21 @@
     "bank_linked": "Bank",
     "agreement_name": "Agreement",
     "price_rub": "Estimate",
-    "by_tasks": "From tasks"
+    "by_tasks": "From tasks",
+    "task_count": "Tasks",
+    "task_amount_rub": "Task amount",
+    "tasks_preview": "Included tasks",
+    "match_state": "Match",
+    "review_details": "Review details"
   },
   "fields": {
     "name": "Name",
     "client": "Client",
     "project": "Project",
+    "workspace": "Workspace",
+    "projects": "Projects",
+    "choose_projects": "Choose projects below",
+    "entire_workspace": "All workspace projects",
     "workspace_id": "Workspace ID",
     "project_id": "Project ID",
     "issue_id": "Issue ID",
@@ -291,6 +308,8 @@
     "owner_draw": "owner draw",
     "vitmax_transit": "VitMax transit",
     "unknown": "unclassified",
+    "matched": "matched",
+    "unmatched": "unmatched",
     "client_payer": "client payer",
     "worker_payee": "worker payee",
     "vendor": "vendor",
@@ -327,12 +346,24 @@
   "money": {
     "incoming": "Incoming",
     "on_review": "Needs review",
+    "on_review_hint": "Amount, due date, or confirmed terms are missing",
+    "missing_amount": "amount is missing",
+    "missing_invoice_date": "invoice date is missing",
+    "missing_due_date": "due date is missing",
+    "missing_payer": "payer is missing",
     "received": "Received",
     "estimated": "from tasks (billing estimate)",
     "split": "Split estimate",
     "team": "team ≤35%",
     "company": "company pool 15%",
-    "owner": "owner ≥50%"
+    "owner": "owner ≥50%",
+    "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
+    "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "bank": {
+    "source": "Data source",
+    "modulbank_import": "Modulbank statement",
+    "last_import": "last import"
   },
   "card": {
     "details": "Client details",

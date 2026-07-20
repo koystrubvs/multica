@@ -59,6 +59,7 @@
     "target": "目標進捗",
     "task_value": "承認済みタスク価値",
     "unknown": "未確認入金",
+    "unmatched": "Unmatched receipts",
     "expected": "予定額",
     "invoiced": "請求済み",
     "receivable_paid": "入金済み",
@@ -95,11 +96,14 @@
     "payout_items": "担当者別支払",
     "participations": "タスク参加",
     "year_dynamics": "推移：月別の計画と実績",
+    "month_dynamics": "Dynamics: plan vs fact by day",
+    "task_calculation": "Task calculation",
     "billing_candidates": "見積可能な課金タスク"
   },
   "actions": {
     "add_client": "顧客を追加",
     "map_project": "プロジェクトを対応",
+    "map_projects": "Link selected",
     "add_agreement": "契約を追加",
     "generate_receivables": "売掛金を生成",
     "import_statement": "明細を取り込む",
@@ -113,6 +117,9 @@
     "submit_draft": "銀行草案を作成",
     "save": "保存",
     "classify": "分類",
+    "resolve": "Resolve",
+    "choose_receivable": "Choose receivable",
+    "match_receipt": "Match",
     "clear_filters": "フィルターをクリア",
     "skip": "スキップ",
     "add_payer": "支払者を追加",
@@ -130,6 +137,7 @@
     "all": "すべて",
     "only_review": "要確認のみ",
     "only_overdue": "期限超過のみ",
+    "only_unmatched": "Unmatched only",
     "rows": "件数",
     "hide_empty": "ゼロ行を隠す（T&M）"
   },
@@ -213,12 +221,21 @@
     "bank_linked": "銀行",
     "agreement_name": "契約",
     "price_rub": "見積額",
-    "by_tasks": "タスク由来"
+    "by_tasks": "タスク由来",
+    "task_count": "Tasks",
+    "task_amount_rub": "Task amount",
+    "tasks_preview": "Included tasks",
+    "match_state": "Match",
+    "review_details": "Review details"
   },
   "fields": {
     "name": "名前",
     "client": "顧客",
     "project": "プロジェクト",
+    "workspace": "Workspace",
+    "projects": "Projects",
+    "choose_projects": "Choose projects below",
+    "entire_workspace": "All workspace projects",
     "workspace_id": "ワークスペース ID",
     "project_id": "プロジェクト ID",
     "issue_id": "タスク ID",
@@ -291,6 +308,8 @@
     "owner_draw": "所有者引出",
     "vitmax_transit": "VitMax 通過",
     "unknown": "未分類",
+    "matched": "matched",
+    "unmatched": "unmatched",
     "client_payer": "顧客支払者",
     "worker_payee": "担当者受取人",
     "vendor": "ベンダー",
@@ -327,12 +346,24 @@
   "money": {
     "incoming": "入金予定",
     "on_review": "要確認",
+    "on_review_hint": "Amount, due date, or confirmed terms are missing",
+    "missing_amount": "amount is missing",
+    "missing_invoice_date": "invoice date is missing",
+    "missing_due_date": "due date is missing",
+    "missing_payer": "payer is missing",
     "received": "入金済み",
     "estimated": "タスクから（課金見積）",
     "split": "配分の目安",
     "team": "チーム ≤35%",
     "company": "会社プール 15%",
-    "owner": "所有者 ≥50%"
+    "owner": "所有者 ≥50%",
+    "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
+    "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "bank": {
+    "source": "Data source",
+    "modulbank_import": "Modulbank statement",
+    "last_import": "last import"
   },
   "card": {
     "details": "顧客情報",

@@ -59,6 +59,7 @@
     "target": "목표 진행률",
     "task_value": "승인된 작업 가치",
     "unknown": "미확인 입금",
+    "unmatched": "Unmatched receipts",
     "expected": "예상액",
     "invoiced": "청구됨",
     "receivable_paid": "입금됨",
@@ -95,11 +96,14 @@
     "payout_items": "작업자별 지급",
     "participations": "작업 참여",
     "year_dynamics": "추이: 월별 계획 대 실적",
+    "month_dynamics": "Dynamics: plan vs fact by day",
+    "task_calculation": "Task calculation",
     "billing_candidates": "평가 가능한 청구 작업"
   },
   "actions": {
     "add_client": "고객 추가",
     "map_project": "프로젝트 연결",
+    "map_projects": "Link selected",
     "add_agreement": "계약 추가",
     "generate_receivables": "미수금 생성",
     "import_statement": "명세서 가져오기",
@@ -113,6 +117,9 @@
     "submit_draft": "은행 초안 생성",
     "save": "저장",
     "classify": "분류",
+    "resolve": "Resolve",
+    "choose_receivable": "Choose receivable",
+    "match_receipt": "Match",
     "clear_filters": "필터 초기화",
     "skip": "건너뛰기",
     "add_payer": "지불인 추가",
@@ -130,6 +137,7 @@
     "all": "전체",
     "only_review": "검토 필요만",
     "only_overdue": "연체만",
+    "only_unmatched": "Unmatched only",
     "rows": "행",
     "hide_empty": "0 행 숨기기 (T&M)"
   },
@@ -213,12 +221,21 @@
     "bank_linked": "은행",
     "agreement_name": "계약",
     "price_rub": "평가액",
-    "by_tasks": "작업 기준"
+    "by_tasks": "작업 기준",
+    "task_count": "Tasks",
+    "task_amount_rub": "Task amount",
+    "tasks_preview": "Included tasks",
+    "match_state": "Match",
+    "review_details": "Review details"
   },
   "fields": {
     "name": "이름",
     "client": "고객",
     "project": "프로젝트",
+    "workspace": "Workspace",
+    "projects": "Projects",
+    "choose_projects": "Choose projects below",
+    "entire_workspace": "All workspace projects",
     "workspace_id": "워크스페이스 ID",
     "project_id": "프로젝트 ID",
     "issue_id": "작업 ID",
@@ -291,6 +308,8 @@
     "owner_draw": "소유자 인출",
     "vitmax_transit": "VitMax 경유",
     "unknown": "미분류",
+    "matched": "matched",
+    "unmatched": "unmatched",
     "client_payer": "고객 지불인",
     "worker_payee": "작업자 수취인",
     "vendor": "공급업체",
@@ -327,12 +346,24 @@
   "money": {
     "incoming": "입금 예정",
     "on_review": "검토 필요",
+    "on_review_hint": "Amount, due date, or confirmed terms are missing",
+    "missing_amount": "amount is missing",
+    "missing_invoice_date": "invoice date is missing",
+    "missing_due_date": "due date is missing",
+    "missing_payer": "payer is missing",
     "received": "입금됨",
     "estimated": "작업 기준(청구 추정)",
     "split": "배분 추정",
     "team": "팀 ≤35%",
     "company": "회사 풀 15%",
-    "owner": "소유자 ≥50%"
+    "owner": "소유자 ≥50%",
+    "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
+    "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "bank": {
+    "source": "Data source",
+    "modulbank_import": "Modulbank statement",
+    "last_import": "last import"
   },
   "card": {
     "details": "고객 정보",

@@ -59,6 +59,7 @@
     "target": "目标进度",
     "task_value": "已接受任务价值",
     "unknown": "未知入账",
+    "unmatched": "Unmatched receipts",
     "expected": "预期",
     "invoiced": "已开票",
     "receivable_paid": "已收款",
@@ -95,11 +96,14 @@
     "payout_items": "按工作人员付款",
     "participations": "任务参与",
     "year_dynamics": "动态：按月计划与实际",
+    "month_dynamics": "Dynamics: plan vs fact by day",
+    "task_calculation": "Task calculation",
     "billing_candidates": "可评估的计费任务"
   },
   "actions": {
     "add_client": "添加客户",
     "map_project": "映射项目",
+    "map_projects": "Link selected",
     "add_agreement": "添加协议",
     "generate_receivables": "生成应收款",
     "import_statement": "导入对账单",
@@ -113,6 +117,9 @@
     "submit_draft": "创建银行草稿",
     "save": "保存",
     "classify": "分类",
+    "resolve": "Resolve",
+    "choose_receivable": "Choose receivable",
+    "match_receipt": "Match",
     "clear_filters": "清除筛选",
     "skip": "跳过",
     "add_payer": "添加付款方",
@@ -130,6 +137,7 @@
     "all": "全部",
     "only_review": "仅待复核",
     "only_overdue": "仅逾期",
+    "only_unmatched": "Unmatched only",
     "rows": "行数",
     "hide_empty": "隐藏零值行（T&M）"
   },
@@ -213,12 +221,21 @@
     "bank_linked": "银行",
     "agreement_name": "协议",
     "price_rub": "评估额",
-    "by_tasks": "按任务"
+    "by_tasks": "按任务",
+    "task_count": "Tasks",
+    "task_amount_rub": "Task amount",
+    "tasks_preview": "Included tasks",
+    "match_state": "Match",
+    "review_details": "Review details"
   },
   "fields": {
     "name": "名称",
     "client": "客户",
     "project": "项目",
+    "workspace": "Workspace",
+    "projects": "Projects",
+    "choose_projects": "Choose projects below",
+    "entire_workspace": "All workspace projects",
     "workspace_id": "工作区 ID",
     "project_id": "项目 ID",
     "issue_id": "任务 ID",
@@ -291,6 +308,8 @@
     "owner_draw": "所有者提款",
     "vitmax_transit": "VitMax 过账",
     "unknown": "未分类",
+    "matched": "matched",
+    "unmatched": "unmatched",
     "client_payer": "客户付款方",
     "worker_payee": "工作人员收款人",
     "vendor": "供应商",
@@ -327,12 +346,24 @@
   "money": {
     "incoming": "待入账",
     "on_review": "待复核",
+    "on_review_hint": "Amount, due date, or confirmed terms are missing",
+    "missing_amount": "amount is missing",
+    "missing_invoice_date": "invoice date is missing",
+    "missing_due_date": "due date is missing",
+    "missing_payer": "payer is missing",
     "received": "已入账",
     "estimated": "按任务（计费估算）",
     "split": "分配估算",
     "team": "团队 ≤35%",
     "company": "公司池 15%",
-    "owner": "所有者 ≥50%"
+    "owner": "所有者 ≥50%",
+    "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
+    "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "bank": {
+    "source": "Data source",
+    "modulbank_import": "Modulbank statement",
+    "last_import": "last import"
   },
   "card": {
     "details": "客户信息",

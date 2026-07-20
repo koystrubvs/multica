@@ -21,34 +21,37 @@ import (
 const businessJSONBodyLimit = 1 << 20
 
 type BusinessSnapshotResponse struct {
-	Clients            json.RawMessage `json:"clients"`
-	Aliases            json.RawMessage `json:"aliases"`
-	Payers             json.RawMessage `json:"payers"`
-	Projects           json.RawMessage `json:"projects"`
-	Counterparties     json.RawMessage `json:"counterparties"`
-	Agreements         json.RawMessage `json:"agreements"`
-	Receivables        json.RawMessage `json:"receivables"`
-	BankImports        json.RawMessage `json:"bank_imports"`
-	Transactions       json.RawMessage `json:"transactions"`
-	Matches            json.RawMessage `json:"matches"`
-	CompanyCosts       json.RawMessage `json:"company_costs"`
-	RecurringCosts     json.RawMessage `json:"recurring_costs"`
-	Workers            json.RawMessage `json:"workers"`
-	Policies           json.RawMessage `json:"policies"`
-	ClientRequests     json.RawMessage `json:"client_requests"`
-	TaskEconomics      json.RawMessage `json:"task_economics"`
-	TaskParticipants   json.RawMessage `json:"task_participants"`
-	ReceivableTasks    json.RawMessage `json:"receivable_tasks"`
-	Accruals           json.RawMessage `json:"accruals"`
-	QualityCases       json.RawMessage `json:"quality_cases"`
-	AccrualAdjustments json.RawMessage `json:"accrual_adjustments"`
-	ReserveLedger      json.RawMessage `json:"reserve_ledger"`
-	PayoutBatches      json.RawMessage `json:"payout_batches"`
-	PayoutItems        json.RawMessage `json:"payout_items"`
-	BankOutbox         json.RawMessage `json:"bank_outbox"`
-	BillingCandidates  json.RawMessage `json:"billing_candidates"`
-	BillingMonthTotals json.RawMessage `json:"billing_month_client_totals"`
-	GeneratedAt        string          `json:"generated_at"`
+	Clients             json.RawMessage `json:"clients"`
+	Aliases             json.RawMessage `json:"aliases"`
+	Payers              json.RawMessage `json:"payers"`
+	Projects            json.RawMessage `json:"projects"`
+	AvailableWorkspaces json.RawMessage `json:"available_workspaces"`
+	AvailableProjects   json.RawMessage `json:"available_projects"`
+	Counterparties      json.RawMessage `json:"counterparties"`
+	Agreements          json.RawMessage `json:"agreements"`
+	Receivables         json.RawMessage `json:"receivables"`
+	BankImports         json.RawMessage `json:"bank_imports"`
+	Transactions        json.RawMessage `json:"transactions"`
+	Matches             json.RawMessage `json:"matches"`
+	CompanyCosts        json.RawMessage `json:"company_costs"`
+	RecurringCosts      json.RawMessage `json:"recurring_costs"`
+	Workers             json.RawMessage `json:"workers"`
+	Policies            json.RawMessage `json:"policies"`
+	ClientRequests      json.RawMessage `json:"client_requests"`
+	TaskEconomics       json.RawMessage `json:"task_economics"`
+	TaskParticipants    json.RawMessage `json:"task_participants"`
+	ReceivableTasks     json.RawMessage `json:"receivable_tasks"`
+	Accruals            json.RawMessage `json:"accruals"`
+	QualityCases        json.RawMessage `json:"quality_cases"`
+	AccrualAdjustments  json.RawMessage `json:"accrual_adjustments"`
+	ReserveLedger       json.RawMessage `json:"reserve_ledger"`
+	PayoutBatches       json.RawMessage `json:"payout_batches"`
+	PayoutItems         json.RawMessage `json:"payout_items"`
+	BankOutbox          json.RawMessage `json:"bank_outbox"`
+	BillingCandidates   json.RawMessage `json:"billing_candidates"`
+	BillingMonthTotals  json.RawMessage `json:"billing_month_client_totals"`
+	BillingTasks        json.RawMessage `json:"billing_tasks"`
+	GeneratedAt         string          `json:"generated_at"`
 }
 
 type BusinessDashboardResponse struct {
@@ -191,6 +194,22 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			LEFT JOIN client_billing_config cb ON cb.project_id = bcp.project_id
 			WHERE bcp.business_id = $1 ORDER BY p.title
 		) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.workspace_name), '[]'::jsonb) FROM (
+			SELECT w.id AS workspace_id, w.name AS workspace_name, w.slug AS workspace_slug
+			FROM business_workspace bw
+			JOIN workspace w ON w.id = bw.workspace_id
+			WHERE bw.business_id = $1 AND bw.kind <> 'archive' AND w.slug <> 'vitmax'
+			ORDER BY w.name
+		) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.workspace_name, q.project_title), '[]'::jsonb) FROM (
+			SELECT p.id AS project_id, p.title AS project_title, p.status AS project_status,
+			       w.id AS workspace_id, w.name AS workspace_name, w.slug AS workspace_slug
+			FROM business_workspace bw
+			JOIN workspace w ON w.id = bw.workspace_id
+			JOIN project p ON p.workspace_id = w.id
+			WHERE bw.business_id = $1 AND bw.kind <> 'archive' AND w.slug <> 'vitmax' AND p.status <> 'archived'
+			ORDER BY w.name, p.title
+		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.classification, q.name), '[]'::jsonb) FROM (SELECT * FROM business_counterparty_classification WHERE business_id = $1 ORDER BY classification, name) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.status, q.name), '[]'::jsonb) FROM (
 			SELECT ba.*, bc.canonical_name AS client_name, p.title AS project_title
@@ -201,14 +220,24 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.due_on NULLS LAST, q.period_key), '[]'::jsonb) FROM (
 			SELECT br.*, bc.canonical_name AS client_name, p.title AS project_title,
-			       CASE WHEN br.status IN ('expected','invoiced','partially_paid') AND br.due_on < (now() AT TIME ZONE 'Asia/Yekaterinburg')::date THEN true ELSE false END AS is_overdue
+			       CASE WHEN br.status IN ('expected','invoiced','partially_paid','overdue')
+			                  AND GREATEST(br.planned_amount_rub - br.paid_amount_rub, 0) > 0
+			                  AND br.due_on < (now() AT TIME ZONE 'Asia/Yekaterinburg')::date THEN true ELSE false END AS is_overdue
 			FROM business_receivable br
 			JOIN business_client bc ON bc.id = br.client_id AND bc.business_id = br.business_id
 			LEFT JOIN project p ON p.id = br.project_id
 			WHERE br.business_id = $1 ORDER BY br.due_on NULLS LAST, br.period_key
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC), '[]'::jsonb) FROM (SELECT * FROM business_bank_import_batch WHERE business_id = $1 ORDER BY created_at DESC LIMIT 50) q`},
-		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.booked_on DESC, q.created_at DESC), '[]'::jsonb) FROM (SELECT * FROM business_bank_transaction WHERE business_id = $1 ORDER BY booked_on DESC, created_at DESC LIMIT 500) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.booked_on DESC, q.created_at DESC), '[]'::jsonb) FROM (
+			SELECT t.*, EXISTS (
+				SELECT 1 FROM business_transaction_match m
+				WHERE m.business_id = t.business_id AND m.transaction_id = t.id AND m.status = 'confirmed'
+			) AS is_matched
+			FROM business_bank_transaction t
+			WHERE t.business_id = $1 AND t.voided_at IS NULL
+			ORDER BY t.booked_on DESC, t.created_at DESC LIMIT 5000
+		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC), '[]'::jsonb) FROM (SELECT * FROM business_transaction_match WHERE business_id = $1 ORDER BY created_at DESC LIMIT 500) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.incurred_on DESC), '[]'::jsonb) FROM (SELECT * FROM business_company_cost WHERE business_id = $1 ORDER BY incurred_on DESC LIMIT 500) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.status, q.name), '[]'::jsonb) FROM (SELECT * FROM business_recurring_cost WHERE business_id = $1 ORDER BY status, name) q`},
@@ -275,18 +304,33 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			WHERE c.status <> 'void'
 			GROUP BY bcp.client_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM')
 		) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.month DESC, q.client_name, q.issue_title), '[]'::jsonb) FROM (
+			SELECT bcp.client_id, bc.canonical_name AS client_name,
+			       to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM') AS month,
+			       c.issue_id, i.title AS issue_title, i.number AS issue_number,
+			       c.project_id, p.title AS project_title, c.price_rub, c.status
+			FROM client_billing_charge c
+			LEFT JOIN client_billing_period per ON per.id = c.period_id
+			JOIN issue i ON i.id = c.issue_id AND i.workspace_id = c.workspace_id
+			JOIN project p ON p.id = c.project_id AND p.workspace_id = c.workspace_id
+			JOIN business_client_project bcp ON bcp.project_id = c.project_id AND bcp.business_id = $1
+			JOIN business_client bc ON bc.id = bcp.client_id AND bc.business_id = $1
+			WHERE c.status <> 'void'
+			ORDER BY month DESC, bc.canonical_name, i.title LIMIT 5000
+		) q`},
 	}
 
 	response := BusinessSnapshotResponse{GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
 	destinations := []*json.RawMessage{
 		&response.Clients, &response.Aliases, &response.Payers, &response.Projects,
+		&response.AvailableWorkspaces, &response.AvailableProjects,
 		&response.Counterparties, &response.Agreements, &response.Receivables, &response.BankImports,
 		&response.Transactions, &response.Matches, &response.CompanyCosts, &response.RecurringCosts,
 		&response.Workers,
 		&response.Policies, &response.ClientRequests, &response.TaskEconomics, &response.TaskParticipants,
 		&response.ReceivableTasks, &response.Accruals, &response.QualityCases, &response.AccrualAdjustments,
 		&response.ReserveLedger, &response.PayoutBatches, &response.PayoutItems, &response.BankOutbox,
-		&response.BillingCandidates, &response.BillingMonthTotals,
+		&response.BillingCandidates, &response.BillingMonthTotals, &response.BillingTasks,
 	}
 	for index := range queries {
 		queries[index].dst = destinations[index]
@@ -467,14 +511,16 @@ reserve AS (
 metrics AS (
 	SELECT
 		COALESCE((SELECT sum(planned_amount_rub) FROM scoped_receivable WHERE status = 'expected'), 0) AS expected,
-		COALESCE((SELECT sum(planned_amount_rub) FROM scoped_receivable WHERE status IN ('invoiced','partially_paid','paid')), 0) AS invoiced,
+		COALESCE((SELECT sum(GREATEST(planned_amount_rub - paid_amount_rub, 0)) FROM scoped_receivable WHERE status IN ('invoiced','partially_paid','overdue')), 0) AS invoiced,
 		COALESCE((SELECT sum(paid_amount_rub) FROM scoped_receivable), 0) AS receivable_paid,
 		COALESCE((SELECT sum(GREATEST(planned_amount_rub - paid_amount_rub, 0)) FROM scoped_receivable WHERE status NOT IN ('paid','skipped','written_off') AND due_on < (now() AT TIME ZONE 'Asia/Yekaterinburg')::date), 0) AS overdue,
 		COALESCE((SELECT sum(planned_amount_rub) FROM scoped_receivable WHERE status = 'expected' AND invoice_on <= (now() AT TIME ZONE 'Asia/Yekaterinburg')::date), 0) AS not_invoiced,
 		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE direction = 'inbound' AND classification = 'client_income'), 0) AS bank_income,
 		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE classification = 'vitmax_transit'), 0) AS vitmax_transit,
 		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE classification = 'transfer'), 0) AS transfer,
-		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE direction = 'inbound' AND classification = 'unknown'), 0) AS unknown_inbound,
+		COALESCE((SELECT sum(t.amount_rub) FROM scoped_transactions t
+			WHERE t.direction = 'inbound' AND t.classification NOT IN ('transfer','vitmax_transit')
+			  AND NOT EXISTS (SELECT 1 FROM business_transaction_match m WHERE m.business_id = t.business_id AND m.transaction_id = t.id AND m.status = 'confirmed')), 0) AS unknown_inbound,
 		COALESCE((SELECT sum(service_value_rub) FROM scoped_economics), 0) AS task_value,
 		COALESCE((SELECT sum(adjusted_amount_rub) FROM accrual_totals), 0) AS participant_accrued,
 		COALESCE((SELECT sum(c.amount_rub) FROM business_company_cost c, scope s WHERE c.business_id = s.business_id AND c.voided_at IS NULL AND c.incurred_on >= s.month_start AND c.incurred_on < s.month_end AND (s.workspace_id IS NULL OR c.workspace_id = s.workspace_id) AND (s.client_id IS NULL OR c.client_id = s.client_id) AND (s.project_id IS NULL OR c.project_id = s.project_id)), 0)
@@ -484,8 +530,10 @@ metrics AS (
 		(SELECT balance FROM reserve) AS reserve_balance,
 		COALESCE((SELECT sum(GREATEST(adjusted_amount_rub - funded_rub - reserve_funded_rub, 0)) FROM accrual_totals WHERE reserve_due_on <= (now() AT TIME ZONE 'Asia/Yekaterinburg')::date), 0) AS reserve_obligation,
 		(SELECT monthly_owner_income_target_rub FROM business_account WHERE id = $1::uuid) AS owner_target,
-		(SELECT count(*) FROM scoped_transactions t WHERE t.classification NOT IN ('transfer','vitmax_transit') AND NOT EXISTS (SELECT 1 FROM business_transaction_match m WHERE m.business_id = t.business_id AND m.transaction_id = t.id AND m.status = 'confirmed')) AS unmatched_count,
-		(SELECT count(*) FROM scoped_receivable WHERE status NOT IN ('paid','skipped','written_off') AND due_on < (now() AT TIME ZONE 'Asia/Yekaterinburg')::date) AS overdue_count
+		(SELECT count(*) FROM scoped_transactions t WHERE t.direction = 'inbound' AND t.classification NOT IN ('transfer','vitmax_transit') AND NOT EXISTS (SELECT 1 FROM business_transaction_match m WHERE m.business_id = t.business_id AND m.transaction_id = t.id AND m.status = 'confirmed')) AS unmatched_count,
+		(SELECT count(*) FROM scoped_receivable WHERE status NOT IN ('paid','skipped','written_off')
+			AND GREATEST(planned_amount_rub - paid_amount_rub, 0) > 0
+			AND due_on < (now() AT TIME ZONE 'Asia/Yekaterinburg')::date) AS overdue_count
 )
 SELECT
 	expected::text, invoiced::text, receivable_paid::text, overdue::text, not_invoiced::text,
@@ -509,17 +557,24 @@ type businessSeriesPoint struct {
 }
 
 const businessSeriesSQL = `
-WITH months AS (
-	SELECT (date_trunc('month', $2::date) + make_interval(months => g.n))::date AS month_start
+WITH buckets AS (
+	SELECT CASE WHEN $4::text = 'day'
+		THEN $2::date + g.n
+		ELSE (date_trunc('month', $2::date) + make_interval(months => g.n))::date
+	END AS bucket_start
 	FROM generate_series(0, $3::int - 1) AS g(n)
+), ranged AS (
+	SELECT bucket_start,
+	       CASE WHEN $4::text = 'day' THEN bucket_start + 1 ELSE (bucket_start + interval '1 month')::date END AS bucket_end
+	FROM buckets
 )
-SELECT to_char(m.month_start, 'YYYY-MM'),
-	COALESCE((SELECT sum(r.planned_amount_rub) FROM business_receivable r WHERE r.business_id = $1 AND r.status NOT IN ('skipped','written_off') AND r.period_start >= m.month_start AND r.period_start < (m.month_start + interval '1 month')::date), 0)::text,
-	COALESCE((SELECT sum(r.paid_amount_rub) FROM business_receivable r WHERE r.business_id = $1 AND r.status NOT IN ('skipped','written_off') AND r.period_start >= m.month_start AND r.period_start < (m.month_start + interval '1 month')::date), 0)::text,
-	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.direction = 'inbound' AND t.classification = 'client_income' AND t.booked_on >= m.month_start AND t.booked_on < (m.month_start + interval '1 month')::date), 0)::text,
-	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.classification = 'vitmax_transit' AND t.booked_on >= m.month_start AND t.booked_on < (m.month_start + interval '1 month')::date), 0)::text,
-	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.direction = 'inbound' AND t.classification = 'unknown' AND t.booked_on >= m.month_start AND t.booked_on < (m.month_start + interval '1 month')::date), 0)::text
-FROM months m ORDER BY m.month_start`
+SELECT CASE WHEN $4::text = 'day' THEN to_char(b.bucket_start, 'YYYY-MM-DD') ELSE to_char(b.bucket_start, 'YYYY-MM') END,
+	COALESCE((SELECT sum(r.planned_amount_rub) FROM business_receivable r WHERE r.business_id = $1 AND r.status NOT IN ('skipped','written_off') AND COALESCE(r.due_on, r.invoice_on, r.period_start) >= b.bucket_start AND COALESCE(r.due_on, r.invoice_on, r.period_start) < b.bucket_end), 0)::text,
+	COALESCE((SELECT sum(r.paid_amount_rub) FROM business_receivable r WHERE r.business_id = $1 AND r.status NOT IN ('skipped','written_off') AND COALESCE(r.due_on, r.invoice_on, r.period_start) >= b.bucket_start AND COALESCE(r.due_on, r.invoice_on, r.period_start) < b.bucket_end), 0)::text,
+	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.direction = 'inbound' AND t.classification = 'client_income' AND t.booked_on >= b.bucket_start AND t.booked_on < b.bucket_end), 0)::text,
+	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.classification = 'vitmax_transit' AND t.booked_on >= b.bucket_start AND t.booked_on < b.bucket_end), 0)::text,
+	COALESCE((SELECT sum(t.amount_rub) FROM business_bank_transaction t WHERE t.business_id = $1 AND t.voided_at IS NULL AND t.direction = 'inbound' AND t.classification = 'unknown' AND t.booked_on >= b.bucket_start AND t.booked_on < b.bucket_end), 0)::text
+FROM ranged b ORDER BY b.bucket_start`
 
 func (h *Handler) GetBusinessDashboardSeries(w http.ResponseWriter, r *http.Request) {
 	businessID, _, ok := businessRequestIDs(w, r)
@@ -530,31 +585,46 @@ func (h *Handler) GetBusinessDashboardSeries(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		location = time.FixedZone("Asia/Yekaterinburg", 5*60*60)
 	}
-	from := r.URL.Query().Get("from")
-	if from == "" {
-		from = time.Now().In(location).Format("2006") + "-01"
+	granularity := r.URL.Query().Get("granularity")
+	if granularity == "" {
+		granularity = "month"
 	}
-	parsed, err := time.ParseInLocation("2006-01", from, location)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "from must use YYYY-MM")
+	if granularity != "month" && granularity != "day" {
+		writeError(w, http.StatusBadRequest, "granularity must be month or day")
 		return
 	}
-	months := 12
-	if raw := r.URL.Query().Get("months"); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil || value < 1 || value > 24 {
-			writeError(w, http.StatusBadRequest, "months must be between 1 and 24")
+	from := r.URL.Query().Get("from")
+	if from == "" {
+		from = time.Now().In(location).Format("2006-01-02")
+	}
+	parsed, err := time.ParseInLocation("2006-01-02", from, location)
+	if err != nil {
+		parsed, err = time.ParseInLocation("2006-01", from, location)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "from must use YYYY-MM or YYYY-MM-DD")
 			return
 		}
-		months = value
 	}
-	rows, err := h.DB.Query(r.Context(), businessSeriesSQL, businessID, parsed.Format("2006-01-02"), months)
+	periods := 12
+	rawPeriods := r.URL.Query().Get("periods")
+	if rawPeriods == "" {
+		rawPeriods = r.URL.Query().Get("months")
+	}
+	if rawPeriods != "" {
+		value, err := strconv.Atoi(rawPeriods)
+		if err != nil || value < 1 || value > 366 {
+			writeError(w, http.StatusBadRequest, "periods must be between 1 and 366")
+			return
+		}
+		periods = value
+	}
+	rows, err := h.DB.Query(r.Context(), businessSeriesSQL, businessID, parsed.Format("2006-01-02"), periods, granularity)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load business series")
 		return
 	}
 	defer rows.Close()
-	points := make([]businessSeriesPoint, 0, months)
+	points := make([]businessSeriesPoint, 0, periods)
 	for rows.Next() {
 		var point businessSeriesPoint
 		if err := rows.Scan(&point.Month, &point.ExpectedRUB, &point.ReceivablePaidRUB, &point.BankIncomeRUB, &point.VitmaxTransitRUB, &point.UnknownInboundRUB); err != nil {
@@ -567,7 +637,7 @@ func (h *Handler) GetBusinessDashboardSeries(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "failed to load business series")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"from": from, "months": months, "points": points})
+	writeJSON(w, http.StatusOK, map[string]any{"from": parsed.Format("2006-01-02"), "months": periods, "periods": periods, "granularity": granularity, "points": points})
 }
 
 type updateBusinessAgreementRequest struct {

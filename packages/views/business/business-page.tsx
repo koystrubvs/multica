@@ -154,6 +154,7 @@ function cellNode(row: BusinessRow, spec: ColumnSpec, tt: TT, locale: string): R
     case "bool":
       if (spec.key === "is_overdue") return <FlagPill on={isTruthyFlag(value)} tone="bad" label={tt("columns.is_overdue", { defaultValue: "overdue" })} />;
       if (spec.key === "needs_review") return <FlagPill on={isTruthyFlag(value)} tone="warn" label={tt("columns.needs_review", { defaultValue: "review" })} />;
+      // eslint-disable-next-line i18next/no-literal-string -- compact boolean glyph, not user-facing copy
       return isTruthyFlag(value) ? <span>✓</span> : <span className="text-muted-foreground/50">—</span>;
     case "enum": {
       const raw = String(value);
@@ -322,8 +323,14 @@ function Section({ title, actions, children }: { title: string; actions?: React.
   return <section className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h2>{actions}</div>{children}</section>;
 }
 
-function Metric({ label, value, hint, warning }: { label: string; value: string; hint?: string; warning?: boolean }) {
-  return <div className={cn("flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3", warning && "border-warning/50 bg-warning/5")}><div className="truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground" title={label}>{label}</div><div className="break-words text-base font-semibold leading-tight tabular-nums @3xl:text-lg">{value}</div>{hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}</div>;
+function Metric({ label, value, hint, warning, onClick }: { label: string; value: string; hint?: string; warning?: boolean; onClick?: () => void }) {
+  const className = cn(
+    "flex min-w-0 flex-col gap-1 rounded-lg border bg-card p-3 text-left",
+    warning && "border-warning/50 bg-warning/5",
+    onClick && "cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  );
+  const content = <><div className="truncate text-[10px] font-medium uppercase tracking-wider text-muted-foreground" title={label}>{label}</div><div className="break-words text-base font-semibold leading-tight tabular-nums @3xl:text-lg">{value}</div>{hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}</>;
+  return onClick ? <button type="button" className={className} onClick={onClick}>{content}</button> : <div className={className}>{content}</div>;
 }
 
 function formData(event: FormEvent<HTMLFormElement>): FormData {
@@ -384,6 +391,7 @@ export function BusinessPage() {
   const [hideZeroReceivables, setHideZeroReceivables] = useState(true);
   const [txClasses, setTxClasses] = useState<string[]>([]);
   const [txDirections, setTxDirections] = useState<string[]>([]);
+  const [txUnmatchedOnly, setTxUnmatchedOnly] = useState(false);
   const [txSearch, setTxSearch] = useState("");
   const [econWorker, setEconWorker] = useState("");
   const [econRole, setEconRole] = useState("");
@@ -408,8 +416,14 @@ export function BusinessPage() {
     enabled: enabled && !!businessID,
   });
   const snapshot = useQuery({ queryKey: ["business", businessID, "snapshot"], queryFn: () => api.getBusinessSnapshot(businessID), enabled: enabled && !!businessID });
-  const seriesFrom = `${periodYear}-01`;
-  const series = useQuery({ queryKey: ["business", businessID, "series", seriesFrom], queryFn: () => api.getBusinessDashboardSeries(businessID, seriesFrom, 12), enabled: enabled && !!businessID });
+  const seriesGranularity = periodMode === "month" ? "day" : "month";
+  const seriesFrom = periodMode === "month" ? `${month}-01` : `${periodYear}-01-01`;
+  const seriesPeriods = periodMode === "month" ? new Date(Number(periodYear), Number(month.slice(5, 7)), 0).getDate() : 12;
+  const series = useQuery({
+    queryKey: ["business", businessID, "series", seriesFrom, seriesPeriods, seriesGranularity],
+    queryFn: () => api.getBusinessDashboardSeries(businessID, seriesFrom, seriesPeriods, seriesGranularity),
+    enabled: enabled && !!businessID,
+  });
 
   const generatedRef = useRef(false);
   const snapshotRefetch = snapshot.refetch;
@@ -460,7 +474,7 @@ export function BusinessPage() {
   }, [data?.billing_month_client_totals]);
 
   const moneyTotals = useMemo(() => {
-    const totals = { incoming: 0, review: 0, received: 0, overdue: 0, estimated: 0 };
+    const totals = { incoming: 0, review: 0, reviewCount: 0, received: 0, overdue: 0, estimated: 0 };
     const estimateUsed = new Set<string>();
     for (const row of data?.receivables ?? []) {
       const monthKey = String(row.due_on ?? row.invoice_on ?? row.period_start ?? "").slice(0, 7);
@@ -471,7 +485,10 @@ export function BusinessPage() {
       const paid = Number(row.paid_amount_rub ?? 0);
       totals.received += paid;
       const rest = Math.max(planned - paid, 0);
-      if (isTruthyFlag(row.needs_review)) totals.review += rest;
+      if (isTruthyFlag(row.needs_review)) {
+        totals.review += rest;
+        totals.reviewCount += 1;
+      }
       else totals.incoming += rest;
       if (isTruthyFlag(row.is_overdue)) totals.overdue += rest;
       if (planned === 0 && paid === 0) {
@@ -512,11 +529,17 @@ export function BusinessPage() {
       }
       if (hideZeroReceivables && planned === 0 && paid === 0 && estimated === 0) continue;
       const entry = groups.get(monthKey) ?? { rows: [], planned: 0, paid: 0, overdue: 0, estimated: 0 };
+      const reviewDetails: string[] = [];
+      if (planned <= 0) reviewDetails.push(t(($) => $.money.missing_amount));
+      if (!row.invoice_on) reviewDetails.push(t(($) => $.money.missing_invoice_date));
+      if (!row.due_on) reviewDetails.push(t(($) => $.money.missing_due_date));
+      if (!(data?.payers ?? []).some((payer) => String(payer.client_id) === String(row.client_id))) reviewDetails.push(t(($) => $.money.missing_payer));
       entry.rows.push({
         ...row,
         agreement_name: meta?.name || String(row.project_title ?? row.period_key ?? ""),
         planned_amount_rub: planned > 0 ? row.planned_amount_rub : (estimated > 0 ? estimated : row.planned_amount_rub),
         by_tasks: estimated > 0,
+        review_details: isTruthyFlag(row.needs_review) ? reviewDetails.join(", ") : "",
       });
       if (status !== "skipped" && status !== "written_off") {
         entry.planned += planned > 0 ? planned : estimated;
@@ -536,16 +559,40 @@ export function BusinessPage() {
         overdue: entry.overdue,
         estimated: entry.estimated,
       }));
-  }, [filteredReceivables, hideZeroReceivables, agreementMeta, billingByClientMonth, periodPrefix, receivableStatuses]);
+  }, [filteredReceivables, hideZeroReceivables, agreementMeta, billingByClientMonth, periodPrefix, receivableStatuses, data?.payers, t]);
+
+  const periodTransactions = useMemo(() => (data?.transactions ?? []).filter((row) => String(row.booked_on ?? "").startsWith(periodPrefix)), [data?.transactions, periodPrefix]);
 
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
-    return (data?.transactions ?? []).filter((row) =>
+    return periodTransactions.filter((row) =>
       (txClasses.length === 0 || txClasses.includes(String(row.classification)))
       && (txDirections.length === 0 || txDirections.includes(String(row.direction)))
+      && (!txUnmatchedOnly || (String(row.direction) === "inbound" && !["transfer", "vitmax_transit"].includes(String(row.classification)) && !isTruthyFlag(row.is_matched)))
       && (!needle || `${String(row.counterparty_name ?? "")} ${String(row.purpose ?? "")} ${String(row.counterparty_inn ?? "")}`.toLowerCase().includes(needle))
-    );
-  }, [data?.transactions, txClasses, txDirections, txSearch]);
+    ).map((row) => ({ ...row, match_state: isTruthyFlag(row.is_matched) ? "matched" : "unmatched" }) as BusinessRow);
+  }, [periodTransactions, txClasses, txDirections, txUnmatchedOnly, txSearch]);
+
+  const taskBillingGroups = useMemo(() => {
+    const groups = new Map<string, { month: string; client_name: string; task_amount_rub: number; issues: Map<string, string> }>();
+    for (const row of data?.billing_tasks ?? []) {
+      const taskMonth = String(row.month ?? "");
+      if (!taskMonth.startsWith(periodPrefix)) continue;
+      const clientName = String(row.client_name ?? "—");
+      const key = `${taskMonth}|${String(row.client_id ?? "")}`;
+      const entry = groups.get(key) ?? { month: taskMonth, client_name: clientName, task_amount_rub: 0, issues: new Map<string, string>() };
+      entry.task_amount_rub += Number(row.price_rub ?? 0);
+      entry.issues.set(String(row.issue_id), `${String(row.project_title ?? "")} · ${String(row.issue_title ?? row.issue_id)}`);
+      groups.set(key, entry);
+    }
+    return [...groups.values()].map((entry) => ({
+      month: entry.month,
+      client_name: entry.client_name,
+      task_count: entry.issues.size,
+      task_amount_rub: entry.task_amount_rub,
+      tasks_preview: [...entry.issues.values()].join("; "),
+    })).sort((a, b) => b.month.localeCompare(a.month) || a.client_name.localeCompare(b.client_name));
+  }, [data?.billing_tasks, periodPrefix]);
 
   const transactionTotals = useMemo(() => filteredTransactions.reduce<{ inbound: number; outbound: number }>((acc, row) => {
     const amount = Number(row.amount_rub ?? 0);
@@ -631,6 +678,10 @@ export function BusinessPage() {
   const metrics = dashboard.data;
   const clientOptions = (data.clients ?? []).map((row) => ({ value: String(row.id), label: String(row.canonical_name) }));
   const projectOptions = (data.projects ?? []).map((row) => ({ value: String(row.project_id), label: String(row.project_title ?? row.project_id) }));
+  const matchableReceivables = (data.receivables ?? []).filter((row) => {
+    const status = String(row.status ?? "");
+    return !["paid", "skipped", "written_off"].includes(status) && Math.max(Number(row.planned_amount_rub ?? 0) - Number(row.paid_amount_rub ?? 0), 0) > 0;
+  });
   const serviceOptions = SERVICE_TYPES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) }));
   const econWorkerRow = (data.workers ?? []).find((row) => String(row.id) === econWorker) ?? (data.workers ?? [])[0];
   const effWorkerID = econWorker || String(econWorkerRow?.id ?? "");
@@ -681,11 +732,14 @@ export function BusinessPage() {
         };
       case "bank":
         return {
-          onClear: () => { setTxClasses([]); setTxDirections([]); setCounterpartyClasses([]); },
+          onClear: () => { setTxClasses([]); setTxDirections([]); setCounterpartyClasses([]); setTxUnmatchedOnly(false); },
           sections: [
             { key: "class", label: t(($) => $.filters.classification), options: CLASSIFICATIONS.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: txClasses, onToggle: (value) => setTxClasses(toggleValue(txClasses, value)) },
             { key: "direction", label: t(($) => $.filters.direction), options: [{ value: "inbound", label: t(($) => $.values.inbound) }, { value: "outbound", label: t(($) => $.values.outbound) }], selected: txDirections, onToggle: (value) => setTxDirections(toggleValue(txDirections, value)) },
             { key: "cp", label: t(($) => $.sections.counterparties), options: COUNTERPARTY_CLASSES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) })), selected: counterpartyClasses, onToggle: (value) => setCounterpartyClasses(toggleValue(counterpartyClasses, value)) },
+          ],
+          toggles: [
+            { key: "unmatched", label: t(($) => $.filters.only_unmatched), checked: txUnmatchedOnly, onToggle: () => setTxUnmatchedOnly(!txUnmatchedOnly) },
           ],
         };
       case "economics":
@@ -714,13 +768,11 @@ export function BusinessPage() {
   const chartConfig = {
     plan: { label: t(($) => $.metrics.expected), color: "var(--chart-1)" },
     fact: { label: t(($) => $.metrics.client_income), color: "var(--chart-2)" },
-    paid: { label: t(($) => $.metrics.receivable_paid), color: "var(--chart-3)" },
   } satisfies ChartConfig;
   const chartData = seriesPoints.map((point) => ({
-    label: point.month.slice(5),
+    label: periodMode === "month" ? point.month.slice(8) : point.month.slice(5),
     plan: Number(point.expected_rub),
     fact: Number(point.bank_income_rub),
-    paid: Number(point.receivable_paid_rub),
   }));
 
   return (
@@ -792,7 +844,7 @@ export function BusinessPage() {
             <Metric label={t(($) => $.metrics.expected)} value={rub(metrics.expected_rub)} />
             <Metric label={t(($) => $.metrics.invoiced)} value={rub(metrics.invoiced_rub)} />
             <Metric label={t(($) => $.metrics.receivable_paid)} value={rub(metrics.receivable_paid_rub)} />
-            <Metric label={t(($) => $.metrics.overdue)} value={rub(metrics.overdue_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.overdue_count ?? 0}`} warning={Number(metrics.overdue_rub) > 0} />
+            <Metric label={t(($) => $.metrics.overdue)} value={rub(metrics.overdue_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.overdue_count ?? 0}`} warning={Number(metrics.overdue_rub) > 0} onClick={() => { setReceivableStatuses([]); setReceivableClients([]); setReceivableOverdueOnly(true); setReceivableReviewOnly(false); setTab("calendar"); }} />
             <Metric label={t(($) => $.metrics.not_invoiced)} value={rub(metrics.not_invoiced_rub)} warning={Number(metrics.not_invoiced_rub) > 0} />
           </div>
         </Section>
@@ -800,7 +852,7 @@ export function BusinessPage() {
         <Section title={t(($) => $.metric_groups.bank)}>
           <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.client_income)} value={rub(metrics.bank_client_income_rub)} />
-            <Metric label={t(($) => $.metrics.unknown)} value={rub(metrics.unknown_inbound_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.unmatched_count ?? 0}`} warning={(metrics.unmatched_count ?? 0) > 0} />
+            <Metric label={t(($) => $.metrics.unmatched)} value={rub(metrics.unknown_inbound_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.unmatched_count ?? 0}`} warning={(metrics.unmatched_count ?? 0) > 0} onClick={() => { setTxClasses([]); setTxDirections(["inbound"]); setTxUnmatchedOnly(true); setTab("bank"); }} />
             <Metric label={t(($) => $.values.vitmax)} value={rub(metrics.vitmax_transit_rub)} />
             <Metric label={t(($) => $.values.transfers)} value={rub(metrics.transfer_rub)} />
           </div>
@@ -832,7 +884,7 @@ export function BusinessPage() {
           </div>
         </Section>
 
-        <Section title={t(($) => $.sections.year_dynamics)}>
+        <Section title={periodMode === "month" ? t(($) => $.sections.month_dynamics) : t(($) => $.sections.year_dynamics)}>
           <div className="space-y-2">
             {chartData.length > 0 && (
               <div className="rounded-lg border p-3">
@@ -844,12 +896,11 @@ export function BusinessPage() {
                     <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => `${rub(Number(value))} · ${String(chartConfig[name as keyof typeof chartConfig]?.label ?? name)}`} />} />
                     <Bar dataKey="plan" fill="var(--color-plan)" radius={[3, 3, 0, 0]} />
                     <Bar dataKey="fact" fill="var(--color-fact)" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="paid" fill="var(--color-paid)" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ChartContainer>
               </div>
             )}
-            <RowTable tt={tt} locale={locale} rows={seriesPoints as unknown as BusinessRow[]} columns={[{ key: "month" }, { key: "expected_rub", kind: "money" }, { key: "receivable_paid_rub", kind: "money" }, { key: "bank_income_rub", kind: "money" }, { key: "vitmax_transit_rub", kind: "money" }, { key: "unknown_inbound_rub", kind: "money" }]} empty={t(($) => $.empty)} />
+            <RowTable tt={tt} locale={locale} rows={seriesPoints as unknown as BusinessRow[]} columns={[{ key: "month" }, { key: "expected_rub", kind: "money" }, { key: "bank_income_rub", kind: "money" }]} empty={t(($) => $.empty)} />
           </div>
         </Section>
 
@@ -869,12 +920,17 @@ export function BusinessPage() {
             </form>
           </div>
         </Toolbar>
-        <Section title={t(($) => $.sections.clients)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));void execute("map",()=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:fd.get("workspace"),project_id:fd.get("project"),service_type:fd.get("service"),billable:true},"PUT"));}}>
+        <Section title={t(($) => $.sections.clients)} actions={<form className="flex flex-wrap items-start gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));const workspace=String(fd.get("workspace")??"");const selected=fd.getAll("project").map(String).filter(Boolean);const candidates=selected.length>0?(data.available_projects??[]).filter((row)=>selected.includes(String(row.project_id))):(data.available_projects??[]).filter((row)=>workspace&&String(row.workspace_id)===workspace);void execute("map",()=>Promise.all(candidates.map((row)=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:row.workspace_id,project_id:row.project_id,service_type:fd.get("service"),billable:true},"PUT"))));}}>
           <NativeSelect size="sm" required name="client">{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>
-          <Input required name="workspace" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.workspace_id)}/>
-          <Input required name="project" className="h-7 w-36 text-xs" placeholder={t(($)=>$.fields.project_id)}/>
+          <NativeSelect size="sm" name="workspace" aria-label={t(($)=>$.fields.workspace)}>
+            <NativeSelectOption value="">{t(($) => $.fields.choose_projects)}</NativeSelectOption>
+            {(data.available_workspaces ?? []).map((row)=><NativeSelectOption key={text(row,"workspace_id")} value={text(row,"workspace_id")}>{t(($) => $.fields.entire_workspace)}: {text(row,"workspace_name")}</NativeSelectOption>)}
+          </NativeSelect>
+          <select multiple name="project" aria-label={t(($) => $.fields.projects)} className="min-h-20 min-w-64 rounded-md border bg-background px-2 py-1 text-xs">
+            {(data.available_projects ?? []).map((row)=><option key={text(row,"project_id")} value={text(row,"project_id")}>{text(row,"workspace_name")} · {text(row,"project_title")}</option>)}
+          </select>
           <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_project)}</Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_projects)}</Button>
         </form>}>
           <div className="space-y-1.5">
             <div className="text-[11px] text-muted-foreground">{t(($) => $.card.hint)}</div>
@@ -900,9 +956,9 @@ export function BusinessPage() {
       {tab === "calendar" && calendarEnabled && <div className="space-y-6">
         <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
           <Metric label={t(($) => $.money.incoming)} value={rub(moneyTotals.incoming)} hint={moneyTotals.estimated > 0 ? `+ ≈ ${rub(moneyTotals.estimated)} ${t(($) => $.money.estimated)}` : undefined} />
-          <Metric label={t(($) => $.money.on_review)} value={rub(moneyTotals.review)} warning={moneyTotals.review > 0} />
+          <Metric label={t(($) => $.money.on_review)} value={rub(moneyTotals.review)} hint={`${t(($) => $.filters.rows)}: ${moneyTotals.reviewCount} · ${t(($) => $.money.on_review_hint)}`} warning={moneyTotals.reviewCount > 0} onClick={() => { setReceivableStatuses([]); setReceivableClients([]); setReceivableReviewOnly(true); setReceivableOverdueOnly(false); }} />
           <Metric label={t(($) => $.money.received)} value={rub(moneyTotals.received)} />
-          <Metric label={t(($) => $.metrics.overdue)} value={rub(moneyTotals.overdue)} warning={moneyTotals.overdue > 0} />
+          <Metric label={t(($) => $.metrics.overdue)} value={rub(moneyTotals.overdue)} warning={moneyTotals.overdue > 0} onClick={() => { setReceivableStatuses([]); setReceivableClients([]); setReceivableOverdueOnly(true); setReceivableReviewOnly(false); }} />
         </div>
         {(() => {
           const base = moneyTotals.incoming + moneyTotals.review + moneyTotals.estimated + moneyTotals.received;
@@ -931,11 +987,21 @@ export function BusinessPage() {
                       {group.overdue > 0 && <>{" · "}<span className="font-medium text-destructive">{t(($) => $.metrics.overdue)}: {group.overdue}</span></>}
                     </span>
                   </div>
-                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }]} empty={t(($) => $.empty)} />
+                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }, { key: "review_details" }]} empty={t(($) => $.empty)} />
                 </div>
               ))}
             </div>
           )}
+        </Section>
+        <Section title={t(($) => $.sections.task_calculation)}>
+          <p className="text-[11px] text-muted-foreground">{t(($) => $.money.task_calculation_hint)}</p>
+          <RowTable
+            tt={tt}
+            locale={locale}
+            rows={taskBillingGroups as unknown as BusinessRow[]}
+            columns={[{ key: "month" }, { key: "client_name" }, { key: "task_count" }, { key: "task_amount_rub", kind: "money" }, { key: "tasks_preview" }]}
+            empty={t(($) => $.money.no_task_calculation)}
+          />
         </Section>
       </div>}
 
@@ -946,17 +1012,32 @@ export function BusinessPage() {
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input value={txSearch} onChange={(event) => setTxSearch(event.target.value)} placeholder={t(($) => $.filters.search)} className="h-8 w-56 pl-8 text-sm" />
             </div>
-            <ResultCount shown={filteredTransactions.length} total={(data.transactions ?? []).length} />
+            <ResultCount shown={filteredTransactions.length} total={periodTransactions.length} />
             <span className="hidden text-xs tabular-nums text-muted-foreground lg:inline">{t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span> · {t(($) => $.values.outbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.outbound)}</span></span>
           </div>
         </Toolbar>
+        <div className="rounded-lg border p-3 text-xs text-muted-foreground">
+          {t(($) => $.bank.source)}: <span className="font-medium text-foreground">{t(($) => $.bank.modulbank_import)}</span>
+          {(data.bank_imports ?? [])[0] && <>{" · "}{t(($) => $.bank.last_import)}: <span className="font-medium text-foreground">{new Date(String((data.bank_imports ?? [])[0]?.created_at)).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</span></>}
+        </div>
         <Section title={t(($)=>$.sections.transactions)}>
-          <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
-            extra={{ header: t(($) => $.actions.classify), render: (row) => (
-              <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); void execute(`classify-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/classify`, { classification: fd.get("cls"), confidence: "confirmed", reason: "manual reclassification" })); }}>
-                <NativeSelect size="sm" name="cls" defaultValue={String(row.classification ?? "unknown")}>{CLASSIFICATIONS.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-                <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
-              </form>
+          <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "match_state", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
+            extra={{ header: t(($) => $.actions.resolve), render: (row) => (
+              <div className="flex min-w-80 flex-col gap-1">
+                <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); void execute(`classify-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/classify`, { classification: fd.get("cls"), confidence: "confirmed", reason: "manual reclassification" })); }}>
+                  <NativeSelect size="sm" name="cls" defaultValue={String(row.classification ?? "unknown")}>{CLASSIFICATIONS.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
+                  <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                </form>
+                {String(row.direction) === "inbound" && !isTruthyFlag(row.is_matched) && (
+                  <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); const targetID = String(fd.get("receivable") ?? ""); const target = matchableReceivables.find((item) => String(item.id) === targetID); const remaining = Math.max(Number(target?.planned_amount_rub ?? 0) - Number(target?.paid_amount_rub ?? 0), 0); const amount = Math.min(Number(row.amount_rub ?? 0), remaining); if (targetID && amount > 0) void execute(`match-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/matches`, { target_type: "receivable", target_id: targetID, amount_rub: String(amount), status: "confirmed", idempotency_key: crypto.randomUUID(), notes: "manual bank match" })); }}>
+                    <NativeSelect size="sm" required name="receivable" aria-label={t(($) => $.sections.receivables)}>
+                      <NativeSelectOption value="">{t(($) => $.actions.choose_receivable)}</NativeSelectOption>
+                      {matchableReceivables.map((item) => <NativeSelectOption key={String(item.id)} value={String(item.id)}>{String(item.client_name)} · {String(item.period_key)} · {rub(Math.max(Number(item.planned_amount_rub ?? 0) - Number(item.paid_amount_rub ?? 0), 0))}</NativeSelectOption>)}
+                    </NativeSelect>
+                    <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.match_receipt)}</Button>
+                  </form>
+                )}
+              </div>
             ) }} />
         </Section>
         <Section title={t(($)=>$.actions.import_statement)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const file=fd.get("file");if(file instanceof File)void execute("bank",()=>api.importBusinessBankFile(businessID,file));}}>

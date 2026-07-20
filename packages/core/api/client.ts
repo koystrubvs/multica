@@ -3064,10 +3064,16 @@ export class ApiClient {
     return this.fetch(`/api/businesses/${businessId}/dashboard?${search.toString()}`);
   }
 
-  async getBusinessDashboardSeries(businessId: string, from: string, months = 12): Promise<BusinessDashboardSeries> {
+  async getBusinessDashboardSeries(
+    businessId: string,
+    from: string,
+    periods = 12,
+    granularity: "month" | "day" = "month",
+  ): Promise<BusinessDashboardSeries> {
     const search = new URLSearchParams();
     if (from) search.set("from", from);
-    search.set("months", String(months));
+    search.set("periods", String(periods));
+    search.set("granularity", granularity);
     return this.fetch(`/api/businesses/${businessId}/dashboard/series?${search.toString()}`);
   }
 

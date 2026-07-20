@@ -26,7 +26,6 @@ import {
   TableHeader,
   TableRow,
 } from "@multica/ui/components/ui/table";
-import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 
 export const businessBillingKeys = {
@@ -149,10 +148,14 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
     const existing = drafts[id];
     const contractor = existing?.contractor ?? (saved || suggestion);
     const cfg = (configs.data ?? []).find((row) => row.elba_contractor_id === contractor);
+    const clientProjects = projectsByClient.get(String(payer.client_id)) ?? [];
+    const subscriptionProject = clientProjects.find((row) => text(row, "billing_mode") === "subscription");
+    const projectMode = subscriptionProject ? "subscription" : (clientProjects[0] ? text(clientProjects[0], "billing_mode") || "postpaid" : "postpaid");
+    const projectFee = subscriptionProject ? text(subscriptionProject, "billing_subscription_fee_rub") : "";
     return {
       contractor,
-      mode: existing?.mode ?? (cfg?.mode ?? "postpaid"),
-      fee: existing?.fee ?? (cfg?.subscription_fee_rub ? String(cfg.subscription_fee_rub) : ""),
+      mode: existing?.mode ?? (cfg?.mode ?? projectMode),
+      fee: existing?.fee ?? (cfg?.subscription_fee_rub ? String(cfg.subscription_fee_rub) : projectFee),
       suggested: !saved && !existing?.contractor && !!suggestion,
     };
   };
@@ -231,20 +234,18 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                 <TableHead className="h-8 text-xs">{t(($) => $.billing.contractor)}</TableHead>
                 <TableHead className="h-8 text-xs">{t(($) => $.billing.mode)}</TableHead>
                 <TableHead className="h-8 text-xs">{t(($) => $.billing.fee)}</TableHead>
-                <TableHead className="h-8 text-xs">{t(($) => $.billing.linked_projects)}</TableHead>
                 <TableHead className="h-8 text-xs" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {payers.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>
               )}
               {payers.map((payer) => {
                 const id = String(payer.id);
                 const channel = text(payer, "payment_channel");
                 const bank = channel === "bank";
                 const draft = draftFor(payer);
-                const clientProjects = projectsByClient.get(String(payer.client_id)) ?? [];
                 return (
                   <TableRow key={id}>
                     <TableCell className="py-1.5 text-xs font-medium whitespace-nowrap">{clientName.get(String(payer.client_id)) ?? "—"}</TableCell>
@@ -280,28 +281,6 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                       {bank && draft.mode === "subscription" && (
                         <Input inputMode="decimal" className="h-7 w-24 text-xs" value={draft.fee} onChange={(event) => setDraft(payer, { fee: event.target.value })} />
                       )}
-                    </TableCell>
-                    <TableCell className="py-1.5">
-                      <div className="flex max-w-64 flex-wrap gap-1">
-                        {clientProjects.length === 0 && <span className="text-[11px] text-muted-foreground/60">—</span>}
-                        {clientProjects.map((project) => {
-                          const state = projectBillingState(project, draft.contractor);
-                          return (
-                            <span
-                              key={String(project.id)}
-                              title={state === "linked" ? t(($) => $.billing.state_linked) : state === "mismatch" ? t(($) => $.billing.state_mismatch) : t(($) => $.billing.state_off)}
-                              className={cn(
-                                "inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
-                                state === "linked" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-                                state === "mismatch" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                                state === "off" && "bg-muted text-muted-foreground",
-                              )}
-                            >
-                              {text(project, "project_title")}
-                            </span>
-                          );
-                        })}
-                      </div>
                     </TableCell>
                     <TableCell className="py-1.5 text-right">
                       {bank && (
