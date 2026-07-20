@@ -80,7 +80,7 @@ export function calculateRecurringCostTotal(
   months: string[],
   resolveFx: (date: string) => number,
 ): number {
-  return rows.reduce((total, row) => total + months.reduce((monthTotal, month) => {
+  const total = rows.reduce((sum, row) => sum + months.reduce((monthTotal, month) => {
     if (!activeInMonth(row, month)) return monthTotal;
     const amount = Number(row.amount ?? 0);
     const rate = String(row.currency) === "USD"
@@ -88,6 +88,7 @@ export function calculateRecurringCostTotal(
       : 1;
     return monthTotal + amount * rate;
   }, 0), 0);
+  return Math.round(total / 100) * 100;
 }
 
 export function BusinessCostsTab({ businessID, month, periodMode, costs, onChanged }: {

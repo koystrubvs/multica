@@ -23,4 +23,12 @@ describe("calculateRecurringCostTotal", () => {
 
     expect(calculateRecurringCostTotal(rows, ["2026-07"], () => 90)).toBe(0);
   });
+
+  it("rounds the RUB total to the nearest hundred", () => {
+    const rows: BusinessRow[] = [
+      { amount: "580", currency: "USD", charge_day: 15, starts_on: "2026-07-01", status: "active" },
+    ];
+
+    expect(calculateRecurringCostTotal(rows, ["2026-07"], () => 77.4912)).toBe(44_900);
+  });
 });

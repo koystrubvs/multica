@@ -458,7 +458,7 @@ recurring_cost_total AS (
 			SELECT usd_rub FROM fx_rate_daily
 			WHERE date <= charge_on ORDER BY date DESC LIMIT 1
 		), 90) END
-	), 0), 2) AS amount_rub
+	), 0) / 100, 0) * 100 AS amount_rub
 	FROM recurring_charges
 ),
 reserve AS (
