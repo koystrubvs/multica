@@ -51,14 +51,15 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
-import { AlertTriangle, Building2, ChevronLeft, ChevronRight, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, ReceiptText, Search, Upload, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, Building2, ChevronLeft, ChevronRight, CircleDollarSign, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, ReceiptText, Search, Upload, Users, Wallet, X } from "lucide-react";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
 import { BusinessBillingTab } from "./business-billing-tab";
 import { BusinessClientCard } from "./business-client-card";
+import { BusinessCostsTab } from "./business-costs-tab";
 
-type Tab = "overview" | "calendar" | "clients" | "billing" | "bank" | "economics" | "team";
+type Tab = "overview" | "calendar" | "clients" | "billing" | "bank" | "costs" | "economics" | "team";
 
 const TAB_ICONS: Record<Tab, React.ComponentType<{ className?: string }>> = {
   overview: LayoutDashboard,
@@ -66,6 +67,7 @@ const TAB_ICONS: Record<Tab, React.ComponentType<{ className?: string }>> = {
   clients: Users,
   billing: ReceiptText,
   bank: Landmark,
+  costs: CircleDollarSign,
   economics: ListChecks,
   team: HandCoins,
 };
@@ -637,6 +639,7 @@ export function BusinessPage() {
   const tabs: { key: Tab; enabled: boolean }[] = [
     { key: "overview", enabled: true }, { key: "calendar", enabled: calendarEnabled }, { key: "clients", enabled: clientsEnabled },
     { key: "billing", enabled: clientsEnabled }, { key: "bank", enabled: bankEnabled },
+    { key: "costs", enabled: true },
     { key: "economics", enabled: economicsEnabled }, { key: "team", enabled: economicsEnabled },
   ];
   const openClientRow = (data.clients ?? []).find((row) => String(row.id) === openClientID) ?? null;
@@ -882,6 +885,16 @@ export function BusinessPage() {
 
       {tab === "billing" && clientsEnabled && (
         <BusinessBillingTab businessID={businessID} data={data} onChanged={() => snapshot.refetch()} />
+      )}
+
+      {tab === "costs" && (
+        <BusinessCostsTab
+          businessID={businessID}
+          month={month}
+          periodMode={periodMode}
+          costs={data.recurring_costs ?? []}
+          onChanged={() => Promise.all([snapshot.refetch(), dashboard.refetch()])}
+        />
       )}
 
       {tab === "calendar" && calendarEnabled && <div className="space-y-6">

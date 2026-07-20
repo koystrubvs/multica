@@ -68,6 +68,7 @@ export interface BusinessSnapshot {
   transactions: BusinessRow[];
   matches: BusinessRow[];
   company_costs: BusinessRow[];
+  recurring_costs: BusinessRow[];
   workers: BusinessRow[];
   policies: BusinessRow[];
   client_requests: BusinessRow[];

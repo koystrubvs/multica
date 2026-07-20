@@ -1,0 +1,1 @@
+ALTER TABLE business_recurring_cost DROP CONSTRAINT IF EXISTS business_recurring_cost_pkey;

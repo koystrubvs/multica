@@ -1,0 +1,26 @@
+CREATE TABLE IF NOT EXISTS business_recurring_cost (
+    id           UUID NOT NULL DEFAULT gen_random_uuid(),
+    business_id  UUID NOT NULL,
+    name         TEXT NOT NULL,
+    category     TEXT NOT NULL DEFAULT 'service',
+    amount       NUMERIC(14,2) NOT NULL,
+    currency     TEXT NOT NULL DEFAULT 'RUB',
+    charge_day   SMALLINT NOT NULL,
+    starts_on    DATE NOT NULL,
+    ends_on      DATE,
+    notes        TEXT,
+    status       TEXT NOT NULL DEFAULT 'active',
+    created_by   UUID NOT NULL,
+    archived_at  TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT business_recurring_cost_name_check CHECK (btrim(name) <> ''),
+    CONSTRAINT business_recurring_cost_category_check
+        CHECK (category IN ('tax', 'bank', 'ai', 'service', 'infrastructure', 'contractor', 'other')),
+    CONSTRAINT business_recurring_cost_amount_check CHECK (amount > 0),
+    CONSTRAINT business_recurring_cost_currency_check CHECK (currency IN ('RUB', 'USD')),
+    CONSTRAINT business_recurring_cost_charge_day_check CHECK (charge_day BETWEEN 1 AND 31),
+    CONSTRAINT business_recurring_cost_starts_on_check CHECK (starts_on = date_trunc('month', starts_on)::date),
+    CONSTRAINT business_recurring_cost_ends_on_check CHECK (ends_on IS NULL OR ends_on >= starts_on),
+    CONSTRAINT business_recurring_cost_status_check CHECK (status IN ('active', 'paused', 'archived'))
+);

@@ -39,6 +39,7 @@
     "account_empty": "— organization default —"
   },
   "tabs": {
+    "costs": "Expenses",
     "billing": "Billing",
     "overview": "Overview",
     "clients": "Clients",
@@ -315,6 +316,14 @@
   "vitmax_note": "VitMax transit and own-account transfers are not counted as revenue.",
   "no_penalties_note": "Quality adjustments are made only by the owner; there are no automatic penalties.",
   "year": "Year",
+  "costs": {
+    "period_total": "Expenses for the selected period", "fx_note": "USD is converted to RUB at the CBR rate on the charge date. No bank matching.", "fx_loading": "Loading exchange rates...",
+    "new_cost": "New monthly expense", "edit_cost": "Edit expense", "name": "Name", "amount": "Amount", "charge_day": "Charge day", "starts_on": "Starts", "ends_on": "Ends", "notes": "Notes",
+    "save": "Save", "cancel": "Cancel", "saved": "Saved", "save_error": "Could not save", "schedule": "Schedule", "day_of_month": "Day {{day}} every month", "status": "Status", "actions": "Actions",
+    "edit": "Edit", "pause": "Pause", "resume": "Resume", "archive": "Archive", "empty": "No monthly expenses yet",
+    "categories": { "ai": "AI services", "service": "Services", "infrastructure": "Infrastructure", "contractor": "Contractors", "tax": "Taxes", "bank": "Bank", "other": "Other" },
+    "statuses": { "active": "Active", "paused": "Paused", "archived": "Archived" }
+  },
   "money": {
     "incoming": "Incoming",
     "on_review": "Needs review",

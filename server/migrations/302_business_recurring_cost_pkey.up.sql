@@ -1,0 +1,1 @@
+ALTER TABLE business_recurring_cost ADD CONSTRAINT business_recurring_cost_pkey PRIMARY KEY USING INDEX business_recurring_cost_pkey_idx;

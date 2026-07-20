@@ -32,6 +32,7 @@ type BusinessSnapshotResponse struct {
 	Transactions       json.RawMessage `json:"transactions"`
 	Matches            json.RawMessage `json:"matches"`
 	CompanyCosts       json.RawMessage `json:"company_costs"`
+	RecurringCosts     json.RawMessage `json:"recurring_costs"`
 	Workers            json.RawMessage `json:"workers"`
 	Policies           json.RawMessage `json:"policies"`
 	ClientRequests     json.RawMessage `json:"client_requests"`
@@ -210,6 +211,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.booked_on DESC, q.created_at DESC), '[]'::jsonb) FROM (SELECT * FROM business_bank_transaction WHERE business_id = $1 ORDER BY booked_on DESC, created_at DESC LIMIT 500) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC), '[]'::jsonb) FROM (SELECT * FROM business_transaction_match WHERE business_id = $1 ORDER BY created_at DESC LIMIT 500) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.incurred_on DESC), '[]'::jsonb) FROM (SELECT * FROM business_company_cost WHERE business_id = $1 ORDER BY incurred_on DESC LIMIT 500) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.status, q.name), '[]'::jsonb) FROM (SELECT * FROM business_recurring_cost WHERE business_id = $1 ORDER BY status, name) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.name), '[]'::jsonb) FROM (SELECT * FROM business_worker WHERE business_id = $1 ORDER BY name) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.effective_from DESC, q.pool), '[]'::jsonb) FROM (SELECT * FROM business_compensation_policy WHERE business_id = $1 ORDER BY effective_from DESC, pool) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.received_at DESC), '[]'::jsonb) FROM (
@@ -279,7 +281,8 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 	destinations := []*json.RawMessage{
 		&response.Clients, &response.Aliases, &response.Payers, &response.Projects,
 		&response.Counterparties, &response.Agreements, &response.Receivables, &response.BankImports,
-		&response.Transactions, &response.Matches, &response.CompanyCosts, &response.Workers,
+		&response.Transactions, &response.Matches, &response.CompanyCosts, &response.RecurringCosts,
+		&response.Workers,
 		&response.Policies, &response.ClientRequests, &response.TaskEconomics, &response.TaskParticipants,
 		&response.ReceivableTasks, &response.Accruals, &response.QualityCases, &response.AccrualAdjustments,
 		&response.ReserveLedger, &response.PayoutBatches, &response.PayoutItems, &response.BankOutbox,
@@ -424,6 +427,40 @@ accrual_totals AS (
 	FROM business_accrual a
 	WHERE a.business_id = $1::uuid AND EXISTS (SELECT 1 FROM scoped_economics e WHERE e.id = a.task_economics_id)
 ),
+period_months AS (
+	SELECT generate_series(
+		date_trunc('month', s.month_start::date),
+		date_trunc('month', (s.month_end::date - 1)),
+		interval '1 month'
+	)::date AS month_start
+	FROM scope s
+),
+recurring_charges AS (
+	SELECT rc.amount, rc.currency,
+	       make_date(
+		       EXTRACT(year FROM pm.month_start)::int,
+		       EXTRACT(month FROM pm.month_start)::int,
+		       LEAST(rc.charge_day::int, EXTRACT(day FROM (pm.month_start + interval '1 month - 1 day'))::int)
+	       ) AS charge_on
+	FROM business_recurring_cost rc
+	CROSS JOIN period_months pm
+	CROSS JOIN scope s
+	WHERE rc.business_id = s.business_id
+	  AND rc.status = 'active'
+	  AND rc.starts_on < (pm.month_start + interval '1 month')::date
+	  AND (rc.ends_on IS NULL OR rc.ends_on >= pm.month_start)
+	  AND s.workspace_id IS NULL AND s.client_id IS NULL
+	  AND s.project_id IS NULL AND s.service_type IS NULL
+),
+recurring_cost_total AS (
+	SELECT COALESCE(sum(
+		CASE WHEN currency = 'RUB' THEN amount ELSE amount * COALESCE((
+			SELECT usd_rub FROM fx_rate_daily
+			WHERE date <= charge_on ORDER BY date DESC LIMIT 1
+		), 90) END
+	), 0) AS amount_rub
+	FROM recurring_charges
+),
 reserve AS (
 	SELECT COALESCE(sum(amount_rub), 0) AS balance FROM business_reserve_ledger WHERE business_id = $1::uuid
 ),
@@ -440,7 +477,8 @@ metrics AS (
 		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE direction = 'inbound' AND classification = 'unknown'), 0) AS unknown_inbound,
 		COALESCE((SELECT sum(service_value_rub) FROM scoped_economics), 0) AS task_value,
 		COALESCE((SELECT sum(adjusted_amount_rub) FROM accrual_totals), 0) AS participant_accrued,
-		COALESCE((SELECT sum(c.amount_rub) FROM business_company_cost c, scope s WHERE c.business_id = s.business_id AND c.voided_at IS NULL AND c.incurred_on >= s.month_start AND c.incurred_on < s.month_end AND (s.workspace_id IS NULL OR c.workspace_id = s.workspace_id) AND (s.client_id IS NULL OR c.client_id = s.client_id) AND (s.project_id IS NULL OR c.project_id = s.project_id)), 0) AS company_costs,
+		COALESCE((SELECT sum(c.amount_rub) FROM business_company_cost c, scope s WHERE c.business_id = s.business_id AND c.voided_at IS NULL AND c.incurred_on >= s.month_start AND c.incurred_on < s.month_end AND (s.workspace_id IS NULL OR c.workspace_id = s.workspace_id) AND (s.client_id IS NULL OR c.client_id = s.client_id) AND (s.project_id IS NULL OR c.project_id = s.project_id)), 0)
+			+ (SELECT amount_rub FROM recurring_cost_total) AS company_costs,
 		COALESCE((SELECT sum(GREATEST(LEAST(adjusted_amount_rub, funded_rub + reserve_funded_rub) - paid_rub, 0)) FROM accrual_totals WHERE status IN ('partially_payable','payable','in_payout')), 0) AS payable,
 		COALESCE((SELECT sum(paid_rub) FROM accrual_totals), 0) AS paid_workers,
 		(SELECT balance FROM reserve) AS reserve_balance,

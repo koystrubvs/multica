@@ -23,6 +23,7 @@ const { dashboard, snapshot } = vi.hoisted(() => ({
     agreements: [],
     receivables: [],
     transactions: [],
+    recurring_costs: [],
     workers: [],
     task_economics: [],
     accruals: [],
