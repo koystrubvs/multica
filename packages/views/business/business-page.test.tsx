@@ -65,12 +65,11 @@ describe("BusinessPage layout", () => {
     );
   });
 
-  it("uses the standard compact Multica page header", () => {
-    render(<BusinessPage />);
+  it("uses the standard compact Multica page header above the nav/content split", () => {
+    const { container } = render(<BusinessPage />);
 
-    const scrollContainer = screen.getByTestId("business-scroll-container");
-    const header = scrollContainer.previousElementSibling;
-    expect(header?.tagName).toBe("HEADER");
+    const header = container.querySelector("header");
+    expect(header).not.toBeNull();
     expect(header).toHaveClass("min-h-12", "border-b", "px-5");
     expect(header?.querySelector("h1")).toHaveClass("text-sm", "font-medium");
   });

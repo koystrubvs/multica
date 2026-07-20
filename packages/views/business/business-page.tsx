@@ -49,8 +49,9 @@ import {
   type ChartConfig,
 } from "@multica/ui/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
-import { AlertTriangle, Building2, ChevronLeft, ChevronRight, Filter, Search, Upload, X } from "lucide-react";
+import { AlertTriangle, Building2, ChevronLeft, ChevronRight, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, ReceiptText, Search, Upload, Users, Wallet, X } from "lucide-react";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
@@ -58,6 +59,21 @@ import { BusinessBillingTab } from "./business-billing-tab";
 import { BusinessClientCard } from "./business-client-card";
 
 type Tab = "overview" | "calendar" | "clients" | "billing" | "bank" | "economics" | "team";
+
+const TAB_ICONS: Record<Tab, React.ComponentType<{ className?: string }>> = {
+  overview: LayoutDashboard,
+  calendar: Wallet,
+  clients: Users,
+  billing: ReceiptText,
+  bank: Landmark,
+  economics: ListChecks,
+  team: HandCoins,
+};
+
+// Same trigger styling as the settings page sidebar so both surfaces read as
+// one navigation pattern: horizontal line-tabs on mobile, icon list on desktop.
+const NAV_TAB_TRIGGER_CLASS =
+  "h-8 shrink-0 px-2.5 hover:bg-surface-hover data-active:!bg-surface-selected data-active:!text-surface-selected-foreground data-active:hover:!bg-surface-selected md:!w-full md:px-2 md:after:hidden";
 
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 const CLASSIFICATIONS = ["client_income", "payroll", "tax", "service", "transfer", "owner_draw", "vitmax_transit", "unknown"] as const;
@@ -332,6 +348,7 @@ export function BusinessPage() {
   const { t, i18n } = useT("business");
   const tt = t as unknown as TT;
   const locale = i18n?.language || "ru";
+  const isMobile = useIsMobile();
   const controlPlaneEnabled = useFeatureEnabled(BUSINESS_CONTROL_PLANE_FLAG);
   const dashboardEnabled = useFeatureEnabled(BUSINESS_DASHBOARD_FLAG);
   const enabled = controlPlaneEnabled && dashboardEnabled;
@@ -739,16 +756,30 @@ export function BusinessPage() {
         </div>
       </PageHeader>
 
-      <div data-testid="business-scroll-container" className="min-h-0 flex-1 overflow-y-auto @container">
-        <div className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-5">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as Tab)}
+        orientation={isMobile ? "horizontal" : "vertical"}
+        className="flex min-h-0 flex-1 flex-col gap-0 md:flex-row"
+      >
+        <div className="shrink-0 overflow-x-auto border-b p-2 md:w-44 md:overflow-y-auto md:border-b-0 md:border-r md:p-3">
+          <TabsList variant="line" className="flex w-max min-w-full flex-row items-center gap-1 p-0 md:w-full md:flex-col md:items-stretch">
+            {tabs.filter((item) => item.enabled).map(({ key }) => {
+              const Icon = TAB_ICONS[key];
+              return (
+                <TabsTrigger key={key} value={key} className={NAV_TAB_TRIGGER_CLASS}>
+                  <Icon className="h-4 w-4" />
+                  {t(($) => $.tabs[key])}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
+
+        <div data-testid="business-scroll-container" className="min-h-0 flex-1 overflow-y-auto @container">
+          <div className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-5">
 
       {(error || message) && <div className={cn("rounded-lg border p-3 text-sm", error ? "border-destructive/40 bg-destructive/5 text-destructive" : "border-emerald-500/40 bg-emerald-500/5 text-emerald-700")}>{error || message}</div>}
-
-      <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
-        <TabsList variant="line" className="max-w-full justify-start overflow-x-auto">
-          {tabs.filter((item) => item.enabled).map(({ key }) => <TabsTrigger key={key} value={key}>{t(($) => $.tabs[key])}</TabsTrigger>)}
-        </TabsList>
-      </Tabs>
 
       {tab === "overview" && <div className="space-y-5">
         <p className="text-xs text-muted-foreground">{t(($) => $.subtitle)}</p>
@@ -1012,8 +1043,9 @@ export function BusinessPage() {
         </Section>
       </div>}
 
+          </div>
         </div>
-      </div>
+      </Tabs>
 
       <BusinessClientCard
         businessID={businessID}
