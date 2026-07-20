@@ -431,6 +431,23 @@ func main() {
 	if err := schedulerMgr.Register(scheduler.AutopilotScheduleDispatchJob(pool, queries, autopilotSvc)); err != nil {
 		slog.Warn("scheduler: failed to register autopilot_schedule_dispatch job", "error", err)
 	}
+	if envBool("FF_BUSINESS_BANK_API_SYNC", false) {
+		modulbankSyncer, err := handler.NewModulbankSyncer(pool, handler.ModulbankSyncConfig{
+			Token:            os.Getenv("MODULBANK_API_TOKEN"),
+			BusinessID:       os.Getenv("MODULBANK_BUSINESS_ID"),
+			BaseURL:          os.Getenv("MODULBANK_BASE_URL"),
+			LookbackDays:     envPositiveInt("MODULBANK_SYNC_LOOKBACK_DAYS", 14),
+			FullSyncInterval: envDuration("MODULBANK_FULL_SYNC_INTERVAL", 24*time.Hour),
+		})
+		if err != nil {
+			slog.Warn("scheduler: Modulbank sync disabled after configuration error", "error", err)
+		} else if err := schedulerMgr.Register(scheduler.ModulbankOperationsSyncJob(
+			modulbankSyncer,
+			envDuration("MODULBANK_SYNC_INTERVAL", 15*time.Minute),
+		)); err != nil {
+			slog.Warn("scheduler: failed to register Modulbank operations sync job", "error", err)
+		}
+	}
 	go func() {
 		_ = schedulerMgr.Run(sweepCtx)
 	}()
