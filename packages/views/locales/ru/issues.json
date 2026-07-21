@@ -72,6 +72,7 @@
   },
   "display": {
     "tooltip": "Настройки отображения",
+    "button": "Отображение",
     "grouping_section": "Группировка",
     "ordering_section": "Порядок",
     "card_properties_section": "Свойства карточки",
