@@ -13,9 +13,6 @@ const (
 	// The access model exists to gate Composio sharing, so the two ship on the
 	// same switch.
 	ComposioMCPApps = "composio_mcp_apps"
-	// AgentBuilder controls writes of system builder agents. It stays disabled
-	// through the schema-only rollout so an older server cannot expose them.
-	AgentBuilder = "agents_agent_builder"
 	// ResourceLabels controls the agent- and skill-scoped label namespaces.
 	// Issue labels remain available while this release flag is off.
 	ResourceLabels = "settings_resource_labels"
@@ -33,6 +30,10 @@ const (
 	ModulbankPayoutDrafts       = "modulbank_payout_drafts"
 	BusinessDashboard           = "business_dashboard"
 	BusinessAgentSummary        = "business_agent_summary"
+	// agentBuilderCompat is no longer a release flag. Keep publishing the key
+	// as enabled so installed desktop clients that still gate the AI creation
+	// entry on this config decision receive the permanently enabled behavior.
+	agentBuilderCompat = "agents_agent_builder"
 	// agentSkillTogglesCompat is no longer a release flag. Keep publishing the
 	// key as enabled so installed v0.4.0 desktop clients, which still gate the
 	// switch on this config decision, receive the permanently enabled behavior.
@@ -41,7 +42,6 @@ const (
 
 var frontendPublicFlags = []string{
 	ComposioMCPApps,
-	AgentBuilder,
 	ResourceLabels,
 	BusinessControlPlane,
 	BusinessClientsUI,
@@ -59,10 +59,6 @@ func ComposioMCPAppsEnabled(ctx context.Context, flags *featureflag.Service) boo
 	return flags.IsEnabled(ctx, ComposioMCPApps, false)
 }
 
-func AgentBuilderEnabled(ctx context.Context, flags *featureflag.Service) bool {
-	return flags.IsEnabled(ctx, AgentBuilder, false)
-}
-
 func ResourceLabelsEnabled(ctx context.Context, flags *featureflag.Service) bool {
 	return flags.IsEnabled(ctx, ResourceLabels, false)
 }
@@ -76,10 +72,11 @@ func BusinessFeatureEnabled(ctx context.Context, flags *featureflag.Service, key
 }
 
 func EvaluateFrontendPublicFlags(ctx context.Context, flags *featureflag.Service) map[string]bool {
-	out := make(map[string]bool, len(frontendPublicFlags)+1)
+	out := make(map[string]bool, len(frontendPublicFlags)+2)
 	for _, key := range frontendPublicFlags {
 		out[key] = flags.IsEnabled(ctx, key, false)
 	}
+	out[agentBuilderCompat] = true
 	out[agentSkillTogglesCompat] = true
 	return out
 }
