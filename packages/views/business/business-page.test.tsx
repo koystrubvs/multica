@@ -108,6 +108,27 @@ describe("BusinessPage layout", () => {
     expect(screen.queryByText(/import statement|загрузить выписку/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/add transaction|добавить операцию/i)).not.toBeInTheDocument();
   });
+
+  it("submits counterparty rules and only offers roles compatible with operation direction", () => {
+    const { container } = render(<BusinessPage />);
+
+    const tabs = screen.getAllByRole("tab");
+    fireEvent.click(tabs[4]!);
+
+    const resolutionForm = container.querySelector("form.min-w-80");
+    expect(resolutionForm).not.toBeNull();
+    expect(resolutionForm?.querySelector("button")).toHaveAttribute("type", "submit");
+
+    const optionValues = [...(resolutionForm?.querySelectorAll("option") ?? [])]
+      .map((option) => option.value);
+    expect(optionValues).not.toContain("client:client-1");
+    expect(optionValues).toContain("worker:worker-1");
+    expect(optionValues).toEqual(expect.arrayContaining([
+      "class:vendor",
+      "class:transit",
+      "class:ignored",
+    ]));
+  });
 });
 
 describe("bank counterparty resolution", () => {

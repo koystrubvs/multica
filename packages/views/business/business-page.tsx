@@ -983,7 +983,7 @@ export function BusinessPage() {
           <div className="flex flex-wrap items-center gap-2">
             <form className="flex items-center gap-1.5" onSubmit={(event) => { const fd=formData(event); void execute("client", () => api.businessAction(businessID,"clients",{canonical_name:fd.get("name"),status:"active",primary_payment_channel:"bank"})); event.currentTarget.reset(); }}>
               <Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($) => $.fields.name)}/>
-              <Button size="sm" className="h-8" disabled={busy!==""}>{t(($) => $.actions.add_client)}</Button>
+              <Button type="submit" size="sm" className="h-8" disabled={busy!==""}>{t(($) => $.actions.add_client)}</Button>
             </form>
           </div>
         </Toolbar>
@@ -997,7 +997,7 @@ export function BusinessPage() {
             {(data.available_projects ?? []).map((row)=><option key={text(row,"project_id")} value={text(row,"project_id")}>{text(row,"workspace_name")} · {text(row,"project_title")}</option>)}
           </select>
           <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_projects)}</Button>
+          <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_projects)}</Button>
         </form>}>
           <div className="space-y-1.5">
             <div className="text-[11px] text-muted-foreground">{t(($) => $.card.hint)}</div>
@@ -1111,13 +1111,13 @@ export function BusinessPage() {
                 }}>
                   <NativeSelect size="sm" required name="target" aria-label={t(($) => $.bank.resolve_as)}>
                     <NativeSelectOption value="">{t(($) => $.bank.resolve_as)}</NativeSelectOption>
-                    {(data.clients ?? []).map((client) => <NativeSelectOption key={`client-${String(client.id)}`} value={`client:${String(client.id)}`}>{t(($) => $.bank.client_payer_prefix)} · {String(client.canonical_name)}</NativeSelectOption>)}
-                    {(data.workers ?? []).map((worker) => <NativeSelectOption key={`worker-${String(worker.id)}`} value={`worker:${String(worker.id)}`}>{t(($) => $.bank.worker_payee_prefix)} · {String(worker.name)}</NativeSelectOption>)}
+                    {String(row.inbound_transaction_id ?? "") !== "" && (data.clients ?? []).map((client) => <NativeSelectOption key={`client-${String(client.id)}`} value={`client:${String(client.id)}`}>{t(($) => $.bank.client_payer_prefix)} · {String(client.canonical_name)}</NativeSelectOption>)}
+                    {String(row.outbound_transaction_id ?? "") !== "" && (data.workers ?? []).map((worker) => <NativeSelectOption key={`worker-${String(worker.id)}`} value={`worker:${String(worker.id)}`}>{t(($) => $.bank.worker_payee_prefix)} · {String(worker.name)}</NativeSelectOption>)}
                     <NativeSelectOption value="class:vendor">{tt("values.vendor", { defaultValue: "vendor" })}</NativeSelectOption>
                     <NativeSelectOption value="class:transit">{tt("values.transit", { defaultValue: "transit" })}</NativeSelectOption>
                     <NativeSelectOption value="class:ignored">{tt("values.ignored", { defaultValue: "ignored" })}</NativeSelectOption>
                   </NativeSelect>
-                  <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save_rule)}</Button>
+                  <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save_rule)}</Button>
                 </form>
               ) }}
             />
@@ -1129,7 +1129,7 @@ export function BusinessPage() {
               <div className="flex min-w-80 flex-col gap-1">
                 <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); void execute(`classify-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/classify`, { classification: fd.get("cls"), confidence: "confirmed", reason: "manual reclassification" })); }}>
                   <NativeSelect size="sm" name="cls" defaultValue={String(row.classification ?? "unknown")}>{CLASSIFICATIONS.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-                  <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                  <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                 </form>
                 {String(row.direction) === "inbound" && !isTruthyFlag(row.is_matched) && (
                   <form className="flex items-center gap-1" onSubmit={(event) => { const fd = formData(event); const targetID = String(fd.get("receivable") ?? ""); const target = matchableReceivables.find((item) => String(item.id) === targetID); const remaining = Math.max(Number(target?.planned_amount_rub ?? 0) - Number(target?.paid_amount_rub ?? 0), 0); const amount = Math.min(Number(row.amount_rub ?? 0), remaining); if (targetID && amount > 0) void execute(`match-${String(row.id)}`, () => api.businessAction(businessID, `bank/transactions/${String(row.id)}/matches`, { target_type: "receivable", target_id: targetID, amount_rub: String(amount), status: "confirmed", idempotency_key: crypto.randomUUID(), notes: "manual bank match" })); }}>
@@ -1137,7 +1137,7 @@ export function BusinessPage() {
                       <NativeSelectOption value="">{t(($) => $.actions.choose_receivable)}</NativeSelectOption>
                       {matchableReceivables.map((item) => <NativeSelectOption key={String(item.id)} value={String(item.id)}>{String(item.client_name)} · {String(item.period_key)} · {rub(Math.max(Number(item.planned_amount_rub ?? 0) - Number(item.paid_amount_rub ?? 0), 0))}</NativeSelectOption>)}
                     </NativeSelect>
-                    <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.match_receipt)}</Button>
+                    <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.match_receipt)}</Button>
                   </form>
                 )}
               </div>
@@ -1152,7 +1152,7 @@ export function BusinessPage() {
       </div>}
 
       {tab === "team" && economicsEnabled && <div className="space-y-6">
-        <Section title={t(($)=>$.sections.workers)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("worker",()=>api.businessAction(businessID,"workers",{name:fd.get("name"),engagement_format:"self_employed"}));event.currentTarget.reset();}}><Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($)=>$.fields.name)}/><Button size="sm" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.add_worker)}</Button></form>}>
+        <Section title={t(($)=>$.sections.workers)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("worker",()=>api.businessAction(businessID,"workers",{name:fd.get("name"),engagement_format:"self_employed"}));event.currentTarget.reset();}}><Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($)=>$.fields.name)}/><Button type="submit" size="sm" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.add_worker)}</Button></form>}>
           <div className="space-y-1.5">
             <div className="text-[11px] text-muted-foreground">{t(($) => $.team.rate_hint)}</div>
             <div className="rounded-lg border">
@@ -1180,7 +1180,7 @@ export function BusinessPage() {
                               {WORKER_ROLES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
                             </NativeSelect>
                             <Input name="percent" inputMode="decimal" className="h-7 w-16 text-xs" defaultValue={row.default_percent ? String(Number(row.default_percent)) : ""} placeholder="%" />
-                            <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                            <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                           </form>
                         </TableCell>
                       </TableRow>
@@ -1199,14 +1199,14 @@ export function BusinessPage() {
           <RowTable tt={tt} locale={locale} rows={enrichedPayoutItems} columns={[{ key: "worker_name" }, { key: "period_key" }, { key: "amount_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "batch_status", kind: "enum" }, { key: "created_at", kind: "datetime" }]} empty={t(($) => $.empty)} />
         </Section>
         <Section title={t(($)=>$.sections.accruals)}><RowTable tt={tt} locale={locale} rows={filteredAccruals} columns={[{ key: "worker_name" }, { key: "role", kind: "enum" }, { key: "original_amount_rub", kind: "money" }, { key: "adjustment_rub", kind: "money" }, { key: "funded_rub", kind: "money" }, { key: "reserve_funded_rub", kind: "money" }, { key: "paid_rub", kind: "money" }, { key: "status", kind: "enum" }, { key: "reserve_due_on", kind: "date" }]} empty={t(($)=>$.empty)}/></Section>
-        {payoutsEnabled && <Section title={t(($)=>$.sections.payouts)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("payout",()=>api.businessAction(businessID,"payouts",{period_key:fd.get("period"),idempotency_key:`payout:${String(fd.get("period"))}`}));}}><Input required name="period" type="month" defaultValue={month} className="h-8 w-auto text-sm"/><Button size="sm" variant="outline" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.build_payout)}</Button></form>}>
+        {payoutsEnabled && <Section title={t(($)=>$.sections.payouts)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("payout",()=>api.businessAction(businessID,"payouts",{period_key:fd.get("period"),idempotency_key:`payout:${String(fd.get("period"))}`}));}}><Input required name="period" type="month" defaultValue={month} className="h-8 w-auto text-sm"/><Button type="submit" size="sm" variant="outline" className="h-8" disabled={busy!==""}>{t(($)=>$.actions.build_payout)}</Button></form>}>
           <div className="space-y-2">
             <div className="text-[11px] text-muted-foreground">{t(($)=>$.bank_draft_note)}</div>
             <RowTable tt={tt} locale={locale} rows={filteredBatches} columns={[{ key: "period_key" }, { key: "status", kind: "enum" }, { key: "total_rub", kind: "money" }, { key: "worker_count" }, { key: "approved_at", kind: "datetime" }, { key: "paid_at", kind: "datetime" }]} empty={t(($)=>$.empty)}/>
             <div className="flex flex-wrap gap-1.5">{filteredBatches.map((row)=>{const status=text(row,"status"),id=text(row,"id");return <div key={id} className="flex gap-1">{status==="draft"&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("approve",()=>api.businessAction(businessID,`payouts/${id}/approve`))}>{t(($)=>$.actions.approve)} · {text(row,"period_key")}</Button>}{status==="approved"&&bankDraftsEnabled&&<Button type="button" variant="outline" size="sm" className="h-7 text-xs" disabled={busy!==""} onClick={()=>void execute("submit",()=>api.businessAction(businessID,`payouts/${id}/submit-draft`))}>{t(($)=>$.actions.submit_draft)} · {text(row,"period_key")}</Button>}</div>})}</div>
           </div>
         </Section>}
-        <Section title={t(($)=>$.sections.reserve)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("reserve",()=>api.businessAction(businessID,"reserve/entries",{entry_type:"contribution",amount_rub:fd.get("amount"),reason:fd.get("reason"),idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}><Input required name="amount" className="h-7 w-28 text-xs" placeholder={t(($)=>$.fields.amount)}/><Input required name="reason" className="h-7 w-56 text-xs" placeholder={t(($)=>$.fields.reason)}/><Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_reserve)}</Button></form>}><RowTable tt={tt} locale={locale} rows={data.reserve_ledger ?? []} columns={[{ key: "occurred_at", kind: "datetime" }, { key: "entry_type", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "reason" }]} empty={t(($)=>$.empty)}/></Section>
+        <Section title={t(($)=>$.sections.reserve)} actions={<form className="flex items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("reserve",()=>api.businessAction(businessID,"reserve/entries",{entry_type:"contribution",amount_rub:fd.get("amount"),reason:fd.get("reason"),idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}><Input required name="amount" className="h-7 w-28 text-xs" placeholder={t(($)=>$.fields.amount)}/><Input required name="reason" className="h-7 w-56 text-xs" placeholder={t(($)=>$.fields.reason)}/><Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_reserve)}</Button></form>}><RowTable tt={tt} locale={locale} rows={data.reserve_ledger ?? []} columns={[{ key: "occurred_at", kind: "datetime" }, { key: "entry_type", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "reason" }]} empty={t(($)=>$.empty)}/></Section>
       </div>}
 
       {tab === "economics" && economicsEnabled && <div className="space-y-6">
