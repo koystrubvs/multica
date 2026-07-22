@@ -1,6 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { BusinessPage } from "./business-page";
+import {
+  BusinessPage,
+  counterpartyResolutionTransactionID,
+  groupUnresolvedBankCounterparties,
+  parseCounterpartyResolutionTarget,
+} from "./business-page";
 
 const { dashboard, snapshot } = vi.hoisted(() => ({
   dashboard: {
@@ -18,13 +23,26 @@ const { dashboard, snapshot } = vi.hoisted(() => ({
     transfer_rub: "1365600.00",
   },
   snapshot: {
-    clients: [],
+    clients: [{ id: "client-1", canonical_name: "Client" }],
     projects: [],
     agreements: [],
     receivables: [],
-    transactions: [],
+    transactions: [{
+      id: "transaction-1",
+      booked_on: new Date().toISOString().slice(0, 10),
+      direction: "outbound",
+      amount_rub: "1250.00",
+      counterparty_name: "Vendor",
+      counterparty_inn: "1234567890",
+      classification: "unknown",
+      classification_confidence: "unresolved",
+      purpose: "Services",
+      is_matched: false,
+    }],
+    counterparties: [],
+    bank_imports: [],
     recurring_costs: [],
-    workers: [],
+    workers: [{ id: "worker-1", name: "Worker" }],
     task_economics: [],
     accruals: [],
     reserve_ledger: [],
@@ -73,5 +91,52 @@ describe("BusinessPage layout", () => {
     expect(header).not.toBeNull();
     expect(header).toHaveClass("min-h-12", "border-b", "px-5");
     expect(header?.querySelector("h1")).toHaveClass("text-sm", "font-medium");
+  });
+
+  it("bounds business tables with their own scroll area and hides legacy bank entry controls", () => {
+    render(<BusinessPage />);
+
+    // The unit test intentionally has no i18next instance, so tab labels are
+    // empty; Bank is the fifth stable navigation item.
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.length).toBeGreaterThan(4);
+    fireEvent.click(tabs[4]!);
+
+    const table = screen.getAllByTestId("business-row-table")[0]!;
+    expect(table.parentElement).toHaveClass("max-h-[60vh]", "overflow-auto");
+    expect(table.querySelector("th")).toHaveClass("sticky", "top-0");
+    expect(screen.queryByText(/import statement|загрузить выписку/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/add transaction|добавить операцию/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("bank counterparty resolution", () => {
+  it("groups unknown operations by INN and keeps direction totals", () => {
+    const rows = groupUnresolvedBankCounterparties([
+      { id: "1", classification: "unknown", counterparty_name: "Vendor A", counterparty_inn: "123", direction: "outbound", amount_rub: "100" },
+      { id: "2", classification: "unknown", counterparty_name: "Vendor A renamed", counterparty_inn: "123", direction: "outbound", amount_rub: "50" },
+      { id: "3", classification: "service", counterparty_name: "Vendor A", counterparty_inn: "123", direction: "outbound", amount_rub: "900" },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ transaction_id: "1", outbound_transaction_id: "1", inbound_transaction_id: "", operation_count: 2, outbound_rub: 150, inbound_rub: 0 });
+  });
+
+  it("uses an operation whose direction matches the selected entity", () => {
+    const [row] = groupUnresolvedBankCounterparties([
+      { id: "out", classification: "unknown", counterparty_name: "Mixed", counterparty_inn: "123", direction: "outbound", amount_rub: "100" },
+      { id: "in", classification: "unknown", counterparty_name: "Mixed", counterparty_inn: "123", direction: "inbound", amount_rub: "50" },
+    ]);
+
+    expect(counterpartyResolutionTransactionID(row!, { classification: "client_payer", client_id: "client-1" })).toBe("in");
+    expect(counterpartyResolutionTransactionID(row!, { classification: "worker_payee", worker_id: "worker-1" })).toBe("out");
+    expect(counterpartyResolutionTransactionID(row!, { classification: "transit" })).toBe("out");
+  });
+
+  it("maps UI targets to business entities rather than projects", () => {
+    expect(parseCounterpartyResolutionTarget("client:client-1")).toEqual({ classification: "client_payer", client_id: "client-1" });
+    expect(parseCounterpartyResolutionTarget("worker:worker-1")).toEqual({ classification: "worker_payee", worker_id: "worker-1" });
+    expect(parseCounterpartyResolutionTarget("class:vendor")).toEqual({ classification: "vendor" });
+    expect(parseCounterpartyResolutionTarget("project:project-1")).toBeNull();
   });
 });

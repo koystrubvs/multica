@@ -900,6 +900,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessBankImport))
 						r.Post("/bank/imports", h.ImportBusinessBankFile)
 						r.Post("/bank/transactions", h.CreateBusinessBankTransaction)
+						r.Post("/bank/counterparties/resolve", h.ResolveBusinessBankCounterparty)
 						r.Post("/bank/transactions/{transactionId}/classify", h.ClassifyBusinessBankTransaction)
 						r.Post("/bank/transactions/{transactionId}/matches", h.CreateBusinessTransactionMatch)
 						r.Post("/costs", h.CreateBusinessCompanyCost)

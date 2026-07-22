@@ -51,7 +51,7 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
-import { AlertTriangle, Building2, ChevronLeft, ChevronRight, CircleDollarSign, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, ReceiptText, Search, Upload, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, Building2, ChevronLeft, ChevronRight, CircleDollarSign, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, ReceiptText, Search, Users, Wallet, X } from "lucide-react";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
@@ -110,6 +110,71 @@ function text(row: BusinessRow, key: string): string {
 function rub(value: string | number | undefined): string {
   const amount = Number(value ?? 0);
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+export function groupUnresolvedBankCounterparties(rows: BusinessRow[]): BusinessRow[] {
+  const groups = new Map<string, {
+    transaction_id: string;
+    inbound_transaction_id: string;
+    outbound_transaction_id: string;
+    counterparty_name: string;
+    counterparty_inn: string;
+    operation_count: number;
+    inbound_rub: number;
+    outbound_rub: number;
+  }>();
+  for (const row of rows) {
+    if (String(row.classification ?? "") !== "unknown") continue;
+    const name = String(row.counterparty_name ?? "").trim();
+    const inn = String(row.counterparty_inn ?? "").trim();
+    const key = inn ? `inn:${inn}` : `name:${name.toLocaleLowerCase().replaceAll(/\s+/g, " ")}`;
+    const entry = groups.get(key) ?? {
+      transaction_id: String(row.id ?? ""),
+      inbound_transaction_id: "",
+      outbound_transaction_id: "",
+      counterparty_name: name,
+      counterparty_inn: inn,
+      operation_count: 0,
+      inbound_rub: 0,
+      outbound_rub: 0,
+    };
+    entry.operation_count += 1;
+    if (String(row.direction) === "inbound") {
+      entry.inbound_transaction_id ||= String(row.id ?? "");
+      entry.inbound_rub += Number(row.amount_rub ?? 0);
+    } else {
+      entry.outbound_transaction_id ||= String(row.id ?? "");
+      entry.outbound_rub += Number(row.amount_rub ?? 0);
+    }
+    groups.set(key, entry);
+  }
+  return [...groups.values()].sort((a, b) => (b.inbound_rub + b.outbound_rub) - (a.inbound_rub + a.outbound_rub));
+}
+
+export function parseCounterpartyResolutionTarget(value: string): {
+  classification: "client_payer" | "worker_payee" | "vendor" | "transit" | "ignored";
+  client_id?: string;
+  worker_id?: string;
+} | null {
+  const separator = value.indexOf(":");
+  if (separator < 1) return null;
+  const type = value.slice(0, separator);
+  const id = value.slice(separator + 1);
+  if (type === "client" && id) return { classification: "client_payer", client_id: id };
+  if (type === "worker" && id) return { classification: "worker_payee", worker_id: id };
+  if (type === "class" && ["vendor", "transit", "ignored"].includes(id)) {
+    return { classification: id as "vendor" | "transit" | "ignored" };
+  }
+  return null;
+}
+
+export function counterpartyResolutionTransactionID(
+  row: BusinessRow,
+  resolution: NonNullable<ReturnType<typeof parseCounterpartyResolutionTarget>>,
+): string {
+  if (resolution.classification === "client_payer") return String(row.inbound_transaction_id ?? "");
+  if (resolution.classification === "worker_payee") return String(row.outbound_transaction_id ?? "");
+  return String(row.transaction_id ?? "");
 }
 
 const PILL_BAD = new Set(["overdue", "failed", "lost", "written_off", "void", "voided", "leaving", "inactive", "escalated", "missed"]);
@@ -182,15 +247,15 @@ function RowTable({ rows, columns, empty, tt, locale, extra, onRowClick }: {
   if (rows.length === 0) return <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{empty}</div>;
   return (
     <div className="rounded-lg border">
-      <Table>
+      <Table data-testid="business-row-table" containerClassName="max-h-[60vh] overflow-auto">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             {specs.map((spec) => (
-              <TableHead key={spec.key} className="h-8 text-xs font-medium text-muted-foreground">
+              <TableHead key={spec.key} className="sticky top-0 z-10 h-8 bg-background text-xs font-medium text-muted-foreground">
                 {tt(`columns.${spec.key}`, { defaultValue: spec.key.replaceAll("_", " ") })}
               </TableHead>
             ))}
-            {extra && <TableHead className="h-8 text-xs font-medium text-muted-foreground">{extra.header}</TableHead>}
+            {extra && <TableHead className="sticky top-0 z-10 h-8 bg-background text-xs font-medium text-muted-foreground">{extra.header}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -562,6 +627,8 @@ export function BusinessPage() {
   }, [filteredReceivables, hideZeroReceivables, agreementMeta, billingByClientMonth, periodPrefix, receivableStatuses, data?.payers, t]);
 
   const periodTransactions = useMemo(() => (data?.transactions ?? []).filter((row) => String(row.booked_on ?? "").startsWith(periodPrefix)), [data?.transactions, periodPrefix]);
+
+  const unresolvedCounterparties = useMemo(() => groupUnresolvedBankCounterparties(periodTransactions), [periodTransactions]);
 
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
@@ -1020,6 +1087,42 @@ export function BusinessPage() {
           {t(($) => $.bank.source)}: <span className="font-medium text-foreground">{t(($) => $.bank.modulbank_import)}</span>
           {(data.bank_imports ?? [])[0] && <>{" · "}{t(($) => $.bank.last_import)}: <span className="font-medium text-foreground">{new Date(String((data.bank_imports ?? [])[0]?.created_at)).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</span></>}
         </div>
+        <Section title={t(($) => $.sections.unresolved_counterparties)}>
+          <div className="space-y-1.5">
+            <p className="text-[11px] text-muted-foreground">{t(($) => $.bank.unresolved_hint)}</p>
+            <RowTable
+              tt={tt}
+              locale={locale}
+              rows={unresolvedCounterparties}
+              columns={[{ key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "operation_count" }, { key: "inbound_rub", kind: "money" }, { key: "outbound_rub", kind: "money" }]}
+              empty={t(($) => $.bank.all_resolved)}
+              extra={{ header: t(($) => $.actions.resolve), render: (row) => (
+                <form className="flex min-w-80 items-center gap-1" onSubmit={(event) => {
+                  const fd = formData(event);
+                  const resolution = parseCounterpartyResolutionTarget(String(fd.get("target") ?? ""));
+                  if (!resolution) return;
+                  const transactionID = counterpartyResolutionTransactionID(row, resolution);
+                  if (!transactionID) return;
+                  void execute(`counterparty-${String(row.transaction_id)}`, () => api.businessAction(businessID, "bank/counterparties/resolve", {
+                    transaction_id: transactionID,
+                    ...resolution,
+                    reason: "manual bank counterparty resolution",
+                  }));
+                }}>
+                  <NativeSelect size="sm" required name="target" aria-label={t(($) => $.bank.resolve_as)}>
+                    <NativeSelectOption value="">{t(($) => $.bank.resolve_as)}</NativeSelectOption>
+                    {(data.clients ?? []).map((client) => <NativeSelectOption key={`client-${String(client.id)}`} value={`client:${String(client.id)}`}>{t(($) => $.bank.client_payer_prefix)} · {String(client.canonical_name)}</NativeSelectOption>)}
+                    {(data.workers ?? []).map((worker) => <NativeSelectOption key={`worker-${String(worker.id)}`} value={`worker:${String(worker.id)}`}>{t(($) => $.bank.worker_payee_prefix)} · {String(worker.name)}</NativeSelectOption>)}
+                    <NativeSelectOption value="class:vendor">{tt("values.vendor", { defaultValue: "vendor" })}</NativeSelectOption>
+                    <NativeSelectOption value="class:transit">{tt("values.transit", { defaultValue: "transit" })}</NativeSelectOption>
+                    <NativeSelectOption value="class:ignored">{tt("values.ignored", { defaultValue: "ignored" })}</NativeSelectOption>
+                  </NativeSelect>
+                  <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save_rule)}</Button>
+                </form>
+              ) }}
+            />
+          </div>
+        </Section>
         <Section title={t(($)=>$.sections.transactions)}>
           <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "match_state", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
             extra={{ header: t(($) => $.actions.resolve), render: (row) => (
@@ -1040,21 +1143,11 @@ export function BusinessPage() {
               </div>
             ) }} />
         </Section>
-        <Section title={t(($)=>$.actions.import_statement)} actions={<form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);const file=fd.get("file");if(file instanceof File)void execute("bank",()=>api.importBusinessBankFile(businessID,file));}}>
-          <Input required name="file" type="file" accept=".csv,.xlsx" className="h-8 w-64 text-xs"/>
-          <Button size="sm" variant="outline" className="h-8" disabled={busy!==""}><Upload aria-hidden="true" className="size-3.5"/>{t(($)=>$.actions.import_statement)}</Button>
-        </form>}>
-          <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event)=>{const fd=formData(event);void execute("transaction",()=>api.businessAction(businessID,"bank/transactions",{booked_on:fd.get("date"),direction:fd.get("direction"),amount_rub:fd.get("amount"),counterparty_name:fd.get("counterparty"),purpose:fd.get("purpose"),classification:"unknown",idempotency_key:crypto.randomUUID()}));event.currentTarget.reset();}}>
-            <Input required name="date" type="date" className="h-7 w-auto text-xs"/>
-            <NativeSelect size="sm" name="direction"><NativeSelectOption value="inbound">{t(($)=>$.values.inbound)}</NativeSelectOption><NativeSelectOption value="outbound">{t(($)=>$.values.outbound)}</NativeSelectOption></NativeSelect>
-            <Input required name="amount" className="h-7 w-24 text-xs" placeholder={t(($)=>$.fields.amount)}/>
-            <Input required name="counterparty" className="h-7 w-44 text-xs" placeholder={t(($)=>$.fields.counterparty)}/>
-            <Input name="purpose" className="h-7 w-44 text-xs" placeholder={t(($)=>$.fields.purpose)}/>
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.add_transaction)}</Button>
-          </form>
-        </Section>
-        <Section title={t(($) => $.sections.counterparties)}>
-          <RowTable tt={tt} locale={locale} rows={filteredCounterparties} columns={[{ key: "name" }, { key: "inn" }, { key: "classification", kind: "enum" }, { key: "confidence", kind: "enum" }, { key: "reason" }]} empty={t(($) => $.empty)} />
+        <Section title={t(($) => $.sections.counterparty_rules)}>
+          <div className="space-y-1.5">
+            <p className="text-[11px] text-muted-foreground">{t(($) => $.bank.rules_hint)}</p>
+            <RowTable tt={tt} locale={locale} rows={filteredCounterparties} columns={[{ key: "name" }, { key: "inn" }, { key: "classification", kind: "enum" }, { key: "confidence", kind: "enum" }, { key: "reason" }]} empty={t(($) => $.empty)} />
+          </div>
         </Section>
       </div>}
 

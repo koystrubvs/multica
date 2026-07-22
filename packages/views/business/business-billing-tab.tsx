@@ -225,38 +225,39 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
         <h2 className="text-sm font-medium">{t(($) => $.billing.contractors_title)}</h2>
         <p className="text-[11px] text-muted-foreground">{t(($) => $.billing.contractors_hint)}</p>
         {unavailable && <p className="text-xs text-muted-foreground">{t(($) => $.billing.elba_unavailable)}</p>}
-        <div className="overflow-x-auto rounded-lg border">
-          <Table>
+        <div className="rounded-lg border">
+          <Table containerClassName="max-h-[60vh] overflow-auto">
             <TableHeader>
               <TableRow>
-                <TableHead className="h-8 text-xs">{t(($) => $.filters.client)}</TableHead>
-                <TableHead className="h-8 text-xs">{t(($) => $.billing.payer)}</TableHead>
-                <TableHead className="h-8 text-xs">{t(($) => $.billing.contractor)}</TableHead>
-                <TableHead className="h-8 text-xs">{t(($) => $.billing.mode)}</TableHead>
-                <TableHead className="h-8 text-xs">{t(($) => $.billing.fee)}</TableHead>
-                <TableHead className="h-8 text-xs" />
+                <TableHead className="sticky top-0 z-10 h-8 w-40 bg-background text-xs">{t(($) => $.filters.client)}</TableHead>
+                <TableHead className="sticky top-0 z-10 h-8 min-w-72 bg-background text-xs">{t(($) => $.billing.payer_and_contractor)}</TableHead>
+                <TableHead className="sticky top-0 z-10 h-8 min-w-64 bg-background text-xs">{t(($) => $.billing.linked_projects)}</TableHead>
+                <TableHead className="sticky top-0 z-10 h-8 min-w-64 bg-background text-xs">{t(($) => $.billing.calculation)}</TableHead>
+                <TableHead className="sticky top-0 z-10 h-8 bg-background text-xs" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {payers.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>
               )}
               {payers.map((payer) => {
                 const id = String(payer.id);
                 const channel = text(payer, "payment_channel");
                 const bank = channel === "bank";
                 const draft = draftFor(payer);
+                const clientProjects = projectsByClient.get(String(payer.client_id)) ?? [];
+                const cap = Number(draft.fee || 0);
                 return (
                   <TableRow key={id}>
-                    <TableCell className="py-1.5 text-xs font-medium whitespace-nowrap">{clientName.get(String(payer.client_id)) ?? "—"}</TableCell>
-                    <TableCell className="py-1.5 text-xs whitespace-nowrap">
-                      <div>{text(payer, "name")}</div>
-                      {text(payer, "inn") && <div className="tabular-nums text-[11px] text-muted-foreground">{text(payer, "inn")}</div>}
+                    <TableCell className="max-w-40 py-2 align-top text-xs font-medium">
+                      <div className="truncate" title={clientName.get(String(payer.client_id)) ?? ""}>{clientName.get(String(payer.client_id)) ?? "—"}</div>
                     </TableCell>
-                    <TableCell className="py-1.5">
+                    <TableCell className="max-w-[28rem] py-2 align-top text-xs">
+                      <div className="truncate font-medium" title={text(payer, "name")}>{text(payer, "name")}</div>
+                      {text(payer, "inn") && <div className="tabular-nums text-[11px] text-muted-foreground">{text(payer, "inn")}</div>}
                       {bank ? (
-                        <div className="flex items-center gap-1.5">
-                          <NativeSelect size="sm" aria-label={t(($) => $.billing.contractor)} value={draft.contractor} onChange={(event) => setDraft(payer, { contractor: event.target.value })}>
+                        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+                          <NativeSelect className="min-w-0 flex-1" size="sm" aria-label={t(($) => $.billing.contractor)} title={draft.contractor ? contractorDisplay(draft.contractor) : ""} value={draft.contractor} onChange={(event) => setDraft(payer, { contractor: event.target.value })}>
                             <NativeSelectOption value="">{t(($) => $.billing.contractor_empty)}</NativeSelectOption>
                             {contractors.map((row) => <NativeSelectOption key={row.id} value={row.id}>{contractorLabel(row)}</NativeSelectOption>)}
                             {draft.contractor && !contractors.some((row) => row.id === draft.contractor) && (
@@ -266,23 +267,39 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                           {draft.suggested && <span className="whitespace-nowrap rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">{t(($) => $.billing.match_by_inn)}</span>}
                         </div>
                       ) : (
-                        <span className="text-[11px] text-muted-foreground">{tt(`values.${channel}`, { defaultValue: channel })}</span>
+                        <div className="mt-1 text-[11px] text-muted-foreground">{tt(`values.${channel}`, { defaultValue: channel })}</div>
                       )}
                     </TableCell>
-                    <TableCell className="py-1.5">
-                      {bank && (
-                        <NativeSelect size="sm" aria-label={t(($) => $.billing.mode)} value={draft.mode} onChange={(event) => setDraft(payer, { mode: event.target.value })}>
+                    <TableCell className="max-w-80 py-2 align-top text-xs">
+                      {clientProjects.length === 0 ? (
+                        <span className="text-[11px] text-muted-foreground">{t(($) => $.billing.no_projects)}</span>
+                      ) : clientProjects.map((project) => (
+                        <div key={String(project.id)} className="mb-1 flex min-w-0 items-center gap-1.5 last:mb-0">
+                          <span className="min-w-0 flex-1 truncate" title={text(project, "project_title")}>{text(project, "project_title")}</span>
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{tt(`values.${text(project, "service_type")}`, { defaultValue: text(project, "service_type") })}</span>
+                        </div>
+                      ))}
+                    </TableCell>
+                    <TableCell className="py-2 align-top">
+                      {bank && <div className="space-y-1.5">
+                        <NativeSelect className="w-full" size="sm" aria-label={t(($) => $.billing.mode)} value={draft.mode} onChange={(event) => setDraft(payer, { mode: event.target.value })}>
                           <NativeSelectOption value="postpaid">{t(($) => $.billing.mode_postpaid)}</NativeSelectOption>
                           <NativeSelectOption value="subscription">{t(($) => $.billing.mode_subscription)}</NativeSelectOption>
                         </NativeSelect>
-                      )}
+                        {draft.mode === "subscription" && (
+                          <div className="flex items-center gap-1.5">
+                            <Input aria-label={t(($) => $.billing.fee)} inputMode="decimal" className="h-7 w-28 text-xs" value={draft.fee} onChange={(event) => setDraft(payer, { fee: event.target.value })} />
+                            <span className="text-[11px] text-muted-foreground">{t(($) => $.billing.rub_per_period)}</span>
+                          </div>
+                        )}
+                        <p className="max-w-64 text-[11px] leading-4 text-muted-foreground">
+                          {draft.mode === "subscription" && cap > 0
+                            ? t(($) => $.billing.cap_formula, { amount: rub(cap) })
+                            : t(($) => $.billing.postpaid_formula)}
+                        </p>
+                      </div>}
                     </TableCell>
-                    <TableCell className="py-1.5">
-                      {bank && draft.mode === "subscription" && (
-                        <Input inputMode="decimal" className="h-7 w-24 text-xs" value={draft.fee} onChange={(event) => setDraft(payer, { fee: event.target.value })} />
-                      )}
-                    </TableCell>
-                    <TableCell className="py-1.5 text-right">
+                    <TableCell className="py-2 text-right align-top">
                       {bank && (
                         <Button
                           size="sm"
@@ -318,6 +335,10 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
             {(groups.data ?? []).map((group) => {
               const payer = payerByContractor.get(group.elba_contractor_id);
               const client = payer ? clientName.get(String(payer.client_id)) : undefined;
+              const config = (configs.data ?? []).find((row) => row.elba_contractor_id === group.elba_contractor_id);
+              const cap = config?.mode === "subscription" ? Number(config.subscription_fee_rub ?? 0) : 0;
+              const payable = cap > 0 ? Math.min(group.total_rub, cap) : group.total_rub;
+              const exceedsCap = cap > 0 && group.total_rub > cap;
               return (
                 <div key={`${group.elba_contractor_id}-${group.starts_on}`} className="rounded-lg border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -326,9 +347,14 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                       <span className="ml-2 font-normal tabular-nums text-muted-foreground">{fmtDate(group.starts_on)} — {fmtDate(group.ends_on)}</span>
                     </div>
                     <Button size="sm" className="h-7 text-xs" disabled={invoiceMut.isPending} onClick={() => invoiceMut.mutate(group)}>
-                      {t(($) => $.billing.invoice_for, { amount: group.total_rub.toLocaleString("ru-RU") })}
+                      {t(($) => $.billing.invoice_for, { amount: payable.toLocaleString("ru-RU") })}
                     </Button>
                   </div>
+                  {exceedsCap && (
+                    <div className="mt-1.5 rounded bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-400">
+                      {t(($) => $.billing.cap_exceeded, { gross: rub(group.total_rub), cap: rub(cap) })}
+                    </div>
+                  )}
                   <ul className="mt-1.5 space-y-0.5 text-[11px] text-muted-foreground">
                     {group.projects.map((project) => (
                       <li key={project.period_id} className="flex justify-between gap-3">

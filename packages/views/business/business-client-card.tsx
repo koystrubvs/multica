@@ -194,10 +194,22 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                 const clientContractor = text(payers.find((payer) => text(payer, "elba_contractor_id")) ?? {}, "elba_contractor_id");
                 const state = projectBillingState(row, clientContractor);
                 return (
-                  <div key={String(row.id)} className="flex items-center gap-2 text-xs">
-                    <span className="min-w-0 flex-1 truncate">{text(row, "project_title")}</span>
+                  <form key={String(row.id)} className="flex items-center gap-2 text-xs" onSubmit={(event) => {
+                    const fd = formData(event);
+                    void run(`project-${String(row.id)}`, () => api.businessAction(businessID, `clients/${clientID}/projects`, {
+                      workspace_id: row.workspace_id,
+                      project_id: row.project_id,
+                      service_type: fd.get("service"),
+                      billable: isTrue(row.billable),
+                      portal_visible: isTrue(row.portal_visible),
+                      notes: row.notes ?? null,
+                    }, "PUT"));
+                  }}>
+                    <span className="min-w-0 flex-1 truncate" title={text(row, "project_title")}>{text(row, "project_title")}</span>
                     <span className="text-muted-foreground">{text(row, "workspace_name")}</span>
-                    <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{tt(`values.${text(row, "service_type")}`, { defaultValue: text(row, "service_type") })}</span>
+                    <NativeSelect size="sm" name="service" aria-label={t(($) => $.fields.service_type)} defaultValue={text(row, "service_type")}>
+                      {SERVICE_TYPES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
+                    </NativeSelect>
                     <span className={cn(
                       "inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
                       state === "linked" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
@@ -206,7 +218,8 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                     )}>
                       {state === "linked" ? t(($) => $.billing.state_linked) : state === "mismatch" ? t(($) => $.billing.state_mismatch) : t(($) => $.billing.state_off)}
                     </span>
-                  </div>
+                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                  </form>
                 );
               })}
               <form className="flex flex-wrap items-start gap-1.5" onSubmit={(event) => { const fd = formData(event); const workspace = String(fd.get("workspace") ?? ""); const selected = fd.getAll("project").map(String).filter(Boolean); const candidates = selected.length > 0 ? (data.available_projects ?? []).filter((row) => selected.includes(String(row.project_id))) : (data.available_projects ?? []).filter((row) => workspace && String(row.workspace_id) === workspace); void run("map", () => Promise.all(candidates.map((row) => api.businessAction(businessID, `clients/${clientID}/projects`, { workspace_id: row.workspace_id, project_id: row.project_id, service_type: fd.get("service"), billable: true }, "PUT")))); event.currentTarget.reset(); }}>

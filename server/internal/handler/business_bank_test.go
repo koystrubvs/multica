@@ -58,3 +58,32 @@ func TestBusinessFixedDecimal(t *testing.T) {
 		t.Fatalf("signed=%d err=%v", signed, err)
 	}
 }
+
+func TestBusinessCounterpartyTransactionClassification(t *testing.T) {
+	tests := []struct {
+		name           string
+		classification string
+		direction      string
+		wantClass      string
+		wantOK         bool
+	}{
+		{name: "client receipt", classification: "client_payer", direction: "inbound", wantClass: "client_income", wantOK: true},
+		{name: "client payout rejected", classification: "client_payer", direction: "outbound", wantOK: false},
+		{name: "worker payout", classification: "worker_payee", direction: "outbound", wantClass: "payroll", wantOK: true},
+		{name: "worker receipt rejected", classification: "worker_payee", direction: "inbound", wantOK: false},
+		{name: "vendor", classification: "vendor", direction: "outbound", wantClass: "service", wantOK: true},
+		{name: "transit", classification: "transit", direction: "inbound", wantClass: "transfer", wantOK: true},
+		{name: "ignored", classification: "ignored", direction: "outbound", wantClass: "transfer", wantOK: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotClass, gotConfidence, gotOK := businessCounterpartyTransactionClassification(test.classification, test.direction)
+			if gotClass != test.wantClass || gotOK != test.wantOK {
+				t.Fatalf("class=%q ok=%v, want class=%q ok=%v", gotClass, gotOK, test.wantClass, test.wantOK)
+			}
+			if gotOK && gotConfidence != "confirmed" {
+				t.Fatalf("confidence=%q, want confirmed", gotConfidence)
+			}
+		})
+	}
+}

@@ -284,15 +284,8 @@ func classifyBusinessBankRow(ctx context.Context, tx pgx.Tx, businessID string, 
 		ORDER BY updated_at DESC LIMIT 1
 	`, businessID, businessBankCounterpartyKey(row), row.INN).Scan(&classification, &confidence)
 	if err == nil {
-		switch classification {
-		case "client_payer":
-			return "client_income", "confirmed"
-		case "worker_payee":
-			return "payroll", "confirmed"
-		case "transit", "ignored":
-			return "transfer", "confirmed"
-		default:
-			return "service", "suggested"
+		if mapped, mappedConfidence, ok := businessCounterpartyTransactionClassification(classification, direction); ok {
+			return mapped, mappedConfidence
 		}
 	}
 	if direction == "inbound" {
@@ -428,6 +421,174 @@ func (h *Handler) ClassifyBusinessBankTransaction(w http.ResponseWriter, r *http
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type resolveBusinessBankCounterpartyRequest struct {
+	TransactionID  string  `json:"transaction_id"`
+	Classification string  `json:"classification"`
+	ClientID       *string `json:"client_id"`
+	WorkerID       *string `json:"worker_id"`
+	Reason         string  `json:"reason"`
+}
+
+func businessCounterpartyTransactionClassification(classification, direction string) (string, string, bool) {
+	switch classification {
+	case "client_payer":
+		if direction == "inbound" {
+			return "client_income", "confirmed", true
+		}
+	case "worker_payee":
+		if direction == "outbound" {
+			return "payroll", "confirmed", true
+		}
+	case "vendor":
+		return "service", "confirmed", true
+	case "transit", "ignored":
+		return "transfer", "confirmed", true
+	}
+	return "", "", false
+}
+
+func (h *Handler) ResolveBusinessBankCounterparty(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	var request resolveBusinessBankCounterpartyRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	if _, valid := parseUUIDOrBadRequest(w, request.TransactionID, "transaction_id"); !valid {
+		return
+	}
+	if !containsBusinessString([]string{"client_payer", "worker_payee", "vendor", "transit", "ignored"}, request.Classification) {
+		writeError(w, http.StatusBadRequest, "counterparty classification is invalid")
+		return
+	}
+	if request.Classification == "client_payer" && (request.ClientID == nil || *request.ClientID == "") {
+		writeError(w, http.StatusBadRequest, "client_id is required for client_payer")
+		return
+	}
+	if request.Classification == "worker_payee" && (request.WorkerID == nil || *request.WorkerID == "") {
+		writeError(w, http.StatusBadRequest, "worker_id is required for worker_payee")
+		return
+	}
+	if request.Classification != "client_payer" {
+		request.ClientID = nil
+	}
+	if request.Classification != "worker_payee" {
+		request.WorkerID = nil
+	}
+	if request.Reason == "" {
+		request.Reason = "manual bank counterparty resolution"
+	}
+
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	var counterpartyName, counterpartyINN, direction string
+	err = tx.QueryRow(r.Context(), `
+		SELECT counterparty_name, COALESCE(counterparty_inn, ''), direction
+		FROM business_bank_transaction
+		WHERE business_id=$1 AND id=$2 AND voided_at IS NULL
+		FOR UPDATE
+	`, businessID, request.TransactionID).Scan(&counterpartyName, &counterpartyINN, &direction)
+	if err == pgx.ErrNoRows {
+		writeError(w, http.StatusNotFound, "transaction not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load transaction")
+		return
+	}
+	transactionClassification, transactionConfidence, applicable := businessCounterpartyTransactionClassification(request.Classification, direction)
+	if !applicable {
+		writeError(w, http.StatusBadRequest, "counterparty classification does not match transaction direction")
+		return
+	}
+	if request.ClientID != nil && *request.ClientID != "" {
+		if _, valid := parseUUIDOrBadRequest(w, *request.ClientID, "client_id"); !valid || !businessEntityExists(r.Context(), tx, "business_client", *request.ClientID, businessID) {
+			if valid {
+				writeError(w, http.StatusBadRequest, "client is outside business")
+			}
+			return
+		}
+	}
+	if request.WorkerID != nil && *request.WorkerID != "" {
+		if _, valid := parseUUIDOrBadRequest(w, *request.WorkerID, "worker_id"); !valid || !businessEntityExists(r.Context(), tx, "business_worker", *request.WorkerID, businessID) {
+			if valid {
+				writeError(w, http.StatusBadRequest, "worker is outside business")
+			}
+			return
+		}
+	}
+
+	externalID := businessBankCounterpartyKey(businessBankRow{Counterparty: counterpartyName, INN: counterpartyINN})
+	var before json.RawMessage
+	before, err = queryBusinessRowJSON(r.Context(), tx.QueryRow(r.Context(), `
+		SELECT to_jsonb(c) FROM business_counterparty_classification c
+		WHERE business_id=$1 AND source='bank' AND external_id=$2
+		FOR UPDATE
+	`, businessID, externalID))
+	if err != nil && err != pgx.ErrNoRows {
+		writeError(w, http.StatusInternalServerError, "failed to load counterparty rule")
+		return
+	}
+	if err == pgx.ErrNoRows {
+		before = nil
+	}
+
+	var ruleID string
+	var after json.RawMessage
+	err = tx.QueryRow(r.Context(), `
+		INSERT INTO business_counterparty_classification (
+			business_id, source, external_id, name, inn, classification,
+			client_id, worker_id, confidence, reason, classified_by, classified_at
+		) VALUES ($1, 'bank', $2, $3, NULLIF($4, ''), $5, NULLIF($6, '')::uuid,
+			NULLIF($7, '')::uuid, 'confirmed', $8, $9, now())
+		ON CONFLICT (business_id, source, external_id) DO UPDATE SET
+			name=EXCLUDED.name, inn=EXCLUDED.inn, classification=EXCLUDED.classification,
+			client_id=EXCLUDED.client_id, worker_id=EXCLUDED.worker_id,
+			confidence='confirmed', reason=EXCLUDED.reason,
+			classified_by=EXCLUDED.classified_by, classified_at=now(), updated_at=now()
+		RETURNING id::text, to_jsonb(business_counterparty_classification)
+	`, businessID, externalID, strings.TrimSpace(counterpartyName), counterpartyINN,
+		request.Classification, stringValue(request.ClientID), stringValue(request.WorkerID),
+		request.Reason, userID).Scan(&ruleID, &after)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to save counterparty rule")
+		return
+	}
+
+	command, err := tx.Exec(r.Context(), `
+		UPDATE business_bank_transaction
+		SET classification=$3, classification_confidence=$4, updated_at=now()
+		WHERE business_id=$1 AND voided_at IS NULL AND classification='unknown'
+		  AND direction=$5
+		  AND (
+			(NULLIF($6, '') IS NOT NULL AND counterparty_inn=$6)
+			OR (NULLIF($6, '') IS NULL AND COALESCE(counterparty_inn, '')='' AND lower(btrim(counterparty_name))=lower(btrim($2)))
+		  )
+	`, businessID, counterpartyName, transactionClassification, transactionConfidence, direction, counterpartyINN)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to classify counterparty transactions")
+		return
+	}
+	response := map[string]any{"rule": json.RawMessage(after), "updated_transactions": command.RowsAffected()}
+	auditAfter, _ := json.Marshal(response)
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "bank.counterparty.resolve", "business_counterparty_classification", ruleID, request.Reason, before, auditAfter); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to audit counterparty resolution")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve counterparty")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 type createBusinessMatchRequest struct {
