@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { api } from "@multica/core/api";
+import type { BusinessRow } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import {
@@ -20,17 +21,25 @@ import {
 import { useT } from "../i18n";
 
 const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
+const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 
 type TT = (key: string, options?: { defaultValue?: string }) => string;
 
 const FIELD_LABEL = "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
 
+function text(row: BusinessRow, key: string): string {
+  const value = row[key];
+  return value === null || value === undefined ? "" : String(value);
+}
+
 // Right-side drawer for creating a new business client. Mirrors the
 // BusinessClientCard Sheet so the two client surfaces read as one pattern.
-// Only the core fields live here (name, status, payment channel, notes) —
-// agreements, payers and projects are attached afterwards from the client card.
-export function BusinessClientCreateSheet({ businessID, open, onOpenChange, onCreated }: {
+// Core fields (name, status, payment channel, notes) plus an optional project
+// attach step — so a client and its projects are linked in one flow. Payers and
+// agreements are added afterwards from the client card that opens on create.
+export function BusinessClientCreateSheet({ businessID, availableProjects, open, onOpenChange, onCreated }: {
   businessID: string;
+  availableProjects: BusinessRow[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (clientID: string) => Promise<void>;
@@ -45,6 +54,8 @@ export function BusinessClientCreateSheet({ businessID, open, onOpenChange, onCr
     const fd = new FormData(event.currentTarget);
     const name = String(fd.get("name") ?? "").trim();
     if (!name) return;
+    const projectIDs = fd.getAll("project").map(String).filter(Boolean);
+    const serviceType = String(fd.get("service") ?? "development");
     setBusy(true);
     setError("");
     try {
@@ -54,8 +65,18 @@ export function BusinessClientCreateSheet({ businessID, open, onOpenChange, onCr
         primary_payment_channel: fd.get("channel"),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
+      const clientID = String(created?.id ?? "");
+      if (clientID && projectIDs.length > 0) {
+        const chosen = availableProjects.filter((row) => projectIDs.includes(text(row, "project_id")));
+        await Promise.all(chosen.map((row) => api.businessAction(businessID, `clients/${clientID}/projects`, {
+          workspace_id: row.workspace_id,
+          project_id: row.project_id,
+          service_type: serviceType,
+          billable: true,
+        }, "PUT")));
+      }
       onOpenChange(false);
-      await onCreated(String(created?.id ?? ""));
+      await onCreated(clientID);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -108,6 +129,35 @@ export function BusinessClientCreateSheet({ businessID, open, onOpenChange, onCr
               <span className={FIELD_LABEL}>{t(($) => $.fields.notes)}</span>
               <Input name="notes" className="h-9 text-sm" placeholder={t(($) => $.fields.notes)} />
             </label>
+            {availableProjects.length > 0 && (
+              <div className="space-y-2 border-t pt-4">
+                <label className="block space-y-1">
+                  <span className={FIELD_LABEL}>{t(($) => $.fields.projects)}</span>
+                  <select
+                    multiple
+                    name="project"
+                    aria-label={t(($) => $.fields.projects)}
+                    className="min-h-28 w-full rounded-md border bg-background px-2 py-1 text-xs"
+                  >
+                    {availableProjects.map((row) => (
+                      <option key={text(row, "project_id")} value={text(row, "project_id")}>
+                        {text(row, "workspace_name")} · {text(row, "project_title")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-1">
+                  <span className={FIELD_LABEL}>{t(($) => $.fields.service_type)}</span>
+                  <NativeSelect name="service" defaultValue="development" className="w-full">
+                    {SERVICE_TYPES.map((value) => (
+                      <NativeSelectOption key={value} value={value}>
+                        {tt(`values.${value}`, { defaultValue: value })}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </label>
+              </div>
+            )}
           </div>
           <SheetFooter>
             <Button type="submit" disabled={busy} className="w-full">

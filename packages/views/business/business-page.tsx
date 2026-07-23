@@ -1035,18 +1035,7 @@ export function BusinessPage() {
             </Button>
           </div>
         </Toolbar>
-        <Section title={t(($) => $.sections.clients)} actions={<form className="flex flex-wrap items-start gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));const workspace=String(fd.get("workspace")??"");const selected=fd.getAll("project").map(String).filter(Boolean);const candidates=selected.length>0?(data.available_projects??[]).filter((row)=>selected.includes(String(row.project_id))):(data.available_projects??[]).filter((row)=>workspace&&String(row.workspace_id)===workspace);void execute("map",()=>Promise.all(candidates.map((row)=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:row.workspace_id,project_id:row.project_id,service_type:fd.get("service"),billable:true},"PUT"))));}}>
-          <NativeSelect size="sm" required name="client">{(data.clients ?? []).map((row)=><NativeSelectOption key={text(row,"id")} value={text(row,"id")}>{text(row,"canonical_name")}</NativeSelectOption>)}</NativeSelect>
-          <NativeSelect size="sm" name="workspace" aria-label={t(($)=>$.fields.workspace)}>
-            <NativeSelectOption value="">{t(($) => $.fields.choose_projects)}</NativeSelectOption>
-            {(data.available_workspaces ?? []).map((row)=><NativeSelectOption key={text(row,"workspace_id")} value={text(row,"workspace_id")}>{t(($) => $.fields.entire_workspace)}: {text(row,"workspace_name")}</NativeSelectOption>)}
-          </NativeSelect>
-          <select multiple name="project" aria-label={t(($) => $.fields.projects)} className="min-h-20 min-w-64 rounded-md border bg-background px-2 py-1 text-xs">
-            {(data.available_projects ?? []).map((row)=><option key={text(row,"project_id")} value={text(row,"project_id")}>{text(row,"workspace_name")} · {text(row,"project_title")}</option>)}
-          </select>
-          <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value)=><NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-          <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy!==""}>{t(($)=>$.actions.map_projects)}</Button>
-        </form>}>
+        <Section title={t(($) => $.sections.clients)}>
           <div className="space-y-1.5">
             <div className="text-[11px] text-muted-foreground">{t(($) => $.card.hint)}</div>
             <RowTable tt={tt} locale={locale} rows={clientRows as unknown as BusinessRow[]} columns={[{ key: "canonical_name" }, { key: "status", kind: "enum" }, { key: "primary_payment_channel", kind: "enum" }, { key: "projects_list" }, { key: "payers_list" }, { key: "elba", kind: "bool" }, { key: "bank_linked", kind: "bool" }, { key: "notes" }]} empty={t(($) => $.empty)} onRowClick={(row) => setOpenClientID(String(row.id))} />
@@ -1289,6 +1278,7 @@ export function BusinessPage() {
 
       <BusinessClientCreateSheet
         businessID={businessID}
+        availableProjects={data.available_projects ?? []}
         open={createClientOpen}
         onOpenChange={setCreateClientOpen}
         onCreated={async (clientID) => {
