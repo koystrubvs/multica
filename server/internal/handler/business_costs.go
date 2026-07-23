@@ -16,6 +16,7 @@ type createBusinessRecurringCostRequest struct {
 	Category  string  `json:"category"`
 	Amount    string  `json:"amount"`
 	Currency  string  `json:"currency"`
+	Frequency string  `json:"frequency"`
 	ChargeDay int16   `json:"charge_day"`
 	StartsOn  string  `json:"starts_on"`
 	EndsOn    *string `json:"ends_on"`
@@ -27,6 +28,7 @@ type updateBusinessRecurringCostRequest struct {
 	Category  *string `json:"category"`
 	Amount    *string `json:"amount"`
 	Currency  *string `json:"currency"`
+	Frequency *string `json:"frequency"`
 	ChargeDay *int16  `json:"charge_day"`
 	StartsOn  *string `json:"starts_on"`
 	EndsOn    *string `json:"ends_on"`
@@ -39,6 +41,7 @@ type businessRecurringCostFields struct {
 	Category  string
 	Amount    string
 	Currency  string
+	Frequency string
 	ChargeDay int16
 	StartsOn  string
 	EndsOn    string
@@ -66,6 +69,7 @@ func (fields *businessRecurringCostFields) normalizeAndValidate() error {
 	fields.Name = strings.TrimSpace(fields.Name)
 	fields.Category = strings.TrimSpace(fields.Category)
 	fields.Currency = strings.ToUpper(strings.TrimSpace(fields.Currency))
+	fields.Frequency = strings.ToLower(strings.TrimSpace(fields.Frequency))
 	fields.Notes = strings.TrimSpace(fields.Notes)
 	fields.Status = strings.TrimSpace(fields.Status)
 	if fields.Name == "" || len(fields.Name) > 200 {
@@ -81,6 +85,12 @@ func (fields *businessRecurringCostFields) normalizeAndValidate() error {
 	fields.Amount = amount
 	if !containsBusinessString([]string{"RUB", "USD"}, fields.Currency) {
 		return errors.New("invalid currency")
+	}
+	if fields.Frequency == "" {
+		fields.Frequency = "monthly"
+	}
+	if !containsBusinessString([]string{"monthly", "yearly"}, fields.Frequency) {
+		return errors.New("invalid frequency")
 	}
 	if fields.ChargeDay < 1 || fields.ChargeDay > 31 {
 		return errors.New("invalid charge day")
@@ -120,6 +130,7 @@ func (h *Handler) CreateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 		Category:  request.Category,
 		Amount:    request.Amount,
 		Currency:  request.Currency,
+		Frequency: request.Frequency,
 		ChargeDay: request.ChargeDay,
 		StartsOn:  request.StartsOn,
 		EndsOn:    stringValue(request.EndsOn),
@@ -140,13 +151,13 @@ func (h *Handler) CreateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 	var id string
 	err = tx.QueryRow(r.Context(), `
 		INSERT INTO business_recurring_cost (
-			business_id, name, category, amount, currency, charge_day,
+			business_id, name, category, amount, currency, frequency, charge_day,
 			starts_on, ends_on, notes, status, created_by
-		) VALUES ($1, $2, $3, $4::numeric, $5, $6, $7::date, NULLIF($8, '')::date,
-		          NULLIF($9, ''), 'active', $10)
+		) VALUES ($1, $2, $3, $4::numeric, $5, $6, $7, $8::date, NULLIF($9, '')::date,
+		          NULLIF($10, ''), 'active', $11)
 		RETURNING id::text
 	`, businessID, fields.Name, fields.Category, fields.Amount, fields.Currency,
-		fields.ChargeDay, fields.StartsOn, fields.EndsOn, fields.Notes, userID).Scan(&id)
+		fields.Frequency, fields.ChargeDay, fields.StartsOn, fields.EndsOn, fields.Notes, userID).Scan(&id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create recurring cost")
 		return
@@ -188,13 +199,13 @@ func (h *Handler) UpdateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 	var fields businessRecurringCostFields
 	var endsOn, notes *string
 	err = tx.QueryRow(r.Context(), `
-		SELECT name, category, amount::text, currency, charge_day,
+		SELECT name, category, amount::text, currency, frequency, charge_day,
 		       starts_on::text, ends_on::text, notes, status
 		FROM business_recurring_cost
 		WHERE business_id = $1 AND id = $2
 		FOR UPDATE
 	`, businessID, costID).Scan(&fields.Name, &fields.Category, &fields.Amount,
-		&fields.Currency, &fields.ChargeDay, &fields.StartsOn, &endsOn, &notes, &fields.Status)
+		&fields.Currency, &fields.Frequency, &fields.ChargeDay, &fields.StartsOn, &endsOn, &notes, &fields.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "recurring cost not found")
 		return
@@ -224,6 +235,9 @@ func (h *Handler) UpdateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 	if request.Currency != nil {
 		fields.Currency = *request.Currency
 	}
+	if request.Frequency != nil {
+		fields.Frequency = *request.Frequency
+	}
 	if request.ChargeDay != nil {
 		fields.ChargeDay = *request.ChargeDay
 	}
@@ -247,13 +261,13 @@ func (h *Handler) UpdateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 	_, err = tx.Exec(r.Context(), `
 		UPDATE business_recurring_cost
 		SET name = $3, category = $4, amount = $5::numeric, currency = $6,
-		    charge_day = $7, starts_on = $8::date, ends_on = NULLIF($9, '')::date,
-		    notes = NULLIF($10, ''), status = $11,
-		    archived_at = CASE WHEN $11 = 'archived' THEN COALESCE(archived_at, now()) ELSE NULL END,
+		    frequency = $7, charge_day = $8, starts_on = $9::date, ends_on = NULLIF($10, '')::date,
+		    notes = NULLIF($11, ''), status = $12,
+		    archived_at = CASE WHEN $12 = 'archived' THEN COALESCE(archived_at, now()) ELSE NULL END,
 		    updated_at = now()
 		WHERE business_id = $1 AND id = $2
 	`, businessID, costID, fields.Name, fields.Category, fields.Amount, fields.Currency,
-		fields.ChargeDay, fields.StartsOn, fields.EndsOn, fields.Notes, fields.Status)
+		fields.Frequency, fields.ChargeDay, fields.StartsOn, fields.EndsOn, fields.Notes, fields.Status)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update recurring cost")
 		return

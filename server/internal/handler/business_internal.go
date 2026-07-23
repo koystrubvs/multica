@@ -493,6 +493,7 @@ recurring_charges AS (
 	  AND rc.status = 'active'
 	  AND rc.starts_on < (pm.month_start + interval '1 month')::date
 	  AND (rc.ends_on IS NULL OR rc.ends_on >= pm.month_start)
+	  AND (rc.frequency = 'monthly' OR EXTRACT(month FROM rc.starts_on) = EXTRACT(month FROM pm.month_start))
 	  AND s.workspace_id IS NULL AND s.client_id IS NULL
 	  AND s.project_id IS NULL AND s.service_type IS NULL
 ),

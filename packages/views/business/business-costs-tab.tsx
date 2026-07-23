@@ -29,6 +29,7 @@ interface CostFormState {
   amount: string;
   currency: "USD" | "RUB";
   category: string;
+  frequency: "monthly" | "yearly";
   chargeDay: string;
   startsOn: string;
   endsOn: string;
@@ -42,6 +43,7 @@ function emptyForm(month: string): CostFormState {
     amount: "",
     currency: "USD",
     category: "ai",
+    frequency: "monthly",
     chargeDay: "15",
     startsOn: `${month}-01`,
     endsOn: "",
@@ -64,7 +66,22 @@ function activeInMonth(row: BusinessRow, month: string): boolean {
   if (String(row.status) !== "active") return false;
   const startsOn = String(row.starts_on ?? "").slice(0, 7);
   const endsOn = String(row.ends_on ?? "").slice(0, 7);
-  return (!startsOn || startsOn <= month) && (!endsOn || endsOn >= month);
+  if ((startsOn && startsOn > month) || (endsOn && endsOn < month)) return false;
+  return String(row.frequency ?? "monthly") !== "yearly" || startsOn.slice(5, 7) === month.slice(5, 7);
+}
+
+function scheduleLabel(
+  row: BusinessRow,
+  tt: (key: string, options?: { defaultValue?: string }) => string,
+): string {
+  const day = String(row.charge_day);
+  if (String(row.frequency ?? "monthly") !== "yearly") {
+    return tt("costs.day_of_month", { defaultValue: "{{day}}" }).replace("{{day}}", day);
+  }
+  const month = String(row.starts_on ?? "").slice(5, 7);
+  return tt("costs.day_of_year", { defaultValue: "{{day}}.{{month}}" })
+    .replace("{{day}}", day)
+    .replace("{{month}}", month);
 }
 
 function rub(value: number): string {
@@ -120,6 +137,7 @@ export function BusinessCostsTab({ businessID, month, periodMode, costs, onChang
       category: form.category,
       amount: form.amount,
       currency: form.currency,
+      frequency: form.frequency,
       charge_day: Number(form.chargeDay),
       starts_on: form.startsOn,
       ends_on: form.endsOn,
@@ -147,6 +165,7 @@ export function BusinessCostsTab({ businessID, month, periodMode, costs, onChang
     amount: String(row.amount ?? ""),
     currency: String(row.currency) === "RUB" ? "RUB" : "USD",
     category: String(row.category ?? "service"),
+    frequency: String(row.frequency) === "yearly" ? "yearly" : "monthly",
     chargeDay: String(row.charge_day ?? 15),
     startsOn: String(row.starts_on ?? "").slice(0, 10),
     endsOn: String(row.ends_on ?? "").slice(0, 10),
@@ -192,13 +211,21 @@ export function BusinessCostsTab({ businessID, month, periodMode, costs, onChang
               <NativeSelectOption key={value} value={value}>{tt(`costs.categories.${value}`)}</NativeSelectOption>
             ))}
           </NativeSelect>
+          <NativeSelect
+            aria-label={tt("costs.frequency")}
+            value={form.frequency}
+            onChange={(event) => setForm({ ...form, frequency: event.target.value as "monthly" | "yearly" })}
+          >
+            <NativeSelectOption value="monthly">{tt("costs.frequencies.monthly")}</NativeSelectOption>
+            <NativeSelectOption value="yearly">{tt("costs.frequencies.yearly")}</NativeSelectOption>
+          </NativeSelect>
           <Input required min="1" max="31" type="number" value={form.chargeDay} onChange={(event) => setForm({ ...form, chargeDay: event.target.value })} placeholder={tt("costs.charge_day")} />
           <Input required type="date" value={form.startsOn} onChange={(event) => setForm({ ...form, startsOn: event.target.value })} aria-label={tt("costs.starts_on")} />
           <Input type="date" value={form.endsOn} onChange={(event) => setForm({ ...form, endsOn: event.target.value })} aria-label={tt("costs.ends_on")} />
           <Input className="sm:col-span-2" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={tt("costs.notes")} />
         </div>
         <div className="flex items-center gap-2">
-          <Button disabled={busy} size="sm">{tt("costs.save")}</Button>
+          <Button disabled={busy} size="sm" type="submit">{tt("costs.save")}</Button>
           {form.id && <Button disabled={busy} type="button" variant="ghost" size="sm" onClick={resetForm}>{tt("costs.cancel")}</Button>}
           {message && <span className="text-xs text-muted-foreground">{message}</span>}
         </div>
@@ -219,7 +246,7 @@ export function BusinessCostsTab({ businessID, month, periodMode, costs, onChang
               const status = String(row.status);
               return <TableRow key={String(row.id)}>
                 <TableCell><div className="font-medium">{String(row.name)}</div>{row.notes ? <div className="text-xs text-muted-foreground">{String(row.notes)}</div> : null}</TableCell>
-                <TableCell>{tt("costs.day_of_month", { defaultValue: "{{day}}" }).replace("{{day}}", String(row.charge_day))}</TableCell>
+                <TableCell>{scheduleLabel(row, tt)}</TableCell>
                 <TableCell className="tabular-nums">{Number(row.amount).toLocaleString("ru-RU")} {String(row.currency)}</TableCell>
                 <TableCell>{tt(`costs.statuses.${status}`)}</TableCell>
                 <TableCell className="space-x-1 text-right">

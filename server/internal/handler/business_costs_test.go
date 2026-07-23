@@ -8,6 +8,7 @@ func TestBusinessRecurringCostNormalization(t *testing.T) {
 		Category:  "ai",
 		Amount:    "400",
 		Currency:  "usd",
+		Frequency: "YEARLY",
 		ChargeDay: 15,
 		StartsOn:  "2026-07-01",
 		Status:    "active",
@@ -15,8 +16,24 @@ func TestBusinessRecurringCostNormalization(t *testing.T) {
 	if err := fields.normalizeAndValidate(); err != nil {
 		t.Fatal(err)
 	}
-	if fields.Name != "CloudCode" || fields.Amount != "400.00" || fields.Currency != "USD" {
+	if fields.Name != "CloudCode" || fields.Amount != "400.00" || fields.Currency != "USD" || fields.Frequency != "yearly" {
 		t.Fatalf("unexpected normalized fields: %#v", fields)
+	}
+}
+
+func TestBusinessRecurringCostRejectsInvalidFrequency(t *testing.T) {
+	fields := businessRecurringCostFields{
+		Name:      "Kontur Elba",
+		Category:  "service",
+		Amount:    "18200",
+		Currency:  "RUB",
+		Frequency: "weekly",
+		ChargeDay: 15,
+		StartsOn:  "2026-07-01",
+		Status:    "active",
+	}
+	if err := fields.normalizeAndValidate(); err == nil {
+		t.Fatal("expected invalid frequency")
 	}
 }
 

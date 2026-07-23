@@ -350,9 +350,10 @@
   "year": "연도",
   "costs": {
     "period_total": "선택 기간 비용", "fx_note": "USD는 결제일 CBR 환율로 RUB 환산됩니다. 은행 대조는 하지 않습니다.", "fx_loading": "환율을 불러오는 중...",
-    "new_cost": "새 월간 비용", "edit_cost": "비용 편집", "name": "이름", "amount": "금액", "charge_day": "결제일", "starts_on": "시작", "ends_on": "종료", "notes": "메모",
-    "save": "저장", "cancel": "취소", "saved": "저장됨", "save_error": "저장하지 못했습니다", "schedule": "일정", "day_of_month": "매월 {{day}}일", "status": "상태", "actions": "작업",
-    "edit": "편집", "pause": "일시 중지", "resume": "재개", "archive": "보관", "empty": "월간 비용이 아직 없습니다",
+    "new_cost": "새 정기 비용", "edit_cost": "비용 편집", "name": "이름", "amount": "금액", "frequency": "주기", "charge_day": "결제일", "starts_on": "시작", "ends_on": "종료", "notes": "메모",
+    "save": "저장", "cancel": "취소", "saved": "저장됨", "save_error": "저장하지 못했습니다", "schedule": "일정", "day_of_month": "매월 {{day}}일", "day_of_year": "매년 {{month}}월 {{day}}일", "status": "상태", "actions": "작업",
+    "edit": "편집", "pause": "일시 중지", "resume": "재개", "archive": "보관", "empty": "정기 비용이 아직 없습니다",
+    "frequencies": { "monthly": "매월", "yearly": "매년" },
     "categories": { "ai": "AI 서비스", "service": "서비스", "infrastructure": "인프라", "contractor": "외주", "tax": "세금", "bank": "은행", "other": "기타" },
     "statuses": { "active": "활성", "paused": "일시 중지", "archived": "보관됨" }
   },
