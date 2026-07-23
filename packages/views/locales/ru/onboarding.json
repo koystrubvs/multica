@@ -87,6 +87,9 @@
       "evaluate": "Просто изучаю",
       "other": "Другое",
       "other_placeholder": "напр. координация учебной группы"
+    },
+    "about_you": {
+      "question": "Расскажите немного о себе."
     }
   },
   "option_card": {
