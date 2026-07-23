@@ -294,6 +294,7 @@
     "invoiced": "выставлен",
     "partially_paid": "частично оплачен",
     "paid": "оплачен",
+    "overdue": "просрочен",
     "skipped": "пропущен",
     "written_off": "списан",
     "draft": "черновик",

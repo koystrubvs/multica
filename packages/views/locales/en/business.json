@@ -294,6 +294,7 @@
     "invoiced": "invoiced",
     "partially_paid": "partially paid",
     "paid": "paid",
+    "overdue": "overdue",
     "skipped": "skipped",
     "written_off": "written off",
     "draft": "draft",

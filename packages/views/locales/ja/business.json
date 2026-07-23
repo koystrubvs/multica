@@ -294,6 +294,7 @@
     "invoiced": "請求済み",
     "partially_paid": "一部入金",
     "paid": "入金済み",
+    "overdue": "期限超過",
     "skipped": "スキップ",
     "written_off": "償却済み",
     "draft": "草案",

@@ -43,6 +43,11 @@ import {
 } from "@multica/ui/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@multica/ui/components/ui/tabs";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@multica/ui/components/ui/tooltip";
+import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
@@ -92,7 +97,7 @@ const COUNTERPARTY_REASON_KEYS: Record<string, string> = {
 
 type TT = (key: string, options?: { defaultValue?: string }) => string;
 
-type ColumnKind = "text" | "money" | "date" | "datetime" | "bool" | "enum" | "percent";
+type ColumnKind = "text" | "money" | "date" | "datetime" | "bool" | "enum" | "percent" | "receivable_status";
 interface ColumnSpec {
   key: string;
   kind?: ColumnKind;
@@ -199,13 +204,21 @@ function StatusPill({ value, label }: { value: string; label: string }) {
   return <span className={cn("inline-flex shrink-0 items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium", tone)}>{label}</span>;
 }
 
-function FlagPill({ on, tone, label }: { on: boolean; tone: "bad" | "warn"; label: string }) {
-  if (!on) return <span className="text-muted-foreground/50">—</span>;
+function ReviewHint({ details, tt }: { details: string; tt: TT }) {
   return (
-    <span className={cn(
-      "inline-flex shrink-0 items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
-      tone === "bad" ? "bg-destructive/10 text-destructive" : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    )}>{label}</span>
+    <Tooltip>
+      <TooltipTrigger
+        render={<span aria-label={tt("columns.needs_review", { defaultValue: "review" })} />}
+        className="inline-flex cursor-help items-center text-amber-600 dark:text-amber-400"
+      >
+        <AlertTriangle className="size-3" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">
+        {details
+          ? `${tt("columns.review_details", { defaultValue: "review" })}: ${details}`
+          : tt("columns.needs_review", { defaultValue: "review" })}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -227,13 +240,22 @@ function cellNode(row: BusinessRow, spec: ColumnSpec, tt: TT, locale: string): R
       return <span className="tabular-nums text-muted-foreground">{Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</span>;
     }
     case "bool":
-      if (spec.key === "is_overdue") return <FlagPill on={isTruthyFlag(value)} tone="bad" label={tt("columns.is_overdue", { defaultValue: "overdue" })} />;
-      if (spec.key === "needs_review") return <FlagPill on={isTruthyFlag(value)} tone="warn" label={tt("columns.needs_review", { defaultValue: "review" })} />;
       // eslint-disable-next-line i18next/no-literal-string -- compact boolean glyph, not user-facing copy
       return isTruthyFlag(value) ? <span>✓</span> : <span className="text-muted-foreground/50">—</span>;
     case "enum": {
       const raw = String(value);
       return <StatusPill value={raw} label={tt(`values.${raw}`, { defaultValue: raw })} />;
+    }
+    case "receivable_status": {
+      const raw = String(value);
+      const overdue = isTruthyFlag(row.is_overdue) && !["paid", "skipped", "written_off"].includes(raw);
+      const pillValue = overdue ? "overdue" : raw;
+      return (
+        <span className="inline-flex items-center gap-1">
+          <StatusPill value={pillValue} label={tt(`values.${pillValue}`, { defaultValue: pillValue })} />
+          {isTruthyFlag(row.needs_review) && <ReviewHint details={String(row.review_details ?? "")} tt={tt} />}
+        </span>
+      );
     }
     case "percent":
       return <span className="tabular-nums">{Number(value)}%</span>;
@@ -1078,7 +1100,7 @@ export function BusinessPage() {
                       {group.overdue > 0 && <>{" · "}<span className="font-medium text-destructive">{t(($) => $.metrics.overdue)}: {group.overdue}</span></>}
                     </span>
                   </div>
-                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "enum" }, { key: "is_overdue", kind: "bool" }, { key: "needs_review", kind: "bool" }, { key: "review_details" }]} empty={t(($) => $.empty)} />
+                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "receivable_status" }]} empty={t(($) => $.empty)} />
                 </div>
               ))}
             </div>

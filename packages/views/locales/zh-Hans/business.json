@@ -294,6 +294,7 @@
     "invoiced": "已开票",
     "partially_paid": "部分收款",
     "paid": "已收款",
+    "overdue": "已逾期",
     "skipped": "已跳过",
     "written_off": "已核销",
     "draft": "草稿",
