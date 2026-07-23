@@ -923,6 +923,12 @@ export function BusinessPage() {
               onClear={headerFilter.onClear}
             />
           )}
+          {tab === "clients" && clientsEnabled && (
+            <Button size="sm" className="h-8 gap-1.5" onClick={() => setCreateClientOpen(true)}>
+              <Plus className="size-3.5" />
+              <span className="hidden sm:inline">{t(($) => $.actions.add_client)}</span>
+            </Button>
+          )}
         </div>
       </PageHeader>
 
@@ -1026,16 +1032,7 @@ export function BusinessPage() {
       </div>}
 
       {tab === "clients" && clientsEnabled && <div className="space-y-6">
-        <Toolbar>
-          <ResultCount shown={filteredClients.length} total={(data.clients ?? []).length} />
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => setCreateClientOpen(true)}>
-              <Plus className="size-3.5" />
-              {t(($) => $.actions.add_client)}
-            </Button>
-          </div>
-        </Toolbar>
-        <Section title={t(($) => $.sections.clients)}>
+        <Section title={t(($) => $.sections.clients)} actions={<ResultCount shown={filteredClients.length} total={(data.clients ?? []).length} />}>
           <div className="space-y-1.5">
             <div className="text-[11px] text-muted-foreground">{t(($) => $.card.hint)}</div>
             <RowTable tt={tt} locale={locale} rows={clientRows as unknown as BusinessRow[]} columns={[{ key: "canonical_name" }, { key: "status", kind: "enum" }, { key: "primary_payment_channel", kind: "enum" }, { key: "projects_list" }, { key: "payers_list" }, { key: "elba", kind: "bool" }, { key: "bank_linked", kind: "bool" }, { key: "notes" }]} empty={t(($) => $.empty)} onRowClick={(row) => setOpenClientID(String(row.id))} />
