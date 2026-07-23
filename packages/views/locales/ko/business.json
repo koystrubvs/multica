@@ -382,7 +382,13 @@
     "all_resolved": "선택한 기간의 모든 거래처가 분류되었습니다.",
     "resolve_as": "다음으로 연결…",
     "client_payer_prefix": "고객",
-    "worker_payee_prefix": "작업자"
+    "worker_payee_prefix": "작업자",
+    "reasons": {
+      "owner_approved_personal_payer_registry": "고객 지급자로 소유자 확인 완료",
+      "manual_counterparty_resolution": "은행 거래처를 수동으로 분류",
+      "vitmax_transit_excluded": "VitMax 경유 거래 — 개인 수익에서 제외",
+      "own_account_transfer_excluded": "본인 계좌 간 이체 — 수익 및 비용에서 제외"
+    }
   },
   "card": {
     "details": "고객 정보",

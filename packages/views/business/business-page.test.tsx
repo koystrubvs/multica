@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   BusinessPage,
+  counterpartyReasonTranslationKey,
   counterpartyResolutionTransactionID,
   groupUnresolvedBankCounterparties,
   parseCounterpartyResolutionTarget,
@@ -129,9 +130,48 @@ describe("BusinessPage layout", () => {
       "class:ignored",
     ]));
   });
+
+  it("keeps bank totals and source metadata in one summary row", () => {
+    render(<BusinessPage />);
+
+    const tabs = screen.getAllByRole("tab");
+    fireEvent.click(tabs[4]!);
+
+    const summary = screen.getByTestId("bank-summary");
+    expect(summary).toHaveClass("whitespace-nowrap");
+    expect(summary).toHaveTextContent(/1.?250/);
+  });
+
+  it("hides the unresolved counterparties section when every operation is resolved", () => {
+    const originalTransactions = snapshot.transactions;
+    snapshot.transactions = [];
+
+    try {
+      render(<BusinessPage />);
+      const tabs = screen.getAllByRole("tab");
+      fireEvent.click(tabs[4]!);
+
+      expect(screen.queryByTestId("unresolved-counterparties-section")).not.toBeInTheDocument();
+    } finally {
+      snapshot.transactions = originalTransactions;
+    }
+  });
 });
 
 describe("bank counterparty resolution", () => {
+  it("localizes every system reason currently stored in production", () => {
+    expect(counterpartyReasonTranslationKey("Owner-approved personal business payer registry"))
+      .toBe("bank.reasons.owner_approved_personal_payer_registry");
+    expect(counterpartyReasonTranslationKey("manual bank counterparty resolution"))
+      .toBe("bank.reasons.manual_counterparty_resolution");
+    expect(counterpartyReasonTranslationKey("VitMax transit; excluded from personal revenue"))
+      .toBe("bank.reasons.vitmax_transit_excluded");
+    expect(counterpartyReasonTranslationKey("Own-account transfer; excluded from revenue and expenses"))
+      .toBe("bank.reasons.own_account_transfer_excluded");
+    expect(counterpartyReasonTranslationKey("Дантистоф — подтверждено владельцем 19.07.2026"))
+      .toBeNull();
+  });
+
   it("groups unknown operations by INN and keeps direction totals", () => {
     const rows = groupUnresolvedBankCounterparties([
       { id: "1", classification: "unknown", counterparty_name: "Vendor A", counterparty_inn: "123", direction: "outbound", amount_rub: "100" },

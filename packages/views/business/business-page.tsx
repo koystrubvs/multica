@@ -83,6 +83,12 @@ const WORKER_ROLES = ["executor", "pm", "reviewer", "seo", "content", "copywrite
 const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
 const RECEIVABLE_STATUSES = ["expected", "invoiced", "partially_paid", "paid", "skipped", "written_off"] as const;
 const COUNTERPARTY_CLASSES = ["client_payer", "worker_payee", "vendor", "transit", "ignored", "unresolved"] as const;
+const COUNTERPARTY_REASON_KEYS: Record<string, string> = {
+  "Owner-approved personal business payer registry": "bank.reasons.owner_approved_personal_payer_registry",
+  "manual bank counterparty resolution": "bank.reasons.manual_counterparty_resolution",
+  "VitMax transit; excluded from personal revenue": "bank.reasons.vitmax_transit_excluded",
+  "Own-account transfer; excluded from revenue and expenses": "bank.reasons.own_account_transfer_excluded",
+};
 
 type TT = (key: string, options?: { defaultValue?: string }) => string;
 
@@ -168,6 +174,10 @@ export function parseCounterpartyResolutionTarget(value: string): {
   return null;
 }
 
+export function counterpartyReasonTranslationKey(reason: string): string | null {
+  return COUNTERPARTY_REASON_KEYS[reason] ?? null;
+}
+
 export function counterpartyResolutionTransactionID(
   row: BusinessRow,
   resolution: NonNullable<ReturnType<typeof parseCounterpartyResolutionTarget>>,
@@ -229,7 +239,9 @@ function cellNode(row: BusinessRow, spec: ColumnSpec, tt: TT, locale: string): R
       return <span className="tabular-nums">{Number(value)}%</span>;
     default: {
       const rendered = text(row, spec.key);
-      return <span className="truncate" title={rendered}>{rendered}</span>;
+      const reasonKey = spec.key === "reason" ? counterpartyReasonTranslationKey(rendered) : null;
+      const localized = reasonKey ? tt(reasonKey, { defaultValue: rendered }) : rendered;
+      return <span className="truncate" title={localized}>{localized}</span>;
     }
   }
 }
@@ -1080,15 +1092,16 @@ export function BusinessPage() {
               <Input value={txSearch} onChange={(event) => setTxSearch(event.target.value)} placeholder={t(($) => $.filters.search)} className="h-8 w-56 pl-8 text-sm" />
             </div>
             <ResultCount shown={filteredTransactions.length} total={periodTransactions.length} />
-            <span className="hidden text-xs tabular-nums text-muted-foreground lg:inline">{t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span> · {t(($) => $.values.outbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.outbound)}</span></span>
+            <span data-testid="bank-summary" className="hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground lg:inline">
+              {t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span>
+              {" · "}{t(($) => $.values.outbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.outbound)}</span>
+              {" · "}{t(($) => $.bank.source)}: <span className="font-medium text-foreground">{t(($) => $.bank.modulbank_import)}</span>
+              {(data.bank_imports ?? [])[0] && <>{" · "}{t(($) => $.bank.last_import)}: <span className="font-medium text-foreground">{new Date(String((data.bank_imports ?? [])[0]?.created_at)).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</span></>}
+            </span>
           </div>
         </Toolbar>
-        <div className="rounded-lg border p-3 text-xs text-muted-foreground">
-          {t(($) => $.bank.source)}: <span className="font-medium text-foreground">{t(($) => $.bank.modulbank_import)}</span>
-          {(data.bank_imports ?? [])[0] && <>{" · "}{t(($) => $.bank.last_import)}: <span className="font-medium text-foreground">{new Date(String((data.bank_imports ?? [])[0]?.created_at)).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" })}</span></>}
-        </div>
-        <Section title={t(($) => $.sections.unresolved_counterparties)}>
-          <div className="space-y-1.5">
+        {unresolvedCounterparties.length > 0 && <Section title={t(($) => $.sections.unresolved_counterparties)}>
+          <div data-testid="unresolved-counterparties-section" className="space-y-1.5">
             <p className="text-[11px] text-muted-foreground">{t(($) => $.bank.unresolved_hint)}</p>
             <RowTable
               tt={tt}
@@ -1122,7 +1135,7 @@ export function BusinessPage() {
               ) }}
             />
           </div>
-        </Section>
+        </Section>}
         <Section title={t(($)=>$.sections.transactions)}>
           <RowTable tt={tt} locale={locale} rows={filteredTransactions} columns={[{ key: "booked_on", kind: "date" }, { key: "direction", kind: "enum" }, { key: "amount_rub", kind: "money" }, { key: "counterparty_name" }, { key: "counterparty_inn" }, { key: "classification", kind: "enum" }, { key: "match_state", kind: "enum" }, { key: "purpose" }]} empty={t(($)=>$.empty)}
             extra={{ header: t(($) => $.actions.resolve), render: (row) => (

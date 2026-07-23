@@ -382,7 +382,13 @@
     "all_resolved": "所选期间的交易对手均已处理。",
     "resolve_as": "关联为…",
     "client_payer_prefix": "客户",
-    "worker_payee_prefix": "执行者"
+    "worker_payee_prefix": "执行者",
+    "reasons": {
+      "owner_approved_personal_payer_registry": "客户付款方已由所有者确认",
+      "manual_counterparty_resolution": "已手动整理银行交易对手",
+      "vitmax_transit_excluded": "VitMax 过账 — 不计入个人收入",
+      "own_account_transfer_excluded": "自有账户间转账 — 不计入收入和支出"
+    }
   },
   "card": {
     "details": "客户信息",

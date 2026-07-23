@@ -382,7 +382,13 @@
     "all_resolved": "All counterparties are resolved for the selected period.",
     "resolve_as": "Link as…",
     "client_payer_prefix": "Client",
-    "worker_payee_prefix": "Worker"
+    "worker_payee_prefix": "Worker",
+    "reasons": {
+      "owner_approved_personal_payer_registry": "Client payer confirmed by the owner",
+      "manual_counterparty_resolution": "Bank counterparty resolved manually",
+      "vitmax_transit_excluded": "VitMax transit — excluded from personal revenue",
+      "own_account_transfer_excluded": "Own-account transfer — excluded from revenue and expenses"
+    }
   },
   "card": {
     "details": "Client details",

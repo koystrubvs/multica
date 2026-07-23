@@ -382,7 +382,13 @@
     "all_resolved": "За выбранный период все контрагенты разобраны.",
     "resolve_as": "Связать как…",
     "client_payer_prefix": "Клиент",
-    "worker_payee_prefix": "Исполнитель"
+    "worker_payee_prefix": "Исполнитель",
+    "reasons": {
+      "owner_approved_personal_payer_registry": "Плательщик клиента подтверждён владельцем",
+      "manual_counterparty_resolution": "Контрагент разобран вручную в банке",
+      "vitmax_transit_excluded": "Транзит VitMax — не учитывается в личном доходе",
+      "own_account_transfer_excluded": "Перевод между своими счетами — не учитывается в доходах и расходах"
+    }
   },
   "card": {
     "details": "Данные клиента",
