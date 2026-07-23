@@ -350,13 +350,50 @@
   "no_penalties_note": "品質調整は所有者が手動で決定し、自動ペナルティはありません。",
   "year": "年",
   "costs": {
-    "period_total": "選択期間の経費", "fx_note": "USDは引落日のCBRレートでRUB換算されます。銀行照合は行いません。", "fx_loading": "為替レートを読み込み中...",
-    "new_cost": "新しい定期経費", "edit_cost": "経費を編集", "name": "名前", "amount": "金額", "frequency": "頻度", "charge_day": "引落日", "starts_on": "開始", "ends_on": "終了", "notes": "メモ",
-    "save": "保存", "cancel": "キャンセル", "saved": "保存しました", "save_error": "保存できませんでした", "schedule": "スケジュール", "day_of_month": "毎月{{day}}日", "day_of_year": "毎年{{month}}月{{day}}日", "status": "状態", "actions": "操作",
-    "edit": "編集", "pause": "一時停止", "resume": "再開", "archive": "アーカイブ", "empty": "定期経費はまだありません",
-    "frequencies": { "monthly": "毎月", "yearly": "毎年" },
-    "categories": { "ai": "AIサービス", "service": "サービス", "infrastructure": "インフラ", "contractor": "外注", "tax": "税金", "bank": "銀行", "other": "その他" },
-    "statuses": { "active": "有効", "paused": "一時停止", "archived": "アーカイブ済み" }
+    "period_total": "選択期間の経費",
+    "fx_note": "USDは引落日のCBRレートでRUB換算されます。銀行照合は行いません。",
+    "fx_loading": "為替レートを読み込み中...",
+    "new_cost": "新しい定期経費",
+    "edit_cost": "経費を編集",
+    "name": "名前",
+    "amount": "金額",
+    "frequency": "頻度",
+    "charge_day": "引落日",
+    "starts_on": "開始",
+    "ends_on": "終了",
+    "notes": "メモ",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "saved": "保存しました",
+    "save_error": "保存できませんでした",
+    "schedule": "スケジュール",
+    "day_of_month": "毎月{{day}}日",
+    "day_of_year": "毎年{{month}}月{{day}}日",
+    "status": "状態",
+    "actions": "操作",
+    "edit": "編集",
+    "pause": "一時停止",
+    "resume": "再開",
+    "archive": "アーカイブ",
+    "empty": "定期経費はまだありません",
+    "frequencies": {
+      "monthly": "毎月",
+      "yearly": "毎年"
+    },
+    "categories": {
+      "ai": "AIサービス",
+      "service": "サービス",
+      "infrastructure": "インフラ",
+      "contractor": "外注",
+      "tax": "税金",
+      "bank": "銀行",
+      "other": "その他"
+    },
+    "statuses": {
+      "active": "有効",
+      "paused": "一時停止",
+      "archived": "アーカイブ済み"
+    }
   },
   "money": {
     "incoming": "入金予定",
@@ -395,7 +432,26 @@
   "card": {
     "details": "顧客情報",
     "bank": "最近の銀行入金",
-    "hint": "行をクリックすると顧客カードが開き、契約・プロジェクト・支払者・入金計画を編集できます。"
+    "hint": "行をクリックすると顧客カードが開き、契約・プロジェクト・支払者・入金計画を編集できます。",
+    "tab_overview": "概要",
+    "tab_finance": "財務"
   },
-  "economics_hint": "課金タスクにルーブル見積が付き、参加者を割り当てて承認すると、参加者に割合が発生します。右で参加者を選び、タスクの「見積もる」を押してください。"
+  "economics_hint": "課金タスクにルーブル見積が付き、参加者を割り当てて承認すると、参加者に割合が発生します。右で参加者を選び、タスクの「見積もる」を押してください。",
+  "contracts": {
+    "tab": "契約",
+    "add": "契約を追加",
+    "number": "番号",
+    "subject": "件名",
+    "amount": "金額 ₽",
+    "starts_on": "開始",
+    "ends_on": "終了",
+    "file": "契約ファイル",
+    "download": "ダウンロード",
+    "delete": "削除",
+    "empty": "契約はまだありません",
+    "st_draft": "下書き",
+    "st_active": "有効",
+    "st_expired": "期限切れ",
+    "st_terminated": "解除"
+  }
 }

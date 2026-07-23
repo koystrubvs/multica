@@ -350,13 +350,50 @@
   "no_penalties_note": "Quality adjustments are made only by the owner; there are no automatic penalties.",
   "year": "Year",
   "costs": {
-    "period_total": "Expenses for the selected period", "fx_note": "USD is converted to RUB at the CBR rate on the charge date. No bank matching.", "fx_loading": "Loading exchange rates...",
-    "new_cost": "New recurring expense", "edit_cost": "Edit expense", "name": "Name", "amount": "Amount", "frequency": "Frequency", "charge_day": "Charge day", "starts_on": "Starts", "ends_on": "Ends", "notes": "Notes",
-    "save": "Save", "cancel": "Cancel", "saved": "Saved", "save_error": "Could not save", "schedule": "Schedule", "day_of_month": "Day {{day}} every month", "day_of_year": "Every year on {{month}}/{{day}}", "status": "Status", "actions": "Actions",
-    "edit": "Edit", "pause": "Pause", "resume": "Resume", "archive": "Archive", "empty": "No recurring expenses yet",
-    "frequencies": { "monthly": "Monthly", "yearly": "Yearly" },
-    "categories": { "ai": "AI services", "service": "Services", "infrastructure": "Infrastructure", "contractor": "Contractors", "tax": "Taxes", "bank": "Bank", "other": "Other" },
-    "statuses": { "active": "Active", "paused": "Paused", "archived": "Archived" }
+    "period_total": "Expenses for the selected period",
+    "fx_note": "USD is converted to RUB at the CBR rate on the charge date. No bank matching.",
+    "fx_loading": "Loading exchange rates...",
+    "new_cost": "New recurring expense",
+    "edit_cost": "Edit expense",
+    "name": "Name",
+    "amount": "Amount",
+    "frequency": "Frequency",
+    "charge_day": "Charge day",
+    "starts_on": "Starts",
+    "ends_on": "Ends",
+    "notes": "Notes",
+    "save": "Save",
+    "cancel": "Cancel",
+    "saved": "Saved",
+    "save_error": "Could not save",
+    "schedule": "Schedule",
+    "day_of_month": "Day {{day}} every month",
+    "day_of_year": "Every year on {{month}}/{{day}}",
+    "status": "Status",
+    "actions": "Actions",
+    "edit": "Edit",
+    "pause": "Pause",
+    "resume": "Resume",
+    "archive": "Archive",
+    "empty": "No recurring expenses yet",
+    "frequencies": {
+      "monthly": "Monthly",
+      "yearly": "Yearly"
+    },
+    "categories": {
+      "ai": "AI services",
+      "service": "Services",
+      "infrastructure": "Infrastructure",
+      "contractor": "Contractors",
+      "tax": "Taxes",
+      "bank": "Bank",
+      "other": "Other"
+    },
+    "statuses": {
+      "active": "Active",
+      "paused": "Paused",
+      "archived": "Archived"
+    }
   },
   "money": {
     "incoming": "Incoming",
@@ -395,7 +432,26 @@
   "card": {
     "details": "Client details",
     "bank": "Recent bank payments",
-    "hint": "Click a row to open the client card — agreements, projects, payers and the payment plan are edited there."
+    "hint": "Click a row to open the client card — agreements, projects, payers and the payment plan are edited there.",
+    "tab_overview": "Overview",
+    "tab_finance": "Finance"
   },
-  "economics_hint": "A billed task gets a ruble estimate → you assign a participant and accept → the participant accrues their percent. Pick a participant on the right and press Estimate on a task."
+  "economics_hint": "A billed task gets a ruble estimate → you assign a participant and accept → the participant accrues their percent. Pick a participant on the right and press Estimate on a task.",
+  "contracts": {
+    "tab": "Contracts",
+    "add": "Add contract",
+    "number": "Number",
+    "subject": "Subject",
+    "amount": "Amount ₽",
+    "starts_on": "Start",
+    "ends_on": "End",
+    "file": "Contract file",
+    "download": "Download",
+    "delete": "Delete",
+    "empty": "No contracts yet",
+    "st_draft": "draft",
+    "st_active": "active",
+    "st_expired": "expired",
+    "st_terminated": "terminated"
+  }
 }

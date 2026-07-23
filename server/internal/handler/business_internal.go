@@ -51,6 +51,7 @@ type BusinessSnapshotResponse struct {
 	BillingCandidates   json.RawMessage `json:"billing_candidates"`
 	BillingMonthTotals  json.RawMessage `json:"billing_month_client_totals"`
 	BillingTasks        json.RawMessage `json:"billing_tasks"`
+	Contracts           json.RawMessage `json:"contracts"`
 	GeneratedAt         string          `json:"generated_at"`
 }
 
@@ -318,6 +319,12 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			WHERE c.status <> 'void'
 			ORDER BY month DESC, bc.canonical_name, i.title LIMIT 5000
 		) q`},
+		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC), '[]'::jsonb) FROM (
+			SELECT bct.*, a.filename AS file_name, a.content_type AS file_content_type, a.size_bytes AS file_size
+			FROM business_contract bct
+			LEFT JOIN attachment a ON a.id = bct.attachment_id
+			WHERE bct.business_id = $1 ORDER BY bct.created_at DESC
+		) q`},
 	}
 
 	response := BusinessSnapshotResponse{GeneratedAt: time.Now().UTC().Format(time.RFC3339)}
@@ -331,6 +338,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		&response.ReceivableTasks, &response.Accruals, &response.QualityCases, &response.AccrualAdjustments,
 		&response.ReserveLedger, &response.PayoutBatches, &response.PayoutItems, &response.BankOutbox,
 		&response.BillingCandidates, &response.BillingMonthTotals, &response.BillingTasks,
+		&response.Contracts,
 	}
 	for index := range queries {
 		queries[index].dst = destinations[index]

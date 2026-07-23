@@ -350,13 +350,50 @@
   "no_penalties_note": "质量调整由所有者手动决定；不实施自动处罚。",
   "year": "年",
   "costs": {
-    "period_total": "所选期间的支出", "fx_note": "美元按扣款日的俄罗斯央行汇率折算为卢布，不与银行流水核对。", "fx_loading": "正在加载汇率...",
-    "new_cost": "新增定期支出", "edit_cost": "编辑支出", "name": "名称", "amount": "金额", "frequency": "频率", "charge_day": "扣款日", "starts_on": "开始", "ends_on": "结束", "notes": "备注",
-    "save": "保存", "cancel": "取消", "saved": "已保存", "save_error": "保存失败", "schedule": "计划", "day_of_month": "每月{{day}}日", "day_of_year": "每年{{month}}月{{day}}日", "status": "状态", "actions": "操作",
-    "edit": "编辑", "pause": "暂停", "resume": "恢复", "archive": "归档", "empty": "暂无定期支出",
-    "frequencies": { "monthly": "每月", "yearly": "每年" },
-    "categories": { "ai": "AI 服务", "service": "服务", "infrastructure": "基础设施", "contractor": "承包商", "tax": "税费", "bank": "银行", "other": "其他" },
-    "statuses": { "active": "启用", "paused": "已暂停", "archived": "已归档" }
+    "period_total": "所选期间的支出",
+    "fx_note": "美元按扣款日的俄罗斯央行汇率折算为卢布，不与银行流水核对。",
+    "fx_loading": "正在加载汇率...",
+    "new_cost": "新增定期支出",
+    "edit_cost": "编辑支出",
+    "name": "名称",
+    "amount": "金额",
+    "frequency": "频率",
+    "charge_day": "扣款日",
+    "starts_on": "开始",
+    "ends_on": "结束",
+    "notes": "备注",
+    "save": "保存",
+    "cancel": "取消",
+    "saved": "已保存",
+    "save_error": "保存失败",
+    "schedule": "计划",
+    "day_of_month": "每月{{day}}日",
+    "day_of_year": "每年{{month}}月{{day}}日",
+    "status": "状态",
+    "actions": "操作",
+    "edit": "编辑",
+    "pause": "暂停",
+    "resume": "恢复",
+    "archive": "归档",
+    "empty": "暂无定期支出",
+    "frequencies": {
+      "monthly": "每月",
+      "yearly": "每年"
+    },
+    "categories": {
+      "ai": "AI 服务",
+      "service": "服务",
+      "infrastructure": "基础设施",
+      "contractor": "承包商",
+      "tax": "税费",
+      "bank": "银行",
+      "other": "其他"
+    },
+    "statuses": {
+      "active": "启用",
+      "paused": "已暂停",
+      "archived": "已归档"
+    }
   },
   "money": {
     "incoming": "待入账",
@@ -395,7 +432,26 @@
   "card": {
     "details": "客户信息",
     "bank": "最近银行入账",
-    "hint": "点击行打开客户卡片——协议、项目、付款方和收款计划都在那里编辑。"
+    "hint": "点击行打开客户卡片——协议、项目、付款方和收款计划都在那里编辑。",
+    "tab_overview": "概览",
+    "tab_finance": "财务"
   },
-  "economics_hint": "已计费任务获得卢布评估 → 指定参与者并接受 → 参与者按比例计提。在右侧选择参与者并点击任务的「评估」。"
+  "economics_hint": "已计费任务获得卢布评估 → 指定参与者并接受 → 参与者按比例计提。在右侧选择参与者并点击任务的「评估」。",
+  "contracts": {
+    "tab": "合同",
+    "add": "添加合同",
+    "number": "编号",
+    "subject": "标的",
+    "amount": "金额 ₽",
+    "starts_on": "开始",
+    "ends_on": "结束",
+    "file": "合同文件",
+    "download": "下载",
+    "delete": "删除",
+    "empty": "暂无合同",
+    "st_draft": "草稿",
+    "st_active": "生效",
+    "st_expired": "已过期",
+    "st_terminated": "已终止"
+  }
 }

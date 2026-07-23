@@ -3116,7 +3116,7 @@ export class ApiClient {
     businessId: string,
     path: string,
     body?: unknown,
-    method: "POST" | "PUT" | "PATCH" = "POST",
+    method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST",
   ): Promise<T> {
     const suffix = path.replace(/^\/+/, "");
     return this.fetch(`/api/businesses/${businessId}/${suffix}`, {

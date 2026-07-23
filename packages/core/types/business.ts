@@ -89,6 +89,7 @@ export interface BusinessSnapshot {
   billing_candidates: BusinessRow[];
   billing_month_client_totals: BusinessRow[];
   billing_tasks: BusinessRow[];
+  contracts: BusinessRow[];
   generated_at: string;
 }
 

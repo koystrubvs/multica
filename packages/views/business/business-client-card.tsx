@@ -19,7 +19,10 @@ import {
 } from "@multica/ui/components/ui/sheet";
 import { cn } from "@multica/ui/lib/utils";
 import { projectBillingState, useElbaDirectory } from "./business-billing-tab";
+import { BusinessClientContracts } from "./business-client-contracts";
 import { useT } from "../i18n";
+
+type ClientTab = "overview" | "contracts" | "finance" | "projects" | "payers" | "bank";
 
 const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
@@ -68,9 +71,19 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
   const locale = i18n?.language || "ru";
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<ClientTab>("overview");
   const { contractors } = useElbaDirectory();
 
   const clientID = client ? String(client.id) : "";
+  const contracts = (data.contracts ?? []).filter((row) => String(row.client_id) === clientID);
+  const clientTabs: { key: ClientTab; label: string }[] = [
+    { key: "overview", label: tt("card.tab_overview", { defaultValue: "Overview" }) },
+    { key: "contracts", label: tt("contracts.tab", { defaultValue: "Contracts" }) },
+    { key: "finance", label: tt("card.tab_finance", { defaultValue: "Finance" }) },
+    { key: "projects", label: t(($) => $.sections.projects) },
+    { key: "payers", label: t(($) => $.sections.payers) },
+    { key: "bank", label: t(($) => $.card.bank) },
+  ];
   const agreements = (data.agreements ?? []).filter((row) => String(row.client_id) === clientID);
   const projects = (data.projects ?? []).filter((row) => String(row.client_id) === clientID);
   const payers = (data.payers ?? []).filter((row) => String(row.client_id) === clientID);
@@ -96,7 +109,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
 
   return (
     <Sheet open={!!client} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full overflow-y-auto p-0 data-[side=right]:sm:max-w-2xl">
+      <SheetContent side="right" className="w-full overflow-y-auto p-0 data-[side=right]:sm:max-w-3xl">
         {client && <>
           <SheetHeader className="border-b px-4 py-3">
             <SheetTitle className="text-base">{text(client, "canonical_name")}</SheetTitle>
@@ -109,6 +122,23 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
 
           {error && <div className="mx-4 mt-3 rounded-lg border border-destructive/40 bg-destructive/5 p-2 text-xs text-destructive">{error}</div>}
 
+          <div className="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b bg-surface-raised px-2">
+            {clientTabs.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                onClick={() => setTab(entry.key)}
+                className={cn(
+                  "shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-xs transition-colors",
+                  tab === entry.key ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "overview" && (
           <CardSection title={t(($) => $.card.details)}>
             <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("client", () => api.businessAction(businessID, `clients/${clientID}`, { status: fd.get("status"), primary_payment_channel: fd.get("channel"), notes: fd.get("notes") }, "PATCH")); }}>
               <NativeSelect size="sm" name="status" defaultValue={text(client, "status")}>
@@ -122,7 +152,15 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
             </form>
           </CardSection>
+          )}
 
+          {tab === "contracts" && (
+          <CardSection title={tt("contracts.tab", { defaultValue: "Contracts" })}>
+            <BusinessClientContracts businessID={businessID} clientID={clientID} contracts={contracts} locale={locale} onChanged={onChanged} />
+          </CardSection>
+          )}
+
+          {tab === "finance" && (<>
           <CardSection title={t(($) => $.sections.agreements)}>
             <div className="space-y-2">
               {agreements.length === 0 && <div className="text-xs text-muted-foreground">{t(($) => $.empty)}</div>}
@@ -187,7 +225,9 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               })}
             </div>
           </CardSection>
+          </>)}
 
+          {tab === "projects" && (
           <CardSection title={t(($) => $.sections.projects)}>
             <div className="space-y-1.5">
               {projects.map((row) => {
@@ -235,7 +275,9 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               </form>
             </div>
           </CardSection>
+          )}
 
+          {tab === "payers" && (
           <CardSection title={t(($) => $.sections.payers)}>
             <div className="space-y-1.5">
               {payers.map((row) => {
@@ -268,7 +310,9 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               </form>
             </div>
           </CardSection>
+          )}
 
+          {tab === "bank" && (
           <CardSection title={t(($) => $.card.bank)}>
             <div className="space-y-1">
               {bankRows.length === 0 && <div className="text-xs text-muted-foreground">{t(($) => $.empty)}</div>}
@@ -281,6 +325,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               ))}
             </div>
           </CardSection>
+          )}
         </>}
       </SheetContent>
     </Sheet>
