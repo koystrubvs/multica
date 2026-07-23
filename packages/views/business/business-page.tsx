@@ -56,12 +56,13 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { cn } from "@multica/ui/lib/utils";
-import { AlertTriangle, Building2, ChevronLeft, ChevronRight, CircleDollarSign, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, ReceiptText, Search, Users, Wallet, X } from "lucide-react";
+import { AlertTriangle, Building2, ChevronLeft, ChevronRight, CircleDollarSign, Filter, HandCoins, Landmark, LayoutDashboard, ListChecks, Plus, ReceiptText, Search, Users, Wallet, X } from "lucide-react";
 import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
 import { BusinessBillingTab } from "./business-billing-tab";
 import { BusinessClientCard } from "./business-client-card";
+import { BusinessClientCreateSheet } from "./business-client-create";
 import { BusinessCostsTab } from "./business-costs-tab";
 
 type Tab = "overview" | "calendar" | "clients" | "billing" | "bank" | "costs" | "economics" | "team";
@@ -473,6 +474,7 @@ export function BusinessPage() {
   const [periodMode, setPeriodMode] = useState<"month" | "year">("month");
   const [tab, setTab] = useState<Tab>("overview");
   const [openClientID, setOpenClientID] = useState("");
+  const [createClientOpen, setCreateClientOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -1027,10 +1029,10 @@ export function BusinessPage() {
         <Toolbar>
           <ResultCount shown={filteredClients.length} total={(data.clients ?? []).length} />
           <div className="flex flex-wrap items-center gap-2">
-            <form className="flex items-center gap-1.5" onSubmit={(event) => { const fd=formData(event); void execute("client", () => api.businessAction(businessID,"clients",{canonical_name:fd.get("name"),status:"active",primary_payment_channel:"bank"})); event.currentTarget.reset(); }}>
-              <Input required name="name" className="h-8 w-48 text-sm" placeholder={t(($) => $.fields.name)}/>
-              <Button type="submit" size="sm" className="h-8" disabled={busy!==""}>{t(($) => $.actions.add_client)}</Button>
-            </form>
+            <Button size="sm" className="h-8 gap-1.5" onClick={() => setCreateClientOpen(true)}>
+              <Plus className="size-3.5" />
+              {t(($) => $.actions.add_client)}
+            </Button>
           </div>
         </Toolbar>
         <Section title={t(($) => $.sections.clients)} actions={<form className="flex flex-wrap items-start gap-1.5" onSubmit={(event)=>{const fd=formData(event);const client=String(fd.get("client"));const workspace=String(fd.get("workspace")??"");const selected=fd.getAll("project").map(String).filter(Boolean);const candidates=selected.length>0?(data.available_projects??[]).filter((row)=>selected.includes(String(row.project_id))):(data.available_projects??[]).filter((row)=>workspace&&String(row.workspace_id)===workspace);void execute("map",()=>Promise.all(candidates.map((row)=>api.businessAction(businessID,`clients/${client}/projects`,{workspace_id:row.workspace_id,project_id:row.project_id,service_type:fd.get("service"),billable:true},"PUT"))));}}>
@@ -1283,6 +1285,16 @@ export function BusinessPage() {
         data={data}
         onClose={() => setOpenClientID("")}
         onChanged={async () => { await Promise.all([snapshot.refetch(), dashboard.refetch()]); }}
+      />
+
+      <BusinessClientCreateSheet
+        businessID={businessID}
+        open={createClientOpen}
+        onOpenChange={setCreateClientOpen}
+        onCreated={async (clientID) => {
+          await Promise.all([snapshot.refetch(), dashboard.refetch()]);
+          if (clientID) setOpenClientID(clientID);
+        }}
       />
     </div>
   );
