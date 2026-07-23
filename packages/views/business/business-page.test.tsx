@@ -131,11 +131,15 @@ describe("BusinessPage layout", () => {
     ]));
   });
 
-  it("keeps bank totals and source metadata in one summary row", () => {
-    render(<BusinessPage />);
+  it("moves bank search to the page header and keeps metadata in one summary row", () => {
+    const { container } = render(<BusinessPage />);
 
     const tabs = screen.getAllByRole("tab");
+    expect(screen.queryByTestId("bank-counterparty-search")).not.toBeInTheDocument();
     fireEvent.click(tabs[4]!);
+
+    const search = screen.getByTestId("bank-counterparty-search");
+    expect(container.querySelector("header")?.contains(search)).toBe(true);
 
     const summary = screen.getByTestId("bank-summary");
     expect(summary).toHaveClass("whitespace-nowrap");

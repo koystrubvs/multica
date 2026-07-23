@@ -878,6 +878,18 @@ export function BusinessPage() {
               : <span className="px-1 text-xs font-medium tabular-nums">{periodYear}</span>}
             <Button type="button" variant="ghost" size="sm" className="h-8 w-7 px-0 text-muted-foreground" onClick={() => { if (periodMode === "year") { setMonth(`${Number(periodYear) + 1}${month.slice(4)}`); } else { const d = new Date(`${month}-15T00:00:00`); d.setMonth(d.getMonth() + 1); setMonth(d.toISOString().slice(0, 7)); } }}><ChevronRight className="size-4" /></Button>
           </div>
+          {tab === "bank" && bankEnabled && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                data-testid="bank-counterparty-search"
+                value={txSearch}
+                onChange={(event) => setTxSearch(event.target.value)}
+                placeholder={t(($) => $.filters.search)}
+                className="h-8 w-56 pl-8 text-sm"
+              />
+            </div>
+          )}
           {headerFilter && (
             <FilterMenu
               label={t(($) => $.filters.filter)}
@@ -1087,10 +1099,6 @@ export function BusinessPage() {
       {tab === "bank" && bankEnabled && <div className="space-y-6">
         <Toolbar>
           <div className="flex min-w-0 items-center gap-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input value={txSearch} onChange={(event) => setTxSearch(event.target.value)} placeholder={t(($) => $.filters.search)} className="h-8 w-56 pl-8 text-sm" />
-            </div>
             <ResultCount shown={filteredTransactions.length} total={periodTransactions.length} />
             <span data-testid="bank-summary" className="hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground lg:inline">
               {t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span>
