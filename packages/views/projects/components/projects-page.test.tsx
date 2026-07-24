@@ -264,6 +264,22 @@ describe("ProjectsPage compact row navigation", () => {
     expect(typeCell).not.toBe(titleCell);
   });
 
+  it("includes project type in the column picker", async () => {
+    const user = userEvent.setup();
+    renderProjects();
+
+    const typeLabel = screen.getByText("Project type", { selector: "span" });
+    const pickerRow = typeLabel.closest("label");
+    expect(pickerRow).not.toBeNull();
+
+    const typeSwitch = within(pickerRow as HTMLLabelElement).getByRole("switch");
+    expect(typeSwitch).toBeChecked();
+
+    await user.click(typeSwitch);
+
+    expect(mocks.projectViewState.toggleColumn).toHaveBeenCalledWith("type");
+  });
+
   it("renders the project name as text, not a title link", () => {
     renderProjects();
 
