@@ -30,6 +30,13 @@ beforeEach(() => {
     viewMode: "compact",
     sortField: "created",
     sortDirection: "desc",
+    filters: {
+      statuses: [],
+      priorities: [],
+      types: [],
+      clients: [],
+      leads: [],
+    },
   });
   setCurrentWorkspace(null, null);
 });
@@ -55,6 +62,34 @@ describe("useProjectViewStore", () => {
 
     useProjectViewStore.getState().toggleSort("type");
     expect(useProjectViewStore.getState().sortDirection).toBe("desc");
+  });
+
+  it("uses ascending as the default direction when sorting by client", () => {
+    useProjectViewStore.getState().toggleSort("client");
+    expect(useProjectViewStore.getState().sortField).toBe("client");
+    expect(useProjectViewStore.getState().sortDirection).toBe("asc");
+  });
+
+  it("adds the client filter when rehydrating older saved preferences", async () => {
+    localStorage.setItem(
+      "multica_projects_view:acme",
+      JSON.stringify({
+        state: {
+          filters: { statuses: ["in_progress"], priorities: [], leads: [] },
+        },
+        version: 0,
+      }),
+    );
+
+    setCurrentWorkspace("acme", "ws_a");
+    await flush();
+    await flush();
+
+    expect(useProjectViewStore.getState().filters.clients).toEqual([]);
+    expect(useProjectViewStore.getState().filters.types).toEqual([]);
+    expect(useProjectViewStore.getState().filters.statuses).toEqual([
+      "in_progress",
+    ]);
   });
 
   it("partialize persists view prefs (no actions) under the workspace-namespaced key", async () => {

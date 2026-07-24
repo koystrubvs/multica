@@ -28,6 +28,8 @@ type ProjectResponse struct {
 	Status      string  `json:"status"`
 	Priority    string  `json:"priority"`
 	ProjectType *string `json:"project_type"`
+	ClientID    *string `json:"client_id"`
+	ClientName  *string `json:"client_name"`
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
 	// StartDate / DueDate are calendar days ("YYYY-MM-DD"), no time-of-day or
@@ -78,6 +80,68 @@ func (h *Handler) loadProjectResourceCount(ctx context.Context, projectID pgtype
 		return 0
 	}
 	return rows[0].ResourceCount
+}
+
+type projectClientRef struct {
+	ClientID   string
+	ClientName string
+}
+
+// loadProjectClientRefs projects the existing Business client-to-project
+// relation onto the common project API. Business remains the source of truth:
+// this is intentionally read-only and does not duplicate client ownership on
+// the project table.
+func (h *Handler) loadProjectClientRefs(
+	ctx context.Context,
+	workspaceID pgtype.UUID,
+	projectIDs []pgtype.UUID,
+) map[string]projectClientRef {
+	refs := make(map[string]projectClientRef)
+	if h.DB == nil || len(projectIDs) == 0 {
+		return refs
+	}
+
+	rows, err := h.DB.Query(ctx, `
+		SELECT bcp.project_id, bc.id, bc.canonical_name
+		FROM business_client_project AS bcp
+		JOIN business_client AS bc
+		  ON bc.id = bcp.client_id
+		 AND bc.business_id = bcp.business_id
+		WHERE bcp.workspace_id = $1
+		  AND bcp.project_id = ANY($2::uuid[])
+	`, workspaceID, projectIDs)
+	if err != nil {
+		slog.Warn("failed to load project clients", "workspace_id", uuidToString(workspaceID), "error", err)
+		return refs
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var projectID pgtype.UUID
+		var clientID pgtype.UUID
+		var clientName string
+		if err := rows.Scan(&projectID, &clientID, &clientName); err != nil {
+			slog.Warn("failed to scan project client", "workspace_id", uuidToString(workspaceID), "error", err)
+			return refs
+		}
+		refs[uuidToString(projectID)] = projectClientRef{
+			ClientID:   uuidToString(clientID),
+			ClientName: clientName,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("failed while reading project clients", "workspace_id", uuidToString(workspaceID), "error", err)
+	}
+	return refs
+}
+
+func applyProjectClient(resp *ProjectResponse, refs map[string]projectClientRef) {
+	ref, ok := refs[resp.ID]
+	if !ok {
+		return
+	}
+	resp.ClientID = &ref.ClientID
+	resp.ClientName = &ref.ClientName
 }
 
 type CreateProjectRequest struct {
@@ -144,11 +208,13 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	// Batch-fetch issue stats and resource counts for all projects
 	statsMap := make(map[string]db.GetProjectIssueStatsRow)
 	resourceCountMap := make(map[string]int64)
+	clientRefs := make(map[string]projectClientRef)
 	if len(projects) > 0 {
 		projectIDs := make([]pgtype.UUID, len(projects))
 		for i, p := range projects {
 			projectIDs[i] = p.ID
 		}
+		clientRefs = h.loadProjectClientRefs(r.Context(), wsUUID, projectIDs)
 		stats, err := h.Queries.GetProjectIssueStats(r.Context(), projectIDs)
 		if err == nil {
 			for _, s := range stats {
@@ -166,6 +232,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	resp := make([]ProjectResponse, len(projects))
 	for i, p := range projects {
 		resp[i] = projectToResponse(p)
+		applyProjectClient(&resp[i], clientRefs)
 		if s, ok := statsMap[resp[i].ID]; ok {
 			resp[i].IssueCount = s.TotalCount
 			resp[i].DoneCount = s.DoneCount
@@ -194,6 +261,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := projectToResponse(project)
+	applyProjectClient(&resp, h.loadProjectClientRefs(r.Context(), wsUUID, []pgtype.UUID{project.ID}))
 	resp.IssueCount, resp.DoneCount = h.loadProjectIssueStats(r.Context(), project.ID)
 	resp.ResourceCount = h.loadProjectResourceCount(r.Context(), project.ID)
 	writeJSON(w, http.StatusOK, resp)
@@ -599,6 +667,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := projectToResponse(project)
+	applyProjectClient(&resp, h.loadProjectClientRefs(r.Context(), wsUUID, []pgtype.UUID{project.ID}))
 	resp.IssueCount, resp.DoneCount = h.loadProjectIssueStats(r.Context(), project.ID)
 	resp.ResourceCount = h.loadProjectResourceCount(r.Context(), project.ID)
 	h.publish(protocol.EventProjectUpdated, workspaceID, "member", userID, map[string]any{"project": resp})
@@ -873,11 +942,13 @@ func (h *Handler) SearchProjects(w http.ResponseWriter, r *http.Request) {
 	// Batch-fetch issue stats and resource counts
 	statsMap := make(map[string]db.GetProjectIssueStatsRow)
 	resourceCountMap := make(map[string]int64)
+	clientRefs := make(map[string]projectClientRef)
 	if len(results) > 0 {
 		projectIDs := make([]pgtype.UUID, len(results))
 		for i, r := range results {
 			projectIDs[i] = r.project.ID
 		}
+		clientRefs = h.loadProjectClientRefs(ctx, wsUUID, projectIDs)
 		stats, err := h.Queries.GetProjectIssueStats(ctx, projectIDs)
 		if err == nil {
 			for _, s := range stats {
@@ -895,6 +966,7 @@ func (h *Handler) SearchProjects(w http.ResponseWriter, r *http.Request) {
 	resp := make([]SearchProjectResponse, len(results))
 	for i, row := range results {
 		pr := projectToResponse(row.project)
+		applyProjectClient(&pr, clientRefs)
 		if s, ok := statsMap[pr.ID]; ok {
 			pr.IssueCount = s.TotalCount
 			pr.DoneCount = s.DoneCount

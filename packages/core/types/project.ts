@@ -13,6 +13,8 @@ export interface Project {
   status: ProjectStatus;
   priority: ProjectPriority;
   project_type: ProjectType | null;
+  client_id: string | null;
+  client_name: string | null;
   lead_type: "member" | "agent" | null;
   lead_id: string | null;
   // Calendar days ("YYYY-MM-DD"), no time-of-day or timezone — same contract as

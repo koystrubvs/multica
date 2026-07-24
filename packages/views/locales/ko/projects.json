@@ -22,6 +22,7 @@
   },
   "table": {
     "name": "이름",
+    "client": "클라이언트",
     "priority": "우선순위",
     "status": "상태",
     "progress": "진행률",

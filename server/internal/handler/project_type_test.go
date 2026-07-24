@@ -96,3 +96,87 @@ func TestProjectTypeValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectClientProjection(t *testing.T) {
+	ctx := context.Background()
+
+	w := httptest.NewRecorder()
+	testHandler.CreateProject(w, newRequest("POST", "/api/projects?workspace_id="+testWorkspaceID, map[string]any{
+		"title":        "project with business client",
+		"project_type": "seo",
+	}))
+	created := decodeProject(t, w, http.StatusCreated)
+
+	var businessID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO business_account (name, owner_user_id)
+		VALUES ('Project client projection', $1)
+		RETURNING id
+	`, testUserID).Scan(&businessID); err != nil {
+		t.Fatalf("create business: %v", err)
+	}
+
+	var clientID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO business_client (business_id, canonical_name, status)
+		VALUES ($1, 'Acme Clinic', 'active')
+		RETURNING id
+	`, businessID).Scan(&clientID); err != nil {
+		t.Fatalf("create business client: %v", err)
+	}
+
+	if _, err := testPool.Exec(ctx, `
+		INSERT INTO business_client_project (
+			business_id, client_id, workspace_id, project_id, service_type
+		)
+		VALUES ($1, $2, $3, $4, 'seo')
+	`, businessID, clientID, testWorkspaceID, created.ID); err != nil {
+		t.Fatalf("link project client: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM business_client_project WHERE project_id = $1`, created.ID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM business_client WHERE id = $1`, clientID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM business_account WHERE id = $1`, businessID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM project WHERE id = $1`, created.ID)
+	})
+
+	w = httptest.NewRecorder()
+	testHandler.ListProjects(w, newRequest("GET", "/api/projects?workspace_id="+testWorkspaceID, nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status = %d: %s", w.Code, w.Body.String())
+	}
+	var listResp struct {
+		Projects []ProjectResponse `json:"projects"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode project list: %v", err)
+	}
+	var listed *ProjectResponse
+	for i := range listResp.Projects {
+		if listResp.Projects[i].ID == created.ID {
+			listed = &listResp.Projects[i]
+			break
+		}
+	}
+	if listed == nil {
+		t.Fatalf("project missing from list response")
+	}
+	if listed.ClientID == nil || *listed.ClientID != clientID {
+		t.Fatalf("list client_id = %v, want %s", listed.ClientID, clientID)
+	}
+	if listed.ClientName == nil || *listed.ClientName != "Acme Clinic" {
+		t.Fatalf("list client_name = %v, want Acme Clinic", listed.ClientName)
+	}
+
+	w = httptest.NewRecorder()
+	getReq := withURLParam(newRequest("GET", "/api/projects/"+created.ID, nil), "id", created.ID)
+	testHandler.GetProject(w, getReq)
+	got := decodeProject(t, w, http.StatusOK)
+	if got.ClientID == nil || *got.ClientID != clientID {
+		t.Fatalf("get client_id = %v, want %s", got.ClientID, clientID)
+	}
+	if got.ClientName == nil || *got.ClientName != "Acme Clinic" {
+		t.Fatalf("get client_name = %v, want Acme Clinic", got.ClientName)
+	}
+}

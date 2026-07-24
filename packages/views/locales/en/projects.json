@@ -23,6 +23,7 @@
   },
   "table": {
     "name": "Name",
+    "client": "Client",
     "priority": "Priority",
     "status": "Status",
     "progress": "Progress",

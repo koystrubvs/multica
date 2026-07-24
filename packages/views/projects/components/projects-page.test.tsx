@@ -22,7 +22,13 @@ const mocks = vi.hoisted(() => ({
     sortField: "name",
     sortDirection: "asc",
     hiddenColumns: [] as string[],
-    filters: { statuses: [], priorities: [], leads: [] },
+    filters: {
+      statuses: [] as string[],
+      priorities: [] as string[],
+      types: [] as string[],
+      clients: [] as string[],
+      leads: [] as string[],
+    },
     setViewMode: vi.fn(),
     toggleSort: vi.fn(),
     setSortField: vi.fn(),
@@ -191,6 +197,8 @@ const PROJECT: Project = {
   status: "in_progress",
   priority: "high",
   project_type: "seo",
+  client_id: "client-1",
+  client_name: "Acme Clinic",
   lead_type: null,
   lead_id: null,
   start_date: null,
@@ -245,11 +253,19 @@ beforeEach(() => {
   mocks.openModal.mockClear();
   mocks.projectViewState.toggleSort.mockClear();
   mocks.projectViewState.setSortField.mockClear();
+  mocks.projectViewState.toggleFilter.mockClear();
+  mocks.projectViewState.clearFilters.mockClear();
   mocks.projectViewState.viewMode = "compact";
   mocks.projectViewState.sortField = "name";
   mocks.projectViewState.sortDirection = "asc";
   mocks.projectViewState.hiddenColumns = [];
-  mocks.projectViewState.filters = { statuses: [], priorities: [], leads: [] };
+  mocks.projectViewState.filters = {
+    statuses: [],
+    priorities: [],
+    types: [],
+    clients: [],
+    leads: [],
+  };
 });
 
 describe("ProjectsPage compact row navigation", () => {
@@ -311,8 +327,10 @@ describe("ProjectsPage compact row navigation", () => {
     const user = userEvent.setup();
     renderProjects();
 
-    const typeLabel = screen.getByText("Project type", { selector: "span" });
-    const pickerRow = typeLabel.closest("label");
+    const typeLabel = screen
+      .getAllByText("Project type", { selector: "span" })
+      .find((node) => node.closest("label"));
+    const pickerRow = typeLabel?.closest("label");
     expect(pickerRow).not.toBeNull();
 
     const typeSwitch = within(pickerRow as HTMLLabelElement).getByRole("switch");
@@ -321,6 +339,128 @@ describe("ProjectsPage compact row navigation", () => {
     await user.click(typeSwitch);
 
     expect(mocks.projectViewState.toggleColumn).toHaveBeenCalledWith("type");
+  });
+
+  it("renders and sorts the client column", async () => {
+    const user = userEvent.setup();
+    renderProjects();
+
+    const clientHeader = screen.getByRole("columnheader", { name: "Client" });
+    const clientCell = within(projectRow())
+      .getByText("Acme Clinic")
+      .closest('[role="cell"]');
+
+    expect(clientCell).toBeInTheDocument();
+    await user.click(within(clientHeader).getByRole("button", { name: "Client" }));
+    expect(mocks.projectViewState.toggleSort).toHaveBeenCalledWith("client");
+  });
+
+  it("orders clients alphabetically and keeps unassigned projects last", () => {
+    mocks.projects = [
+      { ...PROJECT, id: "none", title: "No Client", client_id: null, client_name: null },
+      { ...PROJECT, id: "beta", title: "Beta Project", client_id: "beta", client_name: "Beta" },
+      { ...PROJECT, id: "alpha", title: "Alpha Project", client_id: "alpha", client_name: "Alpha" },
+    ];
+    mocks.projectViewState.sortField = "client";
+
+    renderProjects();
+
+    const projectNames = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) =>
+        within(within(row).getAllByRole("cell")[1]!)
+          .getByText(/^(Alpha Project|Beta Project|No Client)$/)
+          .textContent,
+      );
+
+    expect(projectNames).toEqual(["Alpha Project", "Beta Project", "No Client"]);
+  });
+
+  it("includes client in the column picker", async () => {
+    const user = userEvent.setup();
+    renderProjects();
+
+    const clientLabel = screen
+      .getAllByText("Client", { selector: "span" })
+      .find((node) => node.closest("label"));
+    const pickerRow = clientLabel?.closest("label");
+    expect(pickerRow).not.toBeNull();
+
+    await user.click(within(pickerRow as HTMLLabelElement).getByRole("switch"));
+
+    expect(mocks.projectViewState.toggleColumn).toHaveBeenCalledWith("client");
+  });
+
+  it("includes clients in the filter menu", async () => {
+    const user = userEvent.setup();
+    renderProjects();
+
+    const clientFilterLabel = screen
+      .getAllByText("Acme Clinic", { exact: true })
+      .find((node) => node.closest("button"));
+    expect(clientFilterLabel).toBeDefined();
+
+    await user.click(clientFilterLabel!.closest("button")!);
+
+    expect(mocks.projectViewState.toggleFilter).toHaveBeenCalledWith(
+      "clients",
+      "client-1",
+    );
+  });
+
+  it("filters projects by selected clients", () => {
+    mocks.projects = [
+      PROJECT,
+      {
+        ...PROJECT,
+        id: "other-project",
+        title: "Other Project",
+        client_id: "client-2",
+        client_name: "Other Client",
+      },
+    ];
+    mocks.projectViewState.filters.clients = ["client-1"];
+
+    renderProjects();
+
+    expect(screen.getByText(PROJECT.title)).toBeInTheDocument();
+    expect(screen.queryByText("Other Project")).not.toBeInTheDocument();
+  });
+
+  it("includes project types in the filter menu", async () => {
+    const user = userEvent.setup();
+    renderProjects();
+
+    const seoFilterLabel = screen
+      .getAllByText("Website SEO", { exact: true })
+      .find((node) => node.closest("button"));
+    expect(seoFilterLabel).toBeDefined();
+
+    await user.click(seoFilterLabel!.closest("button")!);
+
+    expect(mocks.projectViewState.toggleFilter).toHaveBeenCalledWith(
+      "types",
+      "seo",
+    );
+  });
+
+  it("filters projects by selected project types", () => {
+    mocks.projects = [
+      PROJECT,
+      {
+        ...PROJECT,
+        id: "support-project",
+        title: "Support Project",
+        project_type: "support",
+      },
+    ];
+    mocks.projectViewState.filters.types = ["seo"];
+
+    renderProjects();
+
+    expect(screen.getByText(PROJECT.title)).toBeInTheDocument();
+    expect(screen.queryByText("Support Project")).not.toBeInTheDocument();
   });
 
   it("renders the project name as text, not a title link", () => {

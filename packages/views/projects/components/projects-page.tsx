@@ -144,7 +144,7 @@ function leadFilterValue(p: Project): string | null {
 
 // ---------------------------------------------------------------------------
 // Table (compact) view — ListGrid. Name + status are the core columns;
-// type/priority/progress/lead/issues/created collapse below @2xl, with
+// type/client/priority/progress/lead/issues/created collapse below @2xl, with
 // min-width + the wrapper's overflow as the escape valve. Rows use whole-row
 // mouse navigation; inline controls stop propagation so edit/menu clicks stay
 // local.
@@ -152,6 +152,7 @@ function leadFilterValue(p: Project): string | null {
 
 const COLUMN_WIDTHS: Record<ProjectColumnKey, number> = {
   type: 168,
+  client: 160,
   priority: 116,
   progress: 88,
   lead: 132,
@@ -160,9 +161,9 @@ const COLUMN_WIDTHS: Record<ProjectColumnKey, number> = {
 };
 
 // Fixed tracks: edges 12+12, checkbox 16, name min 200, status 116,
-// kebab 28 = 384, plus the 11 gap-x-3 gaps between the wide template's
-// 12 tracks.
-const FIXED_TRACKS_WIDTH = 384 + 11 * 12;
+// kebab 28 = 384, plus the 12 gap-x-3 gaps between the wide template's
+// 13 tracks.
+const FIXED_TRACKS_WIDTH = 384 + 12 * 12;
 
 // Render/track order: checkbox, name, project type, status (core, fixed 116px),
 // priority, progress, lead, issues, created, kebab. MUST be a literal string —
@@ -171,7 +172,7 @@ const FIXED_TRACKS_WIDTH = 384 + 11 * 12;
 // collapses to one column.
 const GRID_COLS =
   "grid-cols-[0.75rem_1rem_minmax(120px,1fr)_116px_1.75rem_0.75rem] " +
-  "@2xl:grid-cols-[0.75rem_1rem_minmax(200px,1fr)_var(--pjc-type)_116px_var(--pjc-priority)_var(--pjc-progress)_var(--pjc-lead)_var(--pjc-issues)_var(--pjc-created)_1.75rem_0.75rem]";
+  "@2xl:grid-cols-[0.75rem_1rem_minmax(200px,1fr)_var(--pjc-type)_var(--pjc-client)_116px_var(--pjc-priority)_var(--pjc-progress)_var(--pjc-lead)_var(--pjc-issues)_var(--pjc-created)_1.75rem_0.75rem]";
 
 const stopRowNavigation = (e: MouseEvent) => e.stopPropagation();
 
@@ -188,6 +189,7 @@ function columnTrackVars(
     );
   return {
     "--pjc-type": width("type"),
+    "--pjc-client": width("client"),
     "--pjc-priority": width("priority"),
     "--pjc-progress": width("progress"),
     "--pjc-lead": width("lead"),
@@ -408,6 +410,16 @@ function ProjectTableRow({
         <ListGridCell className="hidden px-0 @2xl:flex" />
       )}
 
+      {isColVisible("client") ? (
+        <ListGridCell className="hidden @2xl:flex">
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {project.client_name ?? "—"}
+          </span>
+        </ListGridCell>
+      ) : (
+        <ListGridCell className="hidden px-0 @2xl:flex" />
+      )}
+
       {/* status — core column, always visible */}
       <ListGridCell onClick={stopRowNavigation} onAuxClick={stopRowNavigation}>
         <ProjectStatusBadge project={project} handleUpdate={handleUpdate} align="start" />
@@ -535,6 +547,17 @@ function ProjectTableHeader({
       ) : (
         <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
       )}
+      {isColVisible("client") ? (
+        <ListGridHeaderCell
+          className="hidden @2xl:flex"
+          sorted={sorted("client")}
+          onSort={() => onSort("client")}
+        >
+          {t(($) => $.table.client)}
+        </ListGridHeaderCell>
+      ) : (
+        <ListGridHeaderCell className="hidden px-0 @2xl:flex" />
+      )}
       <ListGridHeaderCell sorted={sorted("status")} onSort={() => onSort("status")}>
         {t(($) => $.table.status)}
       </ListGridHeaderCell>
@@ -636,6 +659,11 @@ function ProjectCard({
           <ProjectRowActions project={project} pinned={pinned} canDelete={canDelete} />
           <ProjectStatusBadge project={project} handleUpdate={handleUpdate} triggerClassName="shrink-0" />
         </div>
+        {project.client_name && (
+          <p className="mt-1 truncate pl-7 text-[11px] text-muted-foreground">
+            {t(($) => $.table.client)}: {project.client_name}
+          </p>
+        )}
 
         {project.issue_count > 0 ? (
           <div className="flex items-center justify-end gap-1.5 pt-2">
@@ -707,8 +735,15 @@ const STATUS_VALUES: ProjectStatus[] = [
   "cancelled",
 ];
 const PRIORITY_VALUES: ProjectPriority[] = ["urgent", "high", "medium", "low", "none"];
+const PROJECT_TYPE_VALUES: ProjectType[] = [
+  "support",
+  "seo",
+  "development",
+  "transit",
+];
 const COLUMN_KEYS: ProjectColumnKey[] = [
   "type",
+  "client",
   "priority",
   "progress",
   "lead",
@@ -718,6 +753,7 @@ const COLUMN_KEYS: ProjectColumnKey[] = [
 const SORT_FIELDS: ProjectSortField[] = [
   "name",
   "type",
+  "client",
   "priority",
   "status",
   "progress",
@@ -728,6 +764,8 @@ function countActiveFilters(f: ProjectListFilters): number {
   let c = 0;
   if (f.statuses.length) c++;
   if (f.priorities.length) c++;
+  if (f.types.length) c++;
+  if (f.clients.length) c++;
   if (f.leads.length) c++;
   return c;
 }
@@ -839,6 +877,7 @@ export function ProjectsPage() {
   const rowLink = useRowLink();
   const currentUser = useAuthStore((s) => s.user);
   const { getActorName } = useActorName();
+  const projectTypeLabels = useProjectTypeLabels();
 
   const viewMode = useProjectViewStore((s) => s.viewMode);
   const setViewMode = useProjectViewStore((s) => s.setViewMode);
@@ -902,14 +941,44 @@ export function ProjectsPage() {
     return m;
   }, [projects]);
 
+  const clientOptions = useMemo(() => {
+    const m = new Map<string, { name: string; count: number }>();
+    for (const p of projects) {
+      if (!p.client_id || !p.client_name) continue;
+      const existing = m.get(p.client_id);
+      if (existing) existing.count += 1;
+      else m.set(p.client_id, { name: p.client_name, count: 1 });
+    }
+    return [...m.entries()].sort(([, a], [, b]) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [projects]);
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = projects.filter((p) => {
-      if (q && !p.title.toLowerCase().includes(q) && !matchesPinyin(p.title, q)) {
+      if (
+        q &&
+        !p.title.toLowerCase().includes(q) &&
+        !matchesPinyin(p.title, q) &&
+        !p.client_name?.toLowerCase().includes(q)
+      ) {
         return false;
       }
       if (filters.statuses.length && !filters.statuses.includes(p.status)) return false;
       if (filters.priorities.length && !filters.priorities.includes(p.priority)) {
+        return false;
+      }
+      if (
+        filters.types.length &&
+        (!p.project_type || !filters.types.includes(p.project_type))
+      ) {
+        return false;
+      }
+      if (
+        filters.clients.length &&
+        (!p.client_id || !filters.clients.includes(p.client_id))
+      ) {
         return false;
       }
       if (filters.leads.length) {
@@ -932,6 +1001,17 @@ export function ProjectsPage() {
           (PROJECT_TYPE_SORT_ORDER[a.project_type] -
             PROJECT_TYPE_SORT_ORDER[b.project_type]) *
             dir || a.title.localeCompare(b.title)
+        );
+      }
+      if (sortField === "client") {
+        if (!a.client_name && !b.client_name) {
+          return a.title.localeCompare(b.title);
+        }
+        if (!a.client_name) return 1;
+        if (!b.client_name) return -1;
+        return (
+          a.client_name.localeCompare(b.client_name) * dir ||
+          a.title.localeCompare(b.title)
         );
       }
       if (sortField === "priority") {
@@ -965,25 +1045,29 @@ export function ProjectsPage() {
       ? t(($) => $.table.name)
       : f === "type"
         ? t(($) => $.type.label)
-        : f === "priority"
-          ? t(($) => $.table.priority)
-          : f === "status"
-            ? t(($) => $.table.status)
-            : f === "progress"
-              ? t(($) => $.table.progress)
-              : t(($) => $.table.created);
+        : f === "client"
+          ? t(($) => $.table.client)
+          : f === "priority"
+            ? t(($) => $.table.priority)
+            : f === "status"
+              ? t(($) => $.table.status)
+              : f === "progress"
+                ? t(($) => $.table.progress)
+                : t(($) => $.table.created);
   const columnLabel = (k: ProjectColumnKey) =>
     k === "type"
       ? t(($) => $.type.label)
-      : k === "priority"
-      ? t(($) => $.table.priority)
-      : k === "progress"
-        ? t(($) => $.table.progress)
-        : k === "lead"
-          ? t(($) => $.table.lead)
-          : k === "issues"
-            ? t(($) => $.table.issues)
-            : t(($) => $.table.created);
+      : k === "client"
+        ? t(($) => $.table.client)
+        : k === "priority"
+          ? t(($) => $.table.priority)
+          : k === "progress"
+            ? t(($) => $.table.progress)
+            : k === "lead"
+              ? t(($) => $.table.lead)
+              : k === "issues"
+                ? t(($) => $.table.issues)
+                : t(($) => $.table.created);
 
   const showEmpty = !isLoading && projects.length === 0;
   const countBadge = (n: number) => (
@@ -1103,6 +1187,55 @@ export function ProjectsPage() {
                         >
                           <HoverCheck checked={filters.statuses.includes(s)} />
                           {t(($) => $.status[s])}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <span className="flex-1">{t(($) => $.type.label)}</span>
+                      {filters.types.length > 0 && (
+                        <span className="text-xs font-medium text-primary">
+                          {filters.types.length}
+                        </span>
+                      )}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-auto min-w-52">
+                      {PROJECT_TYPE_VALUES.map((projectType) => (
+                        <DropdownMenuCheckboxItem
+                          key={projectType}
+                          checked={filters.types.includes(projectType)}
+                          onCheckedChange={() =>
+                            toggleFilter("types", projectType)
+                          }
+                          className={FILTER_ITEM_CLASS}
+                        >
+                          <HoverCheck checked={filters.types.includes(projectType)} />
+                          {projectTypeLabels[projectType]}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <span className="flex-1">{t(($) => $.table.client)}</span>
+                      {filters.clients.length > 0 && (
+                        <span className="text-xs font-medium text-primary">
+                          {filters.clients.length}
+                        </span>
+                      )}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="max-h-72 w-auto min-w-48 overflow-y-auto">
+                      {clientOptions.map(([clientID, { name, count }]) => (
+                        <DropdownMenuCheckboxItem
+                          key={clientID}
+                          checked={filters.clients.includes(clientID)}
+                          onCheckedChange={() => toggleFilter("clients", clientID)}
+                          className={FILTER_ITEM_CLASS}
+                        >
+                          <HoverCheck checked={filters.clients.includes(clientID)} />
+                          <span className="min-w-0 truncate">{name}</span>
+                          {countBadge(count)}
                         </DropdownMenuCheckboxItem>
                       ))}
                     </DropdownMenuSubContent>

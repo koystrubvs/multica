@@ -22,6 +22,7 @@
   },
   "table": {
     "name": "名称",
+    "client": "客户",
     "priority": "优先级",
     "status": "状态",
     "progress": "进度",

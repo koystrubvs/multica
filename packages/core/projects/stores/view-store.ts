@@ -15,6 +15,7 @@ export type ProjectViewMode = "compact" | "comfortable";
 export type ProjectSortField =
   | "name"
   | "type"
+  | "client"
   | "priority"
   | "status"
   | "progress"
@@ -28,6 +29,7 @@ export const PROJECT_SORT_DEFAULT_DIRECTION: Record<
 > = {
   name: "asc",
   type: "asc",
+  client: "asc",
   priority: "desc",
   status: "asc",
   progress: "desc",
@@ -40,6 +42,10 @@ export interface ProjectListFilters {
   statuses: string[];
   /** ProjectPriority values. */
   priorities: string[];
+  /** ProjectType values. */
+  types: string[];
+  /** Business client IDs projected onto projects. */
+  clients: string[];
   /** Composite "type:id" lead refs (member or agent). */
   leads: string[];
 }
@@ -47,6 +53,8 @@ export interface ProjectListFilters {
 export const EMPTY_PROJECT_FILTERS: ProjectListFilters = {
   statuses: [],
   priorities: [],
+  types: [],
+  clients: [],
   leads: [],
 };
 
@@ -54,6 +62,7 @@ export const EMPTY_PROJECT_FILTERS: ProjectListFilters = {
 // is the project's defining lifecycle field), so they're not in this set.
 export type ProjectColumnKey =
   | "type"
+  | "client"
   | "priority"
   | "progress"
   | "lead"
