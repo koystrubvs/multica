@@ -687,6 +687,11 @@
       "average": "Среднее",
       "count": "Количество"
     },
-    "rename_title": "Переименовать задачу"
+    "rename_title": "Переименовать задачу",
+    "load_more": "Загрузить ещё",
+    "loading_branch": "Загрузка…",
+    "value_unavailable": "Значение недоступно",
+    "group_property_unavailable": "Свойство группировки больше недоступно. Группировка сброшена.",
+    "group_active": "Группа: {{group}}"
   }
 }
