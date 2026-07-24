@@ -190,7 +190,7 @@ const PROJECT: Project = {
   icon: null,
   status: "in_progress",
   priority: "high",
-  project_type: null,
+  project_type: "seo",
   lead_type: null,
   lead_id: null,
   start_date: null,
@@ -251,6 +251,19 @@ beforeEach(() => {
 });
 
 describe("ProjectsPage compact row navigation", () => {
+  it("renders project type in its own table column", () => {
+    renderProjects();
+
+    expect(screen.getByRole("columnheader", { name: "Project type" })).toBeInTheDocument();
+
+    const row = projectRow();
+    const titleCell = within(row).getByText(PROJECT.title).closest('[role="cell"]');
+    const typeCell = within(row).getByText("Website SEO").closest('[role="cell"]');
+
+    expect(typeCell).toBeInTheDocument();
+    expect(typeCell).not.toBe(titleCell);
+  });
+
   it("renders the project name as text, not a title link", () => {
     renderProjects();
 

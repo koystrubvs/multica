@@ -136,11 +136,13 @@ function leadFilterValue(p: Project): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Table (compact) view — ListGrid. Name + status are the core columns;
+// Table (compact) view — ListGrid. Name + project type + status are the core columns;
 // priority/progress/lead/issues/created collapse below @2xl, with min-width
 // + the wrapper's overflow as the escape valve. Rows use whole-row mouse
 // navigation; inline controls stop propagation so edit/menu clicks stay local.
 // ---------------------------------------------------------------------------
+
+const PROJECT_TYPE_COLUMN_WIDTH = 168;
 
 const COLUMN_WIDTHS: Record<ProjectColumnKey, number> = {
   priority: 116,
@@ -150,19 +152,20 @@ const COLUMN_WIDTHS: Record<ProjectColumnKey, number> = {
   created: 104,
 };
 
-// Fixed tracks: edges 12+12, checkbox 16, name min 200, status 116,
-// kebab 28 = 384, plus the 10 gap-x-3 gaps between the wide template's
-// 11 tracks.
-const FIXED_TRACKS_WIDTH = 384 + 10 * 12;
+// Fixed tracks: edges 12+12, checkbox 16, name min 200, project type 168,
+// status 116, kebab 28 = 552, plus the 11 gap-x-3 gaps between the wide
+// template's 12 tracks.
+const FIXED_TRACKS_WIDTH = 384 + PROJECT_TYPE_COLUMN_WIDTH + 11 * 12;
 
-// Render/track order: checkbox, name, status (core, fixed 116px), priority,
-// progress, lead, issues, created, kebab. MUST be a literal string —
+// Render/track order: checkbox, name, project type (core, fixed 168px),
+// status (core, fixed 116px), priority, progress, lead, issues, created,
+// kebab. MUST be a literal string —
 // Tailwind can't see interpolated `grid-cols-[...]` arbitrary values, so an
 // interpolated width silently drops the whole template and the grid
 // collapses to one column.
 const GRID_COLS =
-  "grid-cols-[0.75rem_1rem_minmax(120px,1fr)_116px_1.75rem_0.75rem] " +
-  "@2xl:grid-cols-[0.75rem_1rem_minmax(200px,1fr)_116px_var(--pjc-priority)_var(--pjc-progress)_var(--pjc-lead)_var(--pjc-issues)_var(--pjc-created)_1.75rem_0.75rem]";
+  "grid-cols-[0.75rem_1rem_minmax(120px,1fr)_168px_116px_1.75rem_0.75rem] " +
+  "@2xl:grid-cols-[0.75rem_1rem_minmax(200px,1fr)_168px_116px_var(--pjc-priority)_var(--pjc-progress)_var(--pjc-lead)_var(--pjc-issues)_var(--pjc-created)_1.75rem_0.75rem]";
 
 const stopRowNavigation = (e: MouseEvent) => e.stopPropagation();
 
@@ -382,10 +385,15 @@ function ProjectTableRow({
         <span className="min-w-0 truncate text-sm font-medium">
           {project.title}
         </span>
-        {project.project_type && (
+      </ListGridCell>
+
+      <ListGridCell>
+        {project.project_type ? (
           <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
             {projectTypeLabels[project.project_type]}
           </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </ListGridCell>
 
@@ -504,6 +512,9 @@ function ProjectTableHeader({
       </div>
       <ListGridHeaderCell sorted={sorted("name")} onSort={() => onSort("name")}>
         {t(($) => $.table.name)}
+      </ListGridHeaderCell>
+      <ListGridHeaderCell>
+        {t(($) => $.type.label)}
       </ListGridHeaderCell>
       <ListGridHeaderCell sorted={sorted("status")} onSort={() => onSort("status")}>
         {t(($) => $.table.status)}
