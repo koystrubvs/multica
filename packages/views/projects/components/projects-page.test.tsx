@@ -243,6 +243,8 @@ beforeEach(() => {
   mocks.createPin.mockClear();
   mocks.deletePin.mockClear();
   mocks.openModal.mockClear();
+  mocks.projectViewState.toggleSort.mockClear();
+  mocks.projectViewState.setSortField.mockClear();
   mocks.projectViewState.viewMode = "compact";
   mocks.projectViewState.sortField = "name";
   mocks.projectViewState.sortDirection = "asc";
@@ -262,6 +264,47 @@ describe("ProjectsPage compact row navigation", () => {
 
     expect(typeCell).toBeInTheDocument();
     expect(typeCell).not.toBe(titleCell);
+  });
+
+  it("sorts from the project type column header", async () => {
+    const user = userEvent.setup();
+    renderProjects();
+
+    const typeHeader = screen.getByRole("columnheader", { name: "Project type" });
+    await user.click(within(typeHeader).getByRole("button", { name: "Project type" }));
+
+    expect(mocks.projectViewState.toggleSort).toHaveBeenCalledWith("type");
+  });
+
+  it("orders project types consistently and keeps unspecified projects last", () => {
+    mocks.projects = [
+      { ...PROJECT, id: "none", title: "No Type", project_type: null },
+      { ...PROJECT, id: "transit", title: "Transit", project_type: "transit" },
+      { ...PROJECT, id: "development", title: "Development", project_type: "development" },
+      { ...PROJECT, id: "seo", title: "SEO", project_type: "seo" },
+      { ...PROJECT, id: "support", title: "Support", project_type: "support" },
+    ];
+    mocks.projectViewState.sortField = "type";
+
+    renderProjects();
+
+    const projectNames = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => {
+        const nameCell = within(row).getAllByRole("cell")[1]!;
+        return within(nameCell).getByText(
+          /^(Support|SEO|Development|Transit|No Type)$/,
+        ).textContent;
+      });
+
+    expect(projectNames).toEqual([
+      "Support",
+      "SEO",
+      "Development",
+      "Transit",
+      "No Type",
+    ]);
   });
 
   it("includes project type in the column picker", async () => {

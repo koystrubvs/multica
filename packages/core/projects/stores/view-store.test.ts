@@ -26,7 +26,11 @@ beforeAll(() => {
 
 beforeEach(() => {
   localStorage.clear();
-  useProjectViewStore.setState({ viewMode: "compact" });
+  useProjectViewStore.setState({
+    viewMode: "compact",
+    sortField: "created",
+    sortDirection: "desc",
+  });
   setCurrentWorkspace(null, null);
 });
 
@@ -42,6 +46,15 @@ describe("useProjectViewStore", () => {
   it("setViewMode mutates the store", () => {
     useProjectViewStore.getState().setViewMode("comfortable");
     expect(useProjectViewStore.getState().viewMode).toBe("comfortable");
+  });
+
+  it("uses ascending as the default direction when sorting by project type", () => {
+    useProjectViewStore.getState().toggleSort("type");
+    expect(useProjectViewStore.getState().sortField).toBe("type");
+    expect(useProjectViewStore.getState().sortDirection).toBe("asc");
+
+    useProjectViewStore.getState().toggleSort("type");
+    expect(useProjectViewStore.getState().sortDirection).toBe("desc");
   });
 
   it("partialize persists view prefs (no actions) under the workspace-namespaced key", async () => {

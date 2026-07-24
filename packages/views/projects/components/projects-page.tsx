@@ -95,6 +95,7 @@ import type {
   Project,
   ProjectPriority,
   ProjectStatus,
+  ProjectType,
   UpdateProjectRequest,
 } from "@multica/core/types";
 import {
@@ -124,6 +125,12 @@ const STATUS_ORDER: Record<ProjectStatus, number> = {
   paused: 2,
   completed: 3,
   cancelled: 4,
+};
+const PROJECT_TYPE_SORT_ORDER: Record<ProjectType, number> = {
+  support: 0,
+  seo: 1,
+  development: 2,
+  transit: 3,
 };
 
 const progressOf = (p: Project) =>
@@ -518,7 +525,11 @@ function ProjectTableHeader({
         {t(($) => $.table.name)}
       </ListGridHeaderCell>
       {isColVisible("type") ? (
-        <ListGridHeaderCell className="hidden @2xl:flex">
+        <ListGridHeaderCell
+          className="hidden @2xl:flex"
+          sorted={sorted("type")}
+          onSort={() => onSort("type")}
+        >
           {t(($) => $.type.label)}
         </ListGridHeaderCell>
       ) : (
@@ -704,7 +715,14 @@ const COLUMN_KEYS: ProjectColumnKey[] = [
   "issues",
   "created",
 ];
-const SORT_FIELDS: ProjectSortField[] = ["name", "priority", "status", "progress", "created"];
+const SORT_FIELDS: ProjectSortField[] = [
+  "name",
+  "type",
+  "priority",
+  "status",
+  "progress",
+  "created",
+];
 
 function countActiveFilters(f: ProjectListFilters): number {
   let c = 0;
@@ -904,6 +922,18 @@ export function ProjectsPage() {
     const sorted = [...filtered];
     sorted.sort((a, b) => {
       if (sortField === "name") return a.title.localeCompare(b.title) * dir;
+      if (sortField === "type") {
+        if (!a.project_type && !b.project_type) {
+          return a.title.localeCompare(b.title);
+        }
+        if (!a.project_type) return 1;
+        if (!b.project_type) return -1;
+        return (
+          (PROJECT_TYPE_SORT_ORDER[a.project_type] -
+            PROJECT_TYPE_SORT_ORDER[b.project_type]) *
+            dir || a.title.localeCompare(b.title)
+        );
+      }
       if (sortField === "priority") {
         return (
           (PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]) * dir ||
@@ -933,13 +963,15 @@ export function ProjectsPage() {
   const sortLabel = (f: ProjectSortField) =>
     f === "name"
       ? t(($) => $.table.name)
-      : f === "priority"
-        ? t(($) => $.table.priority)
-        : f === "status"
-          ? t(($) => $.table.status)
-          : f === "progress"
-            ? t(($) => $.table.progress)
-            : t(($) => $.table.created);
+      : f === "type"
+        ? t(($) => $.type.label)
+        : f === "priority"
+          ? t(($) => $.table.priority)
+          : f === "status"
+            ? t(($) => $.table.status)
+            : f === "progress"
+              ? t(($) => $.table.progress)
+              : t(($) => $.table.created);
   const columnLabel = (k: ProjectColumnKey) =>
     k === "type"
       ? t(($) => $.type.label)

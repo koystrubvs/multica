@@ -12,7 +12,13 @@ import { defaultStorage } from "../../platform/storage";
 // lifecycle better expressed as a filter). Search stays session-local.
 export type ProjectViewMode = "compact" | "comfortable";
 
-export type ProjectSortField = "name" | "priority" | "status" | "progress" | "created";
+export type ProjectSortField =
+  | "name"
+  | "type"
+  | "priority"
+  | "status"
+  | "progress"
+  | "created";
 
 export type ProjectSortDirection = "asc" | "desc";
 
@@ -21,6 +27,7 @@ export const PROJECT_SORT_DEFAULT_DIRECTION: Record<
   ProjectSortDirection
 > = {
   name: "asc",
+  type: "asc",
   priority: "desc",
   status: "asc",
   progress: "desc",
