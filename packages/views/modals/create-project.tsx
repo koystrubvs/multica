@@ -33,7 +33,7 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
 import { memberListOptions, agentListOptions } from "@multica/core/workspace/queries";
 import { useActorName } from "@multica/core/workspace/hooks";
-import type { ProjectStatus, ProjectPriority } from "@multica/core/types";
+import type { ProjectStatus, ProjectPriority, ProjectType } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@multica/ui/components/ui/dialog";
@@ -57,6 +57,10 @@ import {
   useProjectStatusLabels,
   useProjectPriorityLabels,
 } from "../projects/components/labels";
+import {
+  PROJECT_TYPE_ORDER,
+  useProjectTypeLabels,
+} from "../projects/components/project-type";
 import { ProjectStartDatePicker } from "../projects/components/project-start-date-picker";
 import { ProjectDueDatePicker } from "../projects/components/project-due-date-picker";
 import { PillButton } from "../common/pill-button";
@@ -92,6 +96,7 @@ function RepoUrlText({
 
 export function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const { t } = useT("modals");
+  const { t: tProjects } = useT("projects");
   const router = useNavigation();
   const workspace = useCurrentWorkspace();
   const workspaceName = workspace?.name;
@@ -102,6 +107,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const { getActorName } = useActorName();
   const projectStatusLabels = useProjectStatusLabels();
   const projectPriorityLabels = useProjectPriorityLabels();
+  const projectTypeLabels = useProjectTypeLabels();
 
   const draft = useProjectDraftStore((s) => s.draft);
   const setDraft = useProjectDraftStore((s) => s.setDraft);
@@ -111,11 +117,13 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const descEditorRef = useRef<ContentEditorRef>(null);
   const [status, setStatus] = useState<ProjectStatus>(draft.status);
   const [priority, setPriority] = useState<ProjectPriority>(draft.priority);
+  const [projectType, setProjectType] = useState<ProjectType | undefined>(draft.projectType);
   const [leadType, setLeadType] = useState<"member" | "agent" | undefined>(draft.leadType);
   const [leadId, setLeadId] = useState<string | undefined>(draft.leadId);
   const [icon, setIcon] = useState<string | undefined>(draft.icon);
   const [startDate, setStartDate] = useState<string>(draft.startDate ?? "");
   const [dueDate, setDueDate] = useState<string>(draft.dueDate ?? "");
+  const supportsDueDate = !projectType || projectType === "development";
   // Dates are collapsed into the ⋯ overflow by default (progressive
   // disclosure, mirroring create-issue); these flip a pill inline + open.
   const [startDatePickerOpen, setStartDatePickerOpen] = useState(false);
@@ -193,13 +201,23 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
   const updateTitle = (v: string) => { setTitle(v); setDraft({ title: v }); };
   const updateStatus = (v: ProjectStatus) => { setStatus(v); setDraft({ status: v }); };
   const updatePriority = (v: ProjectPriority) => { setPriority(v); setDraft({ priority: v }); };
+  const updateDueDate = (v: string) => { setDueDate(v); setDraft({ dueDate: v || undefined }); };
+  const updateProjectType = (v: ProjectType | undefined) => {
+    setProjectType(v);
+    setDraft({ projectType: v });
+    if (v && v !== "development") {
+      updateDueDate("");
+      setDueDatePickerOpen(false);
+    } else if (v === "development" && !dueDate) {
+      setDueDatePickerOpen(true);
+    }
+  };
   const updateLead = (type?: "member" | "agent", id?: string) => {
     setLeadType(type); setLeadId(id);
     setDraft({ leadType: type, leadId: id });
   };
   const updateIcon = (v: string | undefined) => { setIcon(v); setDraft({ icon: v }); };
   const updateStartDate = (v: string) => { setStartDate(v); setDraft({ startDate: v || undefined }); };
-  const updateDueDate = (v: string) => { setDueDate(v); setDraft({ dueDate: v || undefined }); };
 
   const [leadOpen, setLeadOpen] = useState(false);
   const [leadFilter, setLeadFilter] = useState("");
@@ -217,6 +235,11 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async () => {
     if (!title.trim() || submitting) return;
+    if (projectType === "development" && !dueDate) {
+      toast.error(tProjects(($) => $.type.development_due_required));
+      setDueDatePickerOpen(true);
+      return;
+    }
     // `sourceMode` decides which side's stash gets persisted — the other
     // side is silently dropped, so repos picked then abandoned for local
     // mode don't leak into the project.
@@ -252,6 +275,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
         icon,
         status,
         priority,
+        project_type: projectType,
         lead_type: leadType,
         lead_id: leadId,
         start_date: startDate || undefined,
@@ -434,6 +458,32 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <PillButton>
+                  <span className={projectType ? "" : "text-muted-foreground"}>
+                    {projectType
+                      ? projectTypeLabels[projectType]
+                      : tProjects(($) => $.type.label)}
+                  </span>
+                </PillButton>
+              }
+            />
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={() => updateProjectType(undefined)}>
+                <span className="text-muted-foreground">
+                  {tProjects(($) => $.type.unspecified)}
+                </span>
+              </DropdownMenuItem>
+              {PROJECT_TYPE_ORDER.map((value) => (
+                <DropdownMenuItem key={value} onClick={() => updateProjectType(value)}>
+                  <span>{projectTypeLabels[value]}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Popover
             open={leadOpen}
             onOpenChange={(v) => {
@@ -542,7 +592,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
             />
           )}
 
-          {(dueDate || dueDatePickerOpen) && (
+          {supportsDueDate && (dueDate || dueDatePickerOpen) && (
             <ProjectDueDatePicker
               dueDate={dueDate || null}
               onUpdate={(u) => updateDueDate(u.due_date ?? "")}
@@ -804,7 +854,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
           {/* Overflow — always the last child so it stays at the end of the
               wrap flow. Only rendered while a date is still collapsible; when
               both are set there is nothing left to add. */}
-          {(!startDate || !dueDate) && (
+          {(!startDate || (supportsDueDate && !dueDate)) && (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -814,7 +864,7 @@ export function CreateProjectModal({ onClose }: { onClose: () => void }) {
                 }
               />
               <DropdownMenuContent align="start" className="w-auto">
-                {!dueDate && (
+                {supportsDueDate && !dueDate && (
                   <DropdownMenuItem onClick={() => setDueDatePickerOpen(true)}>
                     <CalendarDays className="h-3.5 w-3.5" />
                     {t(($) => $.create_project.set_due_date)}

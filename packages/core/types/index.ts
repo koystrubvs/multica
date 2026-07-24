@@ -112,6 +112,7 @@ export type {
   Project,
   ProjectStatus,
   ProjectPriority,
+  ProjectType,
   CreateProjectRequest,
   UpdateProjectRequest,
   ListProjectsResponse,

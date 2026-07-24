@@ -27,6 +27,7 @@ type ProjectResponse struct {
 	Icon        *string `json:"icon"`
 	Status      string  `json:"status"`
 	Priority    string  `json:"priority"`
+	ProjectType *string `json:"project_type"`
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
 	// StartDate / DueDate are calendar days ("YYYY-MM-DD"), no time-of-day or
@@ -53,6 +54,7 @@ func projectToResponse(p db.Project) ProjectResponse {
 		Icon:        textToPtr(p.Icon),
 		Status:      p.Status,
 		Priority:    p.Priority,
+		ProjectType: textToPtr(p.ProjectType),
 		LeadType:    textToPtr(p.LeadType),
 		LeadID:      uuidToPtr(p.LeadID),
 		StartDate:   dateToPtr(p.StartDate),
@@ -84,6 +86,7 @@ type CreateProjectRequest struct {
 	Icon        *string                               `json:"icon"`
 	Status      string                                `json:"status"`
 	Priority    string                                `json:"priority"`
+	ProjectType *string                               `json:"project_type"`
 	LeadType    *string                               `json:"lead_type"`
 	LeadID      *string                               `json:"lead_id"`
 	StartDate   *string                               `json:"start_date"`
@@ -107,6 +110,7 @@ type UpdateProjectRequest struct {
 	Icon        *string `json:"icon"`
 	Status      *string `json:"status"`
 	Priority    *string `json:"priority"`
+	ProjectType *string `json:"project_type"`
 	LeadType    *string `json:"lead_type"`
 	LeadID      *string `json:"lead_id"`
 	StartDate   *string `json:"start_date"`
@@ -202,6 +206,11 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 // exact mismatch reported in #3925 (`--status active`).
 var validProjectStatuses = []string{"planned", "in_progress", "paused", "completed", "cancelled"}
 var validProjectPriorities = []string{"urgent", "high", "medium", "low", "none"}
+var validProjectTypes = []string{"support", "seo", "development", "transit"}
+
+func isIndefiniteProjectType(value string) bool {
+	return value == "support" || value == "seo" || value == "transit"
+}
 
 // validateProjectEnum writes a 400 and returns false when value is not in
 // allowed; the caller returns immediately on false.
@@ -259,6 +268,13 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if !validateProjectEnum(w, "priority", priority, validProjectPriorities) {
 		return
 	}
+	var projectType pgtype.Text
+	if req.ProjectType != nil {
+		if !validateProjectEnum(w, "project_type", *req.ProjectType, validProjectTypes) {
+			return
+		}
+		projectType = pgtype.Text{String: *req.ProjectType, Valid: true}
+	}
 	var leadType pgtype.Text
 	var leadID pgtype.UUID
 	if req.LeadType != nil {
@@ -295,6 +311,10 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		dueDate = d
+	}
+	if projectType.Valid && isIndefiniteProjectType(projectType.String) && dueDate.Valid {
+		writeError(w, http.StatusBadRequest, "due_date must be empty for an indefinite project_type")
+		return
 	}
 
 	// Pre-validate every resource payload before opening a transaction so an
@@ -342,6 +362,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		LeadType:    leadType,
 		LeadID:      leadID,
 		Priority:    priority,
+		ProjectType: projectType,
 		StartDate:   startDate,
 		DueDate:     dueDate,
 	}
@@ -475,6 +496,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		Icon:        prevProject.Icon,
 		LeadType:    prevProject.LeadType,
 		LeadID:      prevProject.LeadID,
+		ProjectType: prevProject.ProjectType,
 		StartDate:   prevProject.StartDate,
 		DueDate:     prevProject.DueDate,
 	}
@@ -492,6 +514,16 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		params.Priority = pgtype.Text{String: *req.Priority, Valid: true}
+	}
+	if _, ok := rawFields["project_type"]; ok {
+		if req.ProjectType != nil {
+			if !validateProjectEnum(w, "project_type", *req.ProjectType, validProjectTypes) {
+				return
+			}
+			params.ProjectType = pgtype.Text{String: *req.ProjectType, Valid: true}
+		} else {
+			params.ProjectType = pgtype.Text{Valid: false}
+		}
 	}
 	if _, ok := rawFields["description"]; ok {
 		if req.Description != nil {
@@ -549,6 +581,16 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			params.DueDate = d
 		} else {
 			params.DueDate = pgtype.Date{Valid: false} // explicit null = clear date
+		}
+	}
+	if params.ProjectType.Valid && isIndefiniteProjectType(params.ProjectType.String) {
+		if _, typeChanged := rawFields["project_type"]; typeChanged {
+			// Changing to an indefinite service removes a stale contractual
+			// deadline atomically, even when the caller omits due_date.
+			params.DueDate = pgtype.Date{Valid: false}
+		} else if _, dueChanged := rawFields["due_date"]; dueChanged && params.DueDate.Valid {
+			writeError(w, http.StatusBadRequest, "due_date must be empty for an indefinite project_type")
+			return
 		}
 	}
 	project, err := h.Queries.UpdateProject(r.Context(), params)
@@ -714,7 +756,7 @@ func buildProjectSearchQuery(phrase string, terms []string, includeClosed bool) 
 	offsetParam := nextArg(nil)
 
 	query := fmt.Sprintf(`SELECT p.id, p.workspace_id, p.title, p.description, p.icon,
-		p.status, p.priority, p.lead_type, p.lead_id,
+		p.status, p.priority, p.project_type, p.lead_type, p.lead_id,
 		p.start_date, p.due_date,
 		p.created_at, p.updated_at,
 		COUNT(*) OVER() AS total_count,
@@ -791,6 +833,7 @@ func (h *Handler) SearchProjects(w http.ResponseWriter, r *http.Request) {
 				&row.project.Icon,
 				&row.project.Status,
 				&row.project.Priority,
+				&row.project.ProjectType,
 				&row.project.LeadType,
 				&row.project.LeadID,
 				&row.project.StartDate,

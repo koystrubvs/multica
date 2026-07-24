@@ -25,6 +25,7 @@ vi.mock("@multica/core/projects", () => ({
         description: "",
         status: "planned",
         priority: "medium",
+        projectType: undefined,
         leadType: undefined,
         leadId: undefined,
         icon: undefined,
@@ -196,6 +197,23 @@ describe("CreateProjectModal", () => {
 
     await user.click(screen.getByRole("button", { name: /Set due date/ }));
     expect(screen.getByRole("button", { name: "Due date" })).toBeInTheDocument();
+  });
+
+  it("offers the four project types and only exposes a deadline for finite work", async () => {
+    const user = userEvent.setup();
+    renderWithI18n(<CreateProjectModal onClose={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Website support" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Website SEO" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Website development" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Transit" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Website development" }));
+    expect(screen.getByRole("button", { name: "Due date" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Website support" }));
+    expect(screen.queryByRole("button", { name: "Due date" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Set due date/ })).not.toBeInTheDocument();
   });
 
   it("filters workspace repositories by search text", async () => {

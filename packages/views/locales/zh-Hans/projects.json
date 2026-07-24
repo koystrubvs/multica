@@ -46,6 +46,15 @@
     "low": "低",
     "none": "无优先级"
   },
+  "type": {
+    "label": "项目类型",
+    "unspecified": "未指定",
+    "support": "网站技术支持",
+    "seo": "网站 SEO 推广",
+    "development": "网站开发",
+    "transit": "转付",
+    "development_due_required": "请设置网站开发项目的合同交付日期。"
+  },
   "lead": {
     "no_lead": "无负责人",
     "assign_placeholder": "指派负责人...",
@@ -74,6 +83,7 @@
     "section_description": "描述",
     "prop_start_date": "开始日期",
     "prop_due_date": "截止日期",
+    "prop_contract_due_date": "合同交付日期",
     "clear_date": "清除日期",
     "description_placeholder": "添加描述...",
     "description_hint": "会作为项目上下文提供给智能体，应用于该项目下的每个任务。",

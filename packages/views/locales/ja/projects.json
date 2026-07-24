@@ -46,6 +46,15 @@
     "low": "低",
     "none": "優先度なし"
   },
+  "type": {
+    "label": "プロジェクトタイプ",
+    "unspecified": "未指定",
+    "support": "ウェブサイト保守",
+    "seo": "ウェブサイトSEO",
+    "development": "ウェブサイト開発",
+    "transit": "トランジット",
+    "development_due_required": "ウェブサイト開発プロジェクトの契約納期を設定してください。"
+  },
   "lead": {
     "no_lead": "リードなし",
     "assign_placeholder": "リードを割り当て...",
@@ -74,6 +83,7 @@
     "section_description": "説明",
     "prop_start_date": "開始日",
     "prop_due_date": "期限",
+    "prop_contract_due_date": "契約納期",
     "clear_date": "日付をクリア",
     "description_placeholder": "説明を追加...",
     "description_hint": "このプロジェクトのすべてのタスクで、コンテキストとしてエージェントに共有されます。",

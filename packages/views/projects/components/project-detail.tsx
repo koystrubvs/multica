@@ -80,6 +80,7 @@ import {
 } from "@multica/ui/components/ui/alert-dialog";
 import { useT } from "../../i18n";
 import { useProjectStatusLabels, useProjectPriorityLabels } from "./labels";
+import { PROJECT_TYPE_ORDER, useProjectTypeLabels } from "./project-type";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 
 // ---------------------------------------------------------------------------
@@ -114,6 +115,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const { t } = useT("projects");
   const statusLabels = useProjectStatusLabels();
   const priorityLabels = useProjectPriorityLabels();
+  const projectTypeLabels = useProjectTypeLabels();
   const wsId = useWorkspaceId();
   const wsPaths = useWorkspacePaths();
   const router = useNavigation();
@@ -421,6 +423,42 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </PropRow>
+          <PropRow label={t(($) => $.type.label)}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button type="button" className="inline-flex items-center gap-1.5 text-xs hover:text-foreground transition-colors">
+                    <span className={project.project_type ? "" : "text-muted-foreground"}>
+                      {project.project_type
+                        ? projectTypeLabels[project.project_type]
+                        : t(($) => $.type.unspecified)}
+                    </span>
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem onClick={() => handleUpdateField({ project_type: null })}>
+                  <span className="text-muted-foreground">{t(($) => $.type.unspecified)}</span>
+                  {project.project_type === null && <Check className="ml-auto h-3.5 w-3.5" />}
+                </DropdownMenuItem>
+                {PROJECT_TYPE_ORDER.map((value) => (
+                  <DropdownMenuItem
+                    key={value}
+                    onClick={() =>
+                      handleUpdateField(
+                        value === "development"
+                          ? { project_type: value }
+                          : { project_type: value, due_date: null },
+                      )
+                    }
+                  >
+                    <span>{projectTypeLabels[value]}</span>
+                    {value === project.project_type && <Check className="ml-auto h-3.5 w-3.5" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </PropRow>
           <PropRow label={t(($) => $.table.lead)}>
             <Popover open={leadOpen} onOpenChange={(v) => { setLeadOpen(v); if (!v) setLeadFilter(""); }}>
               <PopoverTrigger
@@ -498,9 +536,17 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           <PropRow label={t(($) => $.detail.prop_start_date)}>
             <ProjectStartDatePicker startDate={project.start_date} onUpdate={handleUpdateField} />
           </PropRow>
-          <PropRow label={t(($) => $.detail.prop_due_date)}>
-            <ProjectDueDatePicker dueDate={project.due_date} onUpdate={handleUpdateField} />
-          </PropRow>
+          {(!project.project_type || project.project_type === "development") && (
+            <PropRow
+              label={
+                project.project_type === "development"
+                  ? t(($) => $.detail.prop_contract_due_date)
+                  : t(($) => $.detail.prop_due_date)
+              }
+            >
+              <ProjectDueDatePicker dueDate={project.due_date} onUpdate={handleUpdateField} />
+            </PropRow>
+          )}
         </div>}
       </div>
 

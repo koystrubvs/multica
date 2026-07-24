@@ -47,6 +47,15 @@
     "low": "Low",
     "none": "No priority"
   },
+  "type": {
+    "label": "Project type",
+    "unspecified": "Not specified",
+    "support": "Website support",
+    "seo": "Website SEO",
+    "development": "Website development",
+    "transit": "Transit",
+    "development_due_required": "Set the contractual deadline for a website development project."
+  },
   "lead": {
     "no_lead": "No lead",
     "assign_placeholder": "Assign lead...",
@@ -75,6 +84,7 @@
     "section_description": "Description",
     "prop_start_date": "Start date",
     "prop_due_date": "Due date",
+    "prop_contract_due_date": "Contract deadline",
     "clear_date": "Clear date",
     "description_placeholder": "Add description...",
     "description_hint": "Shared with agents as context for every task in this project.",

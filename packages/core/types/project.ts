@@ -2,6 +2,8 @@ export type ProjectStatus = "planned" | "in_progress" | "paused" | "completed" |
 
 export type ProjectPriority = "urgent" | "high" | "medium" | "low" | "none";
 
+export type ProjectType = "support" | "seo" | "development" | "transit";
+
 export interface Project {
   id: string;
   workspace_id: string;
@@ -10,6 +12,7 @@ export interface Project {
   icon: string | null;
   status: ProjectStatus;
   priority: ProjectPriority;
+  project_type: ProjectType | null;
   lead_type: "member" | "agent" | null;
   lead_id: string | null;
   // Calendar days ("YYYY-MM-DD"), no time-of-day or timezone — same contract as
@@ -29,6 +32,7 @@ export interface CreateProjectRequest {
   icon?: string;
   status?: ProjectStatus;
   priority?: ProjectPriority;
+  project_type?: ProjectType;
   lead_type?: "member" | "agent";
   lead_id?: string;
   start_date?: string;
@@ -44,6 +48,7 @@ export interface UpdateProjectRequest {
   icon?: string | null;
   status?: ProjectStatus;
   priority?: ProjectPriority;
+  project_type?: ProjectType | null;
   lead_type?: "member" | "agent" | null;
   lead_id?: string | null;
   // Omit the key to leave the date untouched; send null (or "") to clear it.

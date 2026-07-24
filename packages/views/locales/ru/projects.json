@@ -49,6 +49,15 @@
     "low": "Низкий",
     "none": "Без приоритета"
   },
+  "type": {
+    "label": "Тип проекта",
+    "unspecified": "Не указан",
+    "support": "Техподдержка сайта",
+    "seo": "SEO-продвижение сайта",
+    "development": "Разработка сайта",
+    "transit": "Транзит",
+    "development_due_required": "Укажите договорный срок для проекта разработки сайта."
+  },
   "lead": {
     "no_lead": "Нет ответственного",
     "assign_placeholder": "Назначить ответственного...",
@@ -77,6 +86,7 @@
     "section_description": "Описание",
     "prop_start_date": "Дата начала",
     "prop_due_date": "Срок",
+    "prop_contract_due_date": "Срок по договору",
     "clear_date": "Очистить дату",
     "description_placeholder": "Добавьте описание...",
     "description_hint": "Доступно агентам как контекст для каждой задачи в этом проекте.",

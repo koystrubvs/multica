@@ -108,6 +108,7 @@ import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { useFormatRelativeDate } from "./labels";
 import { ProjectStatusBadge, ProjectPriorityBadge } from "./project-badge";
 import { ProjectLeadPicker } from "./project-lead-picker";
+import { useProjectTypeLabels } from "./project-type";
 
 // Sort order maps for the enum columns (header sort needs a total order).
 const PRIORITY_ORDER: Record<ProjectPriority, number> = {
@@ -363,6 +364,7 @@ function ProjectTableRow({
   rowLink: ReturnType<typeof useRowLink>;
 }) {
   const formatRelativeDate = useFormatRelativeDate();
+  const projectTypeLabels = useProjectTypeLabels();
   const updateProject = useUpdateProject();
   const handleUpdate = useCallback(
     (data: UpdateProjectRequest) => updateProject.mutate({ id: project.id, ...data }),
@@ -380,6 +382,11 @@ function ProjectTableRow({
         <span className="min-w-0 truncate text-sm font-medium">
           {project.title}
         </span>
+        {project.project_type && (
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            {projectTypeLabels[project.project_type]}
+          </span>
+        )}
       </ListGridCell>
 
       {/* status — core column, always visible */}
@@ -569,6 +576,7 @@ function ProjectCard({
   const { t } = useT("projects");
   const wsPaths = useWorkspacePaths();
   const formatRelativeDate = useFormatRelativeDate();
+  const projectTypeLabels = useProjectTypeLabels();
   const updateProject = useUpdateProject();
   const handleUpdate = useCallback(
     (data: UpdateProjectRequest) => updateProject.mutate({ id: project.id, ...data }),
@@ -589,6 +597,11 @@ function ProjectCard({
           >
             <ProjectIcon project={project} size="sm" />
             <h3 className="truncate text-sm font-medium">{project.title}</h3>
+            {project.project_type && (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                {projectTypeLabels[project.project_type]}
+              </span>
+            )}
           </AppLink>
           <ProjectRowActions project={project} pinned={pinned} canDelete={canDelete} />
           <ProjectStatusBadge project={project} handleUpdate={handleUpdate} triggerClassName="shrink-0" />

@@ -190,6 +190,7 @@ const PROJECT: Project = {
   icon: null,
   status: "in_progress",
   priority: "high",
+  project_type: null,
   lead_type: null,
   lead_id: null,
   start_date: null,

@@ -46,6 +46,15 @@
     "low": "낮음",
     "none": "우선순위 없음"
   },
+  "type": {
+    "label": "프로젝트 유형",
+    "unspecified": "지정되지 않음",
+    "support": "웹사이트 기술 지원",
+    "seo": "웹사이트 SEO",
+    "development": "웹사이트 개발",
+    "transit": "트랜짓",
+    "development_due_required": "웹사이트 개발 프로젝트의 계약 완료일을 설정하세요."
+  },
   "lead": {
     "no_lead": "리드 없음",
     "assign_placeholder": "리드 지정...",
@@ -74,6 +83,7 @@
     "section_description": "설명",
     "prop_start_date": "시작일",
     "prop_due_date": "마감일",
+    "prop_contract_due_date": "계약 완료일",
     "clear_date": "날짜 지우기",
     "description_placeholder": "설명 추가...",
     "description_hint": "이 프로젝트의 모든 작업에서 컨텍스트로 에이전트에게 공유됩니다.",

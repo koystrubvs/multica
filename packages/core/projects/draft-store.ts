@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import type { ProjectStatus, ProjectPriority } from "../types";
+import type { ProjectStatus, ProjectPriority, ProjectType } from "../types";
 import { createWorkspaceAwareStorage, registerForWorkspaceRehydration } from "../platform/workspace-storage";
 import { defaultStorage } from "../platform/storage";
 
@@ -9,6 +9,7 @@ interface ProjectDraft {
   description: string;
   status: ProjectStatus;
   priority: ProjectPriority;
+  projectType?: ProjectType;
   leadType?: "member" | "agent";
   leadId?: string;
   icon?: string;
@@ -22,6 +23,7 @@ const EMPTY_DRAFT: ProjectDraft = {
   description: "",
   status: "planned",
   priority: "none",
+  projectType: undefined,
   leadType: undefined,
   leadId: undefined,
   icon: undefined,
