@@ -64,6 +64,7 @@ import {
 import { ProjectStartDatePicker } from "../projects/components/project-start-date-picker";
 import { ProjectDueDatePicker } from "../projects/components/project-due-date-picker";
 import { PillButton } from "../common/pill-button";
+import { githubShortLabel } from "../common/github-url";
 import {
   isDesktopShell,
   pickDirectory,
@@ -83,7 +84,7 @@ function RepoUrlText({
       <TooltipTrigger
         render={
           <span className={cn("truncate flex-1 text-left", className)}>
-            {url}
+            {githubShortLabel(url)}
           </span>
         }
       />

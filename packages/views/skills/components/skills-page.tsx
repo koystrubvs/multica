@@ -30,7 +30,7 @@ import {
   selectSkillAssignments,
   skillListOptions,
 } from "@multica/core/workspace/queries";
-import { runtimeListOptions } from "@multica/core/runtimes";
+import { runtimeDisplayLabel, runtimeListOptions } from "@multica/core/runtimes";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { Badge } from "@multica/ui/components/ui/badge";
 import { Button } from "@multica/ui/components/ui/button";
@@ -346,7 +346,7 @@ function SourceCell({
   if (origin.type === "runtime_local") {
     icon = <HardDrive className="h-3 w-3 shrink-0" />;
     label = runtime
-      ? t(($) => $.table.source_runtime_named, { name: runtime.name })
+      ? t(($) => $.table.source_runtime_named, { name: runtimeDisplayLabel(runtime) })
       : origin.provider
         ? t(($) => $.table.source_runtime_provider, {
             provider: origin.provider,
