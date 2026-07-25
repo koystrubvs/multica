@@ -268,7 +268,21 @@
     "billing_dispute_reason_ph": "Почему сумма некорректна?",
     "billing_dispute_submit": "Отправить",
     "billing_dispute_cancel": "Отмена",
-    "billing_dispute_opened_toast": "Спор открыт — мы его рассмотрим"
+    "billing_dispute_opened_toast": "Спор открыт — мы его рассмотрим",
+    "pull_request_checks_none": "Проверок пока нет",
+    "pull_request_checks_all_passed": "Все проверки пройдены ({{total}}/{{total}})",
+    "pull_request_checks_running": "{{passed}}/{{total}} · {{running}} выполняется",
+    "pull_request_checks_failed_count": "{{failed}}/{{total}} с ошибкой",
+    "pull_request_checks_failed_named": "{{failed}}/{{total}} с ошибкой · {{names}}",
+    "pull_request_checks_more": "+{{count}} ещё",
+    "pull_request_merge_conflicting": "Есть конфликты слияния",
+    "pull_request_merge_ready": "Готов к слиянию",
+    "pull_request_merge_blocked": "Заблокирован",
+    "pull_request_merge_behind": "Отстаёт от базовой ветки",
+    "pull_request_merge_unstable": "Нестабилен",
+    "pull_request_merge_has_hooks": "Есть хуки",
+    "pull_request_snapshot_stale": "Обновлено {{time}}",
+    "pull_request_snapshot_stale_unknown": "Снимок может быть устаревшим"
   },
   "timeline": {
     "loading": "Загрузка..."
@@ -692,6 +706,7 @@
     "loading_branch": "Загрузка…",
     "value_unavailable": "Значение недоступно",
     "group_property_unavailable": "Свойство группировки больше недоступно. Группировка сброшена.",
-    "group_active": "Группа: {{group}}"
+    "group_active": "Группа: {{group}}",
+    "no_more": "Больше нет"
   }
 }

@@ -19,7 +19,12 @@
     "placeholder_archived_agent": "Этот агент архивирован",
     "add_tooltip": "Добавить",
     "upload_file": "Изображение или файлы",
-    "send_blocked_toast": "Сообщение не отправлено — у вас больше нет прав на использование этого агента"
+    "send_blocked_toast": "Сообщение не отправлено — у вас больше нет прав на использование этого агента",
+    "project_context": "Контекст проекта",
+    "change_project_context": "Изменить контекст проекта",
+    "remove_project_context": "Убрать контекст проекта",
+    "no_projects": "Проектов пока нет",
+    "project_context_unsupported": "Описание проекта не применится — демону этого агента нужно обновление"
   },
   "message_list": {
     "show_details": "Показать детали",
