@@ -64,7 +64,11 @@ const nextConfig: NextConfig = {
             },
           ]
         : [],
-      afterFiles: remoteApiUrl
+      // Keep backend proxies in `fallback`, not `afterFiles`. Next checks
+      // afterFiles before App Router route handlers, so a catch-all
+      // `/api/:path*` rewrite steals `/api/siteping-admin/*` (404 via Go).
+      afterFiles: [],
+      fallback: remoteApiUrl
         ? [
             {
               source: "/api/:path*",
@@ -84,7 +88,6 @@ const nextConfig: NextConfig = {
             },
           ]
         : [],
-      fallback: [],
     };
   },
 };
