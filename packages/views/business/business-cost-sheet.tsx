@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { api } from "@multica/core/api";
+import { ApiError, api } from "@multica/core/api";
 import type { BusinessRow } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
@@ -21,6 +21,7 @@ import {
 import { useT } from "../i18n";
 
 const FIELD_LABEL = "text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+const FIELD_HINT = "text-[11px] text-muted-foreground";
 const CATEGORIES = ["ai", "service", "infrastructure", "contractor", "tax", "bank", "other"] as const;
 
 type TT = (key: string, options?: { defaultValue?: string }) => string;
@@ -33,9 +34,22 @@ interface CostFormState {
   category: string;
   frequency: "monthly" | "yearly";
   chargeDay: string;
+  /** YYYY-MM-01 */
   startsOn: string;
+  /** YYYY-MM-01 or "" */
   endsOn: string;
   notes: string;
+}
+
+function toMonthStart(value: string, fallback: string): string {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}$/.test(raw)) return `${raw}-01`;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return `${raw.slice(0, 7)}-01`;
+  return fallback;
+}
+
+function monthValue(isoDay: string): string {
+  return isoDay ? isoDay.slice(0, 7) : "";
 }
 
 function emptyForm(month: string): CostFormState {
@@ -54,6 +68,7 @@ function emptyForm(month: string): CostFormState {
 }
 
 function formFromRow(row: BusinessRow, month: string): CostFormState {
+  const fallback = `${month}-01`;
   return {
     id: String(row.id ?? ""),
     name: String(row.name ?? ""),
@@ -62,10 +77,47 @@ function formFromRow(row: BusinessRow, month: string): CostFormState {
     category: String(row.category ?? "service"),
     frequency: String(row.frequency) === "yearly" ? "yearly" : "monthly",
     chargeDay: String(row.charge_day ?? 20),
-    startsOn: String(row.starts_on ?? `${month}-01`).slice(0, 10),
-    endsOn: String(row.ends_on ?? "").slice(0, 10),
+    startsOn: toMonthStart(String(row.starts_on ?? ""), fallback),
+    endsOn: row.ends_on ? toMonthStart(String(row.ends_on), "") : "",
     notes: String(row.notes ?? ""),
   };
+}
+
+function validateForm(form: CostFormState, tt: TT): string | null {
+  if (!form.name.trim()) return tt("costs.validation.name");
+  const amount = Number(form.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return tt("costs.validation.amount");
+  const day = Number(form.chargeDay);
+  if (!Number.isInteger(day) || day < 1 || day > 31) return tt("costs.validation.charge_day");
+  if (!/^\d{4}-\d{2}-01$/.test(form.startsOn)) return tt("costs.validation.starts_on");
+  if (form.endsOn) {
+    if (!/^\d{4}-\d{2}-01$/.test(form.endsOn)) return tt("costs.validation.ends_on");
+    if (form.endsOn < form.startsOn) return tt("costs.validation.ends_before_starts");
+  }
+  return null;
+}
+
+function mapApiError(message: string, tt: TT): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("month must use the first day") || lower.includes("invalid end month")) {
+    return tt("costs.validation.starts_on");
+  }
+  if (lower.includes("amount")) return tt("costs.validation.amount");
+  if (lower.includes("charge day")) return tt("costs.validation.charge_day");
+  if (lower.includes("name")) return tt("costs.validation.name");
+  if (lower.includes("recurring cost fields are invalid")) return tt("costs.validation.generic");
+  return message || tt("costs.save_error");
+}
+
+function schedulePreview(form: CostFormState, tt: TT): string {
+  const day = String(Math.min(Math.max(Number(form.chargeDay) || 1, 1), 31));
+  if (form.frequency !== "yearly") {
+    return tt("costs.day_of_month", { defaultValue: "{{day}}" }).replace("{{day}}", day);
+  }
+  const month = form.startsOn.slice(5, 7) || "01";
+  return tt("costs.day_of_year", { defaultValue: "{{day}}.{{month}}" })
+    .replace("{{day}}", day)
+    .replace("{{month}}", month);
 }
 
 export function BusinessCostSheet({
@@ -89,6 +141,7 @@ export function BusinessCostSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const editing = Boolean(form.id);
+  const preview = useMemo(() => schedulePreview(form, tt), [form, tt]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,10 +151,15 @@ export function BusinessCostSheet({
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const localError = validateForm(form, tt);
+    if (localError) {
+      setError(localError);
+      return;
+    }
     setBusy(true);
     setError("");
     const payload = {
-      name: form.name,
+      name: form.name.trim(),
       category: form.category,
       amount: form.amount,
       currency: form.currency,
@@ -120,7 +178,8 @@ export function BusinessCostSheet({
       onOpenChange(false);
       await onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : tt("costs.save_error"));
+      const message = cause instanceof ApiError || cause instanceof Error ? cause.message : "";
+      setError(mapApiError(message, tt));
     } finally {
       setBusy(false);
     }
@@ -221,26 +280,47 @@ export function BusinessCostSheet({
                 value={form.chargeDay}
                 onChange={(event) => setForm({ ...form, chargeDay: event.target.value })}
               />
+              <span className={FIELD_HINT}>
+                {form.frequency === "yearly" ? tt("costs.charge_day_hint_yearly") : tt("costs.charge_day_hint_monthly")}
+              </span>
             </label>
             <label className="block space-y-1">
-              <span className={FIELD_LABEL}>{tt("costs.starts_on")}</span>
+              <span className={FIELD_LABEL}>
+                {form.frequency === "yearly" ? tt("costs.starts_on_yearly") : tt("costs.starts_on")}
+              </span>
               <Input
                 required
-                type="date"
+                type="month"
                 className="h-9 text-sm"
-                value={form.startsOn}
-                onChange={(event) => setForm({ ...form, startsOn: event.target.value })}
+                value={monthValue(form.startsOn)}
+                onChange={(event) => setForm({
+                  ...form,
+                  startsOn: event.target.value ? `${event.target.value}-01` : "",
+                })}
               />
+              <span className={FIELD_HINT}>
+                {form.frequency === "yearly" ? tt("costs.starts_on_hint_yearly") : tt("costs.starts_on_hint_monthly")}
+              </span>
             </label>
             <label className="block space-y-1">
               <span className={FIELD_LABEL}>{tt("costs.ends_on")}</span>
               <Input
-                type="date"
+                type="month"
                 className="h-9 text-sm"
-                value={form.endsOn}
-                onChange={(event) => setForm({ ...form, endsOn: event.target.value })}
+                value={monthValue(form.endsOn)}
+                onChange={(event) => setForm({
+                  ...form,
+                  endsOn: event.target.value ? `${event.target.value}-01` : "",
+                })}
               />
+              <span className={FIELD_HINT}>{tt("costs.ends_on_hint")}</span>
             </label>
+            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                {tt("costs.schedule")}
+              </div>
+              <div className="mt-1 text-sm text-foreground">{preview}</div>
+            </div>
             <label className="block space-y-1">
               <span className={FIELD_LABEL}>{tt("costs.notes")}</span>
               <Input

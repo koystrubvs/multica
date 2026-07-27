@@ -138,7 +138,7 @@ func (h *Handler) CreateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 		Status:    "active",
 	}
 	if err := fields.normalizeAndValidate(); err != nil {
-		writeError(w, http.StatusBadRequest, "recurring cost fields are invalid")
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *Handler) UpdateBusinessRecurringCost(w http.ResponseWriter, r *http.Req
 		fields.Status = *request.Status
 	}
 	if err := fields.normalizeAndValidate(); err != nil {
-		writeError(w, http.StatusBadRequest, "recurring cost fields are invalid")
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
