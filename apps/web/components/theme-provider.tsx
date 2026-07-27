@@ -9,8 +9,18 @@ export { ThemeProvider } from "@multica/ui/components/common/theme-provider"
 if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   const orig = console.error;
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === "string" && args[0].includes("Encountered a script tag"))
+    const text = args
+      .filter((arg): arg is string => typeof arg === "string")
+      .join(" ");
+    // next-themes injects a script; React 19 warns, but the script is correct.
+    if (text.includes("Encountered a script tag")) return;
+    // Next.js 16 opens a full-screen console overlay on console.error that
+    // intercepts all clicks. ApiClient already throws to callers — keep the
+    // log as warn so failed optional requests (e.g. Elba 503) don't freeze UI.
+    if (text.includes("[api]")) {
+      console.warn(...args);
       return;
+    }
     orig.apply(console, args);
   };
 }

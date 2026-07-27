@@ -149,7 +149,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                 <NativeSelectOption value="personal_card">{tt("values.personal_card", { defaultValue: "personal_card" })}</NativeSelectOption>
               </NativeSelect>
               <Input name="notes" className="h-7 min-w-56 flex-1 text-xs" defaultValue={text(client, "notes")} placeholder={t(($) => $.fields.notes)} />
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+              <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
             </form>
           </CardSection>
           )}
@@ -179,7 +179,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                       <NativeSelectOption value="archived">{tt("values.archived", { defaultValue: "archived" })}</NativeSelectOption>
                     </NativeSelect>
                     <label className="flex items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(agreement.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                    <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                   </form>
                 );
               })}
@@ -188,7 +188,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                 <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
                 <NativeSelect size="sm" name="model">{AGREEMENT_MODELS.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
                 <Input name="amount" inputMode="decimal" className="h-7 w-24 text-xs" placeholder={t(($) => $.fields.amount)} />
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.add_agreement)}</Button>
+                <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.add_agreement)}</Button>
               </form>
             </div>
           </CardSection>
@@ -218,7 +218,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                     <Input name="planned" inputMode="decimal" className="h-7 w-24 text-xs" defaultValue={String(Number(row.planned_amount_rub ?? 0))} />
                     <Input name="due" type="date" className="h-7 w-auto text-xs" defaultValue={text(row, "due_on")} />
                     <label className="flex items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(row.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                    <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                     <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" disabled={busy !== ""} onClick={() => void run(`skip-${id}`, () => api.businessAction(businessID, `receivables/${id}`, { status: "skipped" }, "PATCH"))}>{t(($) => $.actions.skip)}</Button>
                   </form>
                 );
@@ -258,7 +258,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                     )}>
                       {state === "linked" ? t(($) => $.billing.state_linked) : state === "mismatch" ? t(($) => $.billing.state_mismatch) : t(($) => $.billing.state_off)}
                     </span>
-                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                    <Button type="submit" size="sm" variant="ghost" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                   </form>
                 );
               })}
@@ -271,7 +271,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                   {(data.available_projects ?? []).map((row) => <option key={text(row, "project_id")} value={text(row, "project_id")}>{text(row, "workspace_name")} · {text(row, "project_title")}</option>)}
                 </select>
                 <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.map_projects)}</Button>
+                <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.map_projects)}</Button>
               </form>
             </div>
           </CardSection>
@@ -297,7 +297,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                             return <NativeSelectOption key={option.id} value={option.id}>{inn ? `${name} · ${inn}` : name}</NativeSelectOption>;
                           })}
                         </NativeSelect>
-                        <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.billing.apply)}</Button>
+                        <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.billing.apply)}</Button>
                       </>
                     )}
                   </form>
@@ -306,7 +306,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("payer", () => api.businessAction(businessID, `clients/${clientID}/payers`, { name: fd.get("name"), inn: fd.get("inn") || null, status: "active", payment_channel: text(client, "primary_payment_channel") || "bank" })); event.currentTarget.reset(); }}>
                 <Input required name="name" className="h-7 w-52 text-xs" placeholder={t(($) => $.fields.name)} />
                 <Input name="inn" inputMode="numeric" className="h-7 w-32 text-xs" placeholder={tt("columns.inn", { defaultValue: "INN" })} />
-                <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.add_payer)}</Button>
+                <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.add_payer)}</Button>
               </form>
             </div>
           </CardSection>

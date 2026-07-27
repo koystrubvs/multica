@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@multica/core/api";
 import type { BusinessRow } from "@multica/core/types";
-import { Button } from "@multica/ui/components/ui/button";
-import { Input } from "@multica/ui/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@multica/ui/components/ui/native-select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@multica/ui/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -18,38 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@multica/ui/components/ui/table";
+import { cn } from "@multica/ui/lib/utils";
+import { MoreHorizontal } from "lucide-react";
 import { useFxResolver } from "../common/use-fx-rates";
 import { useT } from "../i18n";
+import { BusinessCostSheet } from "./business-cost-sheet";
 
 type PeriodMode = "month" | "year";
-
-interface CostFormState {
-  id: string;
-  name: string;
-  amount: string;
-  currency: "USD" | "RUB";
-  category: string;
-  frequency: "monthly" | "yearly";
-  chargeDay: string;
-  startsOn: string;
-  endsOn: string;
-  notes: string;
-}
-
-function emptyForm(month: string): CostFormState {
-  return {
-    id: "",
-    name: "",
-    amount: "",
-    currency: "USD",
-    category: "ai",
-    frequency: "monthly",
-    chargeDay: "15",
-    startsOn: `${month}-01`,
-    endsOn: "",
-    notes: "",
-  };
-}
 
 function monthList(month: string, periodMode: PeriodMode): string[] {
   if (periodMode === "month") return [month];
@@ -108,17 +83,106 @@ export function calculateRecurringCostTotal(
   return Math.round(total / 100) * 100;
 }
 
-export function BusinessCostsTab({ businessID, month, periodMode, costs, onChanged }: {
+function CostRow({
+  row,
+  busy,
+  highlighted,
+  onEdit,
+  onSetStatus,
+  tt,
+}: {
+  row: BusinessRow;
+  busy: boolean;
+  highlighted: boolean;
+  onEdit: () => void;
+  onSetStatus: (status: string) => void;
+  tt: (key: string, options?: { defaultValue?: string }) => string;
+}) {
+  const status = String(row.status);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <TableRow
+      className={cn("group/row cursor-pointer", highlighted && "bg-muted/50")}
+      onClick={() => triggerRef.current?.click()}
+    >
+      <TableCell>
+        <div className="font-medium">{String(row.name)}</div>
+        {row.notes ? <div className="text-xs text-muted-foreground">{String(row.notes)}</div> : null}
+      </TableCell>
+      <TableCell>{scheduleLabel(row, tt)}</TableCell>
+      <TableCell className="tabular-nums">
+        {Number(row.amount).toLocaleString("ru-RU")} {String(row.currency)}
+      </TableCell>
+      <TableCell>{tt(`costs.statuses.${status}`)}</TableCell>
+      <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                ref={triggerRef}
+                type="button"
+                disabled={busy}
+                aria-label={tt("costs.row_menu")}
+                className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-popup-open:bg-accent data-popup-open:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-48">
+            <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">
+              {String(row.name)}
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onEdit}>{tt("costs.edit")}</DropdownMenuItem>
+            {status !== "archived" && (
+              <DropdownMenuItem
+                disabled={busy}
+                onClick={() => onSetStatus(status === "active" ? "paused" : "active")}
+              >
+                {status === "active" ? tt("costs.pause") : tt("costs.resume")}
+              </DropdownMenuItem>
+            )}
+            {status !== "archived" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() => onSetStatus("archived")}
+                >
+                  {tt("costs.archive")}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+export function BusinessCostsTab({
+  businessID,
+  month,
+  periodMode,
+  costs,
+  createOpen,
+  onCreateOpenChange,
+  onChanged,
+}: {
   businessID: string;
   month: string;
   periodMode: PeriodMode;
   costs: BusinessRow[];
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
   onChanged: () => Promise<unknown>;
 }) {
   const { t } = useT("business");
   const tt = t as unknown as (key: string, options?: { defaultValue?: string }) => string;
-  const [form, setForm] = useState(() => emptyForm(month));
-  const [busy, setBusy] = useState(false);
+  const [editCost, setEditCost] = useState<BusinessRow | null>(null);
+  const [busyKey, setBusyKey] = useState("");
   const [message, setMessage] = useState("");
   const months = useMemo(() => monthList(month, periodMode), [month, periodMode]);
   const from = `${months[0]}-01`;
@@ -126,62 +190,24 @@ export function BusinessCostsTab({ businessID, month, periodMode, costs, onChang
   const to = chargeDate(lastMonth, 31);
   const { resolve, loaded } = useFxResolver(from, to, businessID);
   const periodTotal = calculateRecurringCostTotal(costs, months, resolve);
+  const sheetOpen = createOpen || editCost !== null;
+  const sheetCost = createOpen ? null : editCost;
 
-  const resetForm = () => setForm(emptyForm(month));
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    const payload = {
-      name: form.name,
-      category: form.category,
-      amount: form.amount,
-      currency: form.currency,
-      frequency: form.frequency,
-      charge_day: Number(form.chargeDay),
-      starts_on: form.startsOn,
-      ends_on: form.endsOn,
-      notes: form.notes,
-    };
-    try {
-      if (form.id) {
-        await api.businessAction(businessID, `recurring-costs/${form.id}`, payload, "PATCH");
-      } else {
-        await api.businessAction(businessID, "recurring-costs", payload);
-      }
-      await onChanged();
-      resetForm();
-      setMessage(tt("costs.saved"));
-    } catch {
-      setMessage(tt("costs.save_error"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const edit = (row: BusinessRow) => setForm({
-    id: String(row.id),
-    name: String(row.name ?? ""),
-    amount: String(row.amount ?? ""),
-    currency: String(row.currency) === "RUB" ? "RUB" : "USD",
-    category: String(row.category ?? "service"),
-    frequency: String(row.frequency) === "yearly" ? "yearly" : "monthly",
-    chargeDay: String(row.charge_day ?? 15),
-    startsOn: String(row.starts_on ?? "").slice(0, 10),
-    endsOn: String(row.ends_on ?? "").slice(0, 10),
-    notes: String(row.notes ?? ""),
-  });
+  useEffect(() => {
+    if (createOpen) setEditCost(null);
+  }, [createOpen]);
 
   const setStatus = async (row: BusinessRow, status: string) => {
-    setBusy(true);
+    const id = String(row.id);
+    setBusyKey(id);
     setMessage("");
     try {
-      await api.businessAction(businessID, `recurring-costs/${String(row.id)}`, { status }, "PATCH");
+      await api.businessAction(businessID, `recurring-costs/${id}`, { status }, "PATCH");
       await onChanged();
     } catch {
       setMessage(tt("costs.save_error"));
     } finally {
-      setBusy(false);
+      setBusyKey("");
     }
   };
 
@@ -195,70 +221,70 @@ export function BusinessCostsTab({ businessID, month, periodMode, costs, onChang
         </div>
       </div>
 
-      <form className="space-y-3 rounded-lg border p-4" onSubmit={submit}>
-        <div className="text-sm font-medium">{form.id ? tt("costs.edit_cost") : tt("costs.new_cost")}</div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={tt("costs.name")} />
-          <div className="flex gap-2">
-            <Input required min="0.01" step="0.01" type="number" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder={tt("costs.amount")} />
-            <NativeSelect value={form.currency} onChange={(event) => setForm({ ...form, currency: event.target.value as "USD" | "RUB" })}>
-              <NativeSelectOption value="USD">USD</NativeSelectOption>
-              <NativeSelectOption value="RUB">RUB</NativeSelectOption>
-            </NativeSelect>
-          </div>
-          <NativeSelect value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
-            {["ai", "service", "infrastructure", "contractor", "tax", "bank", "other"].map((value) => (
-              <NativeSelectOption key={value} value={value}>{tt(`costs.categories.${value}`)}</NativeSelectOption>
-            ))}
-          </NativeSelect>
-          <NativeSelect
-            aria-label={tt("costs.frequency")}
-            value={form.frequency}
-            onChange={(event) => setForm({ ...form, frequency: event.target.value as "monthly" | "yearly" })}
-          >
-            <NativeSelectOption value="monthly">{tt("costs.frequencies.monthly")}</NativeSelectOption>
-            <NativeSelectOption value="yearly">{tt("costs.frequencies.yearly")}</NativeSelectOption>
-          </NativeSelect>
-          <Input required min="1" max="31" type="number" value={form.chargeDay} onChange={(event) => setForm({ ...form, chargeDay: event.target.value })} placeholder={tt("costs.charge_day")} />
-          <Input required type="date" value={form.startsOn} onChange={(event) => setForm({ ...form, startsOn: event.target.value })} aria-label={tt("costs.starts_on")} />
-          <Input type="date" value={form.endsOn} onChange={(event) => setForm({ ...form, endsOn: event.target.value })} aria-label={tt("costs.ends_on")} />
-          <Input className="sm:col-span-2" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={tt("costs.notes")} />
-        </div>
-        <div className="flex items-center gap-2">
-          <Button disabled={busy} size="sm" type="submit">{tt("costs.save")}</Button>
-          {form.id && <Button disabled={busy} type="button" variant="ghost" size="sm" onClick={resetForm}>{tt("costs.cancel")}</Button>}
-          {message && <span className="text-xs text-muted-foreground">{message}</span>}
-        </div>
-      </form>
+      {message && (
+        <div className="text-xs text-muted-foreground" role="status">{message}</div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border">
         <Table>
-          <TableHeader><TableRow>
-            <TableHead>{tt("costs.name")}</TableHead>
-            <TableHead>{tt("costs.schedule")}</TableHead>
-            <TableHead>{tt("costs.amount")}</TableHead>
-            <TableHead>{tt("costs.status")}</TableHead>
-            <TableHead className="text-right">{tt("costs.actions")}</TableHead>
-          </TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{tt("costs.name")}</TableHead>
+              <TableHead>{tt("costs.schedule")}</TableHead>
+              <TableHead>{tt("costs.amount")}</TableHead>
+              <TableHead>{tt("costs.status")}</TableHead>
+              <TableHead className="w-10">
+                <span className="sr-only">{tt("costs.actions")}</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
-            {costs.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">{tt("costs.empty")}</TableCell></TableRow>}
-            {costs.map((row) => {
-              const status = String(row.status);
-              return <TableRow key={String(row.id)}>
-                <TableCell><div className="font-medium">{String(row.name)}</div>{row.notes ? <div className="text-xs text-muted-foreground">{String(row.notes)}</div> : null}</TableCell>
-                <TableCell>{scheduleLabel(row, tt)}</TableCell>
-                <TableCell className="tabular-nums">{Number(row.amount).toLocaleString("ru-RU")} {String(row.currency)}</TableCell>
-                <TableCell>{tt(`costs.statuses.${status}`)}</TableCell>
-                <TableCell className="space-x-1 text-right">
-                  <Button disabled={busy} type="button" variant="ghost" size="sm" onClick={() => edit(row)}>{tt("costs.edit")}</Button>
-                  {status !== "archived" && <Button disabled={busy} type="button" variant="ghost" size="sm" onClick={() => void setStatus(row, status === "active" ? "paused" : "active")}>{status === "active" ? tt("costs.pause") : tt("costs.resume")}</Button>}
-                  {status !== "archived" && <Button disabled={busy} type="button" variant="ghost" size="sm" onClick={() => void setStatus(row, "archived")}>{tt("costs.archive")}</Button>}
+            {costs.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                  {tt("costs.empty")}
                 </TableCell>
-              </TableRow>;
+              </TableRow>
+            )}
+            {costs.map((row) => {
+              const id = String(row.id);
+              return (
+                <CostRow
+                  key={id}
+                  row={row}
+                  busy={busyKey === id}
+                  highlighted={editCost !== null && String(editCost.id) === id}
+                  onEdit={() => {
+                    onCreateOpenChange(false);
+                    setEditCost(row);
+                  }}
+                  onSetStatus={(next) => void setStatus(row, next)}
+                  tt={tt}
+                />
+              );
             })}
           </TableBody>
         </Table>
       </div>
+
+      <BusinessCostSheet
+        businessID={businessID}
+        month={month}
+        open={sheetOpen}
+        cost={sheetCost}
+        onOpenChange={(open) => {
+          if (!open) {
+            onCreateOpenChange(false);
+            setEditCost(null);
+            return;
+          }
+          if (!editCost) onCreateOpenChange(true);
+        }}
+        onSaved={async () => {
+          setMessage(tt("costs.saved"));
+          await onChanged();
+        }}
+      />
     </div>
   );
 }

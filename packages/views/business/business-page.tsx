@@ -475,6 +475,7 @@ export function BusinessPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [openClientID, setOpenClientID] = useState("");
   const [createClientOpen, setCreateClientOpen] = useState(false);
+  const [createCostOpen, setCreateCostOpen] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -527,6 +528,7 @@ export function BusinessPage() {
   });
 
   const generatedRef = useRef(false);
+  const bankImportInputRef = useRef<HTMLInputElement>(null);
   const snapshotRefetch = snapshot.refetch;
   useEffect(() => {
     if (tab !== "calendar" || !calendarEnabled || !businessID || !snapshot.data || generatedRef.current) return;
@@ -923,10 +925,57 @@ export function BusinessPage() {
               onClear={headerFilter.onClear}
             />
           )}
+          {tab === "bank" && bankEnabled && (
+            <>
+              <input
+                ref={bankImportInputRef}
+                type="file"
+                accept=".csv,.txt,.xml,.ofx,.pdf,text/csv,application/xml,text/xml"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file || !businessID) return;
+                  void execute("import", () => api.importBusinessBankFile(businessID, file));
+                }}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                disabled={busy !== "" || !businessID}
+                onClick={() => bankImportInputRef.current?.click()}
+              >
+                {t(($) => $.actions.import_statement)}
+              </Button>
+            </>
+          )}
+          {tab === "calendar" && calendarEnabled && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8"
+              disabled={busy !== "" || !businessID}
+              onClick={() => void execute("generate", () => api.businessAction(businessID, "receivables/generate", {
+                from_month: month.slice(0, 7),
+                months: 6,
+              }))}
+            >
+              {t(($) => $.actions.generate_receivables)}
+            </Button>
+          )}
           {tab === "clients" && clientsEnabled && (
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => setCreateClientOpen(true)}>
+            <Button type="button" size="sm" className="h-8 gap-1.5" onClick={() => setCreateClientOpen(true)}>
               <Plus className="size-3.5" />
               <span className="hidden sm:inline">{t(($) => $.actions.add_client)}</span>
+            </Button>
+          )}
+          {tab === "costs" && (
+            <Button type="button" size="sm" className="h-8 gap-1.5" onClick={() => setCreateCostOpen(true)}>
+              <Plus className="size-3.5" />
+              <span className="hidden sm:inline">{t(($) => $.actions.add_cost)}</span>
             </Button>
           )}
         </div>
@@ -1050,6 +1099,8 @@ export function BusinessPage() {
           month={month}
           periodMode={periodMode}
           costs={data.recurring_costs ?? []}
+          createOpen={createCostOpen}
+          onCreateOpenChange={setCreateCostOpen}
           onChanged={() => Promise.all([snapshot.refetch(), dashboard.refetch()])}
         />
       )}

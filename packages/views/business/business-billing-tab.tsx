@@ -302,6 +302,7 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                     <TableCell className="py-2 text-right align-top">
                       {bank && (
                         <Button
+                          type="button"
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"
@@ -346,7 +347,7 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                       {client || contractorDisplay(group.elba_contractor_id)}
                       <span className="ml-2 font-normal tabular-nums text-muted-foreground">{fmtDate(group.starts_on)} — {fmtDate(group.ends_on)}</span>
                     </div>
-                    <Button size="sm" className="h-7 text-xs" disabled={invoiceMut.isPending} onClick={() => invoiceMut.mutate(group)}>
+                    <Button type="button" size="sm" className="h-7 text-xs" disabled={invoiceMut.isPending} onClick={() => invoiceMut.mutate(group)}>
                       {t(($) => $.billing.invoice_for, { amount: payable.toLocaleString("ru-RU") })}
                     </Button>
                   </div>
@@ -468,7 +469,7 @@ function BillingDefaults({ wsConfig, orgId }: {
             </NativeSelect>
           </label>
         </div>
-        <Button size="sm" className="mt-3 h-7 text-xs" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+        <Button type="button" size="sm" className="mt-3 h-7 text-xs" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
           {t(($) => $.actions.save)}
         </Button>
       </div>
