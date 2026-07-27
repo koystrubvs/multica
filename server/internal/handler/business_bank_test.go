@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -56,6 +57,68 @@ func TestBusinessFixedDecimal(t *testing.T) {
 	signed, err := parseSignedBusinessMoney("-1234,56")
 	if err != nil || signed != -123456 {
 		t.Fatalf("signed=%d err=%v", signed, err)
+	}
+}
+
+func TestPickAutoMatchReceivable(t *testing.T) {
+	dueEarly := time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC)
+	dueLate := time.Date(2026, 7, 24, 0, 0, 0, 0, time.UTC)
+
+	t.Run("picks closest remaining under cap", func(t *testing.T) {
+		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+			{ID: "seo", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-07"},
+			{ID: "support", Remaining: 10_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "seo" {
+			t.Fatalf("got id=%q ok=%v, want seo", id, ok)
+		}
+	})
+
+	t.Run("picks support for near-cap payment", func(t *testing.T) {
+		id, ok := pickAutoMatchReceivable(9_820_000, []autoMatchReceivableCandidate{
+			{ID: "seo", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-07"},
+			{ID: "support", Remaining: 10_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "support" {
+			t.Fatalf("got id=%q ok=%v, want support", id, ok)
+		}
+	})
+
+	t.Run("refuses ambiguous same remaining", func(t *testing.T) {
+		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+			{ID: "a", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+			{ID: "b", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-08"},
+		})
+		if ok || id != "" {
+			t.Fatalf("got id=%q ok=%v, want no match", id, ok)
+		}
+	})
+
+	t.Run("rejects amount above remaining", func(t *testing.T) {
+		id, ok := pickAutoMatchReceivable(6_000_000, []autoMatchReceivableCandidate{
+			{ID: "seo", Remaining: 5_000_000, PeriodKey: "2026-07"},
+		})
+		if ok || id != "" {
+			t.Fatalf("got id=%q ok=%v, want no match", id, ok)
+		}
+	})
+}
+
+func TestBusinessReceivablePaidStatus(t *testing.T) {
+	if got := businessReceivablePaidStatus(100000, 98200, "cap"); got != "paid" {
+		t.Fatalf("cap near-full: got %q", got)
+	}
+	if got := businessReceivablePaidStatus(100000, 90000, "cap"); got != "partially_paid" {
+		t.Fatalf("cap below 95%%: got %q", got)
+	}
+	if got := businessReceivablePaidStatus(50000, 49000, "fixed"); got != "partially_paid" {
+		t.Fatalf("fixed near-full: got %q", got)
+	}
+	if got := businessReceivablePaidStatus(50000, 50000, "fixed"); got != "paid" {
+		t.Fatalf("fixed full: got %q", got)
+	}
+	if got := businessReceivablePaidStatus(100000, 0, "cap"); got != "" {
+		t.Fatalf("unpaid: got %q", got)
 	}
 }
 

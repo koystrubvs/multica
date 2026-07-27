@@ -7,11 +7,14 @@ import (
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -224,22 +227,27 @@ func (h *Handler) persistBusinessBankImport(ctx context.Context, businessID, use
 		classification, confidence := classifyBusinessBankRow(ctx, tx, businessID, row, direction)
 		dedup := businessBankDedupKey(row, direction, amount)
 		raw, _ := json.Marshal(row.Raw)
-		command, insertErr := tx.Exec(ctx, `
+		var transactionID string
+		insertErr := tx.QueryRow(ctx, `
 			INSERT INTO business_bank_transaction (
 				business_id, import_batch_id, source, dedup_key, booked_on, direction,
 				amount_rub, account_mask, counterparty_name, counterparty_inn, purpose,
 				classification, classification_confidence, raw_payload
 			) VALUES ($1,$2,$3,$4,$5,$6,$7::numeric/100,$8,$9,NULLIF($10,''),NULLIF($11,''),$12,$13,$14)
 			ON CONFLICT (business_id, dedup_key) WHERE voided_at IS NULL DO NOTHING
+			RETURNING id::text
 		`, businessID, result.BatchID, source, dedup, dateOnly(row.BookedOn), direction, amount,
-			maskBusinessAccount(row.Account), row.Counterparty, row.INN, row.Purpose, classification, confidence, raw)
+			maskBusinessAccount(row.Account), row.Counterparty, row.INN, row.Purpose, classification, confidence, raw).Scan(&transactionID)
+		if errors.Is(insertErr, pgx.ErrNoRows) {
+			result.RowsDuplicate++
+			continue
+		}
 		if insertErr != nil {
 			return result, insertErr
 		}
-		if command.RowsAffected() == 0 {
-			result.RowsDuplicate++
-		} else {
-			result.RowsInserted++
+		result.RowsInserted++
+		if err := autoMatchBankTransactionToReceivable(ctx, tx, businessID, userID, transactionID); err != nil {
+			return result, err
 		}
 	}
 	if _, err := tx.Exec(ctx, `
@@ -364,6 +372,10 @@ func (h *Handler) CreateBusinessBankTransaction(w http.ResponseWriter, r *http.R
 	}
 	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "bank.transaction.create", "business_bank_transaction", id, "manual bank transaction", nil, nil); err != nil {
 		writeError(w, 500, "failed to create transaction")
+		return
+	}
+	if err := autoMatchBankTransactionToReceivable(r.Context(), tx, businessID, userID, id); err != nil {
+		writeError(w, 500, "failed to auto-match transaction")
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {
@@ -759,7 +771,17 @@ func recalculateBusinessReceivableFunding(ctx context.Context, tx pgx.Tx, busine
 			WHERE business_id=$1 AND target_type='receivable' AND target_id=$2 AND status='confirmed'
 		), updated AS (
 			UPDATE business_receivable r SET paid_amount_rub=least(r.planned_amount_rub,f.paid),
-				status=CASE WHEN f.paid>=r.planned_amount_rub THEN 'paid' WHEN f.paid>0 THEN 'partially_paid' ELSE r.status END,
+				status=CASE
+					WHEN f.paid <= 0 THEN r.status
+					WHEN f.paid >= r.planned_amount_rub THEN 'paid'
+					WHEN EXISTS (
+						SELECT 1 FROM business_agreement a
+						WHERE a.id = r.agreement_id
+						  AND a.model = 'cap'
+						  AND f.paid >= round(r.planned_amount_rub * 0.95, 2)
+					) THEN 'paid'
+					ELSE 'partially_paid'
+				END,
 				updated_at=now()
 			FROM funding f WHERE r.business_id=$1 AND r.id=$2 RETURNING r.planned_amount_rub,r.paid_amount_rub
 		), task_funding AS (
@@ -776,6 +798,190 @@ func recalculateBusinessReceivableFunding(ctx context.Context, tx pgx.Tx, busine
 		FROM ratios r WHERE a.business_id=$1 AND a.task_economics_id=r.task_economics_id AND a.status NOT IN ('in_payout','paid')
 	`, businessID, receivableID)
 	return err
+}
+
+type autoMatchReceivableCandidate struct {
+	ID        string
+	Remaining int64 // kopecks
+	DueOn     *time.Time
+	PeriodKey string
+}
+
+// pickAutoMatchReceivable chooses a unique best open receivable for an inbound
+// payment. Score is |remaining - amount|; ties on the best score are refused.
+func pickAutoMatchReceivable(amountKopecks int64, candidates []autoMatchReceivableCandidate) (string, bool) {
+	eligible := make([]autoMatchReceivableCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Remaining >= amountKopecks && amountKopecks > 0 {
+			eligible = append(eligible, candidate)
+		}
+	}
+	if len(eligible) == 0 {
+		return "", false
+	}
+	sort.SliceStable(eligible, func(i, j int) bool {
+		di := absInt64(eligible[i].Remaining - amountKopecks)
+		dj := absInt64(eligible[j].Remaining - amountKopecks)
+		if di != dj {
+			return di < dj
+		}
+		diDue, djDue := eligible[i].DueOn, eligible[j].DueOn
+		switch {
+		case diDue == nil && djDue != nil:
+			return false
+		case diDue != nil && djDue == nil:
+			return true
+		case diDue != nil && djDue != nil && !diDue.Equal(*djDue):
+			return diDue.Before(*djDue)
+		}
+		return eligible[i].PeriodKey < eligible[j].PeriodKey
+	})
+	bestDistance := absInt64(eligible[0].Remaining - amountKopecks)
+	if len(eligible) > 1 && absInt64(eligible[1].Remaining-amountKopecks) == bestDistance {
+		return "", false
+	}
+	return eligible[0].ID, true
+}
+
+func absInt64(value int64) int64 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func businessReceivablePaidStatus(plannedRub, paidRub float64, agreementModel string) string {
+	if paidRub <= 0 {
+		return ""
+	}
+	if paidRub+1e-9 >= plannedRub {
+		return "paid"
+	}
+	if agreementModel == "cap" && paidRub+1e-9 >= math.Round(plannedRub*0.95*100)/100 {
+		return "paid"
+	}
+	return "partially_paid"
+}
+
+func resolveClientIDForBankAutoMatch(ctx context.Context, tx pgx.Tx, businessID, counterpartyName, counterpartyINN string) (string, bool) {
+	inn := digitsOnly(counterpartyINN)
+	name := strings.TrimSpace(counterpartyName)
+	if inn != "" {
+		var clientID string
+		err := tx.QueryRow(ctx, `
+			SELECT client_id::text
+			FROM business_client_payer
+			WHERE business_id = $1 AND status = 'active' AND inn = $2
+			ORDER BY updated_at DESC
+			LIMIT 1
+		`, businessID, inn).Scan(&clientID)
+		if err == nil && clientID != "" {
+			return clientID, true
+		}
+	}
+	if name == "" {
+		return "", false
+	}
+	var clientID string
+	err := tx.QueryRow(ctx, `
+		SELECT client_id::text
+		FROM business_client_payer
+		WHERE business_id = $1 AND status = 'active' AND lower(btrim(name)) = lower(btrim($2))
+		ORDER BY updated_at DESC
+		LIMIT 1
+	`, businessID, name).Scan(&clientID)
+	if err != nil || clientID == "" {
+		return "", false
+	}
+	return clientID, true
+}
+
+func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, businessID, userID, transactionID string) error {
+	var (
+		direction, classification, counterpartyName string
+		counterpartyINN                             *string
+		amountKopecks                               int64
+	)
+	err := tx.QueryRow(ctx, `
+		SELECT direction, classification, counterparty_name, counterparty_inn,
+		       round(amount_rub * 100)::bigint
+		FROM business_bank_transaction
+		WHERE business_id = $1 AND id = $2 AND voided_at IS NULL
+	`, businessID, transactionID).Scan(&direction, &classification, &counterpartyName, &counterpartyINN, &amountKopecks)
+	if err != nil {
+		return err
+	}
+	if direction != "inbound" || classification != "client_income" || amountKopecks <= 0 {
+		return nil
+	}
+
+	var alreadyMatched int64
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(round(sum(amount_rub) * 100), 0)::bigint
+		FROM business_transaction_match
+		WHERE business_id = $1 AND transaction_id = $2 AND status IN ('suggested', 'confirmed')
+	`, businessID, transactionID).Scan(&alreadyMatched); err != nil {
+		return err
+	}
+	if alreadyMatched > 0 {
+		return nil
+	}
+
+	clientID, ok := resolveClientIDForBankAutoMatch(ctx, tx, businessID, counterpartyName, stringValue(counterpartyINN))
+	if !ok {
+		return nil
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT r.id::text,
+		       round((r.planned_amount_rub - r.paid_amount_rub) * 100)::bigint,
+		       r.due_on,
+		       r.period_key
+		FROM business_receivable r
+		WHERE r.business_id = $1
+		  AND r.client_id = $2::uuid
+		  AND r.status IN ('expected', 'invoiced', 'overdue', 'partially_paid')
+		  AND (r.planned_amount_rub - r.paid_amount_rub) > 0
+	`, businessID, clientID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	candidates := make([]autoMatchReceivableCandidate, 0)
+	for rows.Next() {
+		var candidate autoMatchReceivableCandidate
+		if err := rows.Scan(&candidate.ID, &candidate.Remaining, &candidate.DueOn, &candidate.PeriodKey); err != nil {
+			return err
+		}
+		candidates = append(candidates, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	receivableID, ok := pickAutoMatchReceivable(amountKopecks, candidates)
+	if !ok {
+		return nil
+	}
+
+	idempotencyKey := "auto-bank:" + transactionID + ":" + receivableID
+	var matchID string
+	err = tx.QueryRow(ctx, `
+		INSERT INTO business_transaction_match (
+			business_id, transaction_id, target_type, target_id, amount_rub, status,
+			suggested_by, confirmed_by, confirmed_at, idempotency_key, notes
+		) VALUES (
+			$1, $2, 'receivable', $3, $4::numeric / 100, 'confirmed',
+			$5, $5, now(), $6, 'auto bank match'
+		)
+		ON CONFLICT (business_id, idempotency_key) DO UPDATE SET updated_at = now()
+		RETURNING id::text
+	`, businessID, transactionID, receivableID, amountKopecks, userID, idempotencyKey).Scan(&matchID)
+	if err != nil {
+		return err
+	}
+	return recalculateBusinessReceivableFunding(ctx, tx, businessID, receivableID)
 }
 
 func recalculateBusinessPayoutPayment(ctx context.Context, tx pgx.Tx, businessID, payoutID string) error {

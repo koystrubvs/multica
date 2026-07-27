@@ -182,9 +182,24 @@ func TestBusinessSystemLifecycle(t *testing.T) {
 		"idempotency_key": "integration-bank-income",
 	}, http.StatusCreated)
 	transactionID := transaction["id"].(string)
-	businessRequest(t, http.MethodPost, businessID, "/bank/transactions/"+transactionID+"/matches", map[string]any{
-		"target_type": "receivable", "target_id": receivableID, "amount_rub": "1000", "status": "confirmed", "idempotency_key": "integration-match",
-	}, http.StatusCreated)
+	var autoMatchCount int
+	if err := testPool.QueryRow(ctx, `
+		SELECT count(*) FROM business_transaction_match
+		WHERE business_id=$1 AND transaction_id=$2 AND target_type='receivable' AND target_id=$3 AND status='confirmed'
+	`, businessID, transactionID, receivableID).Scan(&autoMatchCount); err != nil {
+		t.Fatal(err)
+	}
+	if autoMatchCount != 1 {
+		t.Fatalf("expected auto bank match to receivable, got count=%d", autoMatchCount)
+	}
+	var receivableStatus string
+	var paidAmount string
+	if err := testPool.QueryRow(ctx, `SELECT status, paid_amount_rub::text FROM business_receivable WHERE id=$1`, receivableID).Scan(&receivableStatus, &paidAmount); err != nil {
+		t.Fatal(err)
+	}
+	if receivableStatus != "paid" || paidAmount != "1000.00" {
+		t.Fatalf("expected receivable paid 1000.00, got status=%s paid=%s", receivableStatus, paidAmount)
+	}
 
 	payout := businessRequest(t, http.MethodPost, businessID, "/payouts", map[string]any{"period_key": month, "idempotency_key": "integration-payout"}, http.StatusCreated)
 	payoutID := payout["id"].(string)
