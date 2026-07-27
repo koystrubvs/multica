@@ -80,6 +80,13 @@ export function runtimeRewriteDestination(
   if (!remoteApiUrl) return undefined;
 
   if (pathname === "/api" || pathname.startsWith("/api/")) {
+    // Next.js App Router BFF for SitePing must not be rewritten to Go.
+    if (
+      pathname === "/api/siteping-admin" ||
+      pathname.startsWith("/api/siteping-admin/")
+    ) {
+      return undefined;
+    }
     return appendPath(remoteApiUrl, pathname);
   }
   if (pathname === "/uploads" || pathname.startsWith("/uploads/")) {
