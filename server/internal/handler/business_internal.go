@@ -171,6 +171,19 @@ func nullableJSON(value json.RawMessage) any {
 	return []byte(value)
 }
 
+// Internal work is tracked in the same projects as client work and priced the
+// same way, so the only thing telling them apart is the workspace "Биллинг"
+// property the agents fill in when they close an issue. Anything not marked
+// internal counts as billable — the property is filled in after the fact, and
+// treating "not yet marked" as internal would empty every ceiling.
+// Requires `c` (client_billing_charge) and `i` (issue) in scope.
+const businessInternalChargeSQL = `EXISTS (
+			SELECT 1 FROM issue_property ip
+			CROSS JOIN LATERAL jsonb_array_elements(ip.config->'options') opt
+			WHERE ip.workspace_id = c.workspace_id AND lower(ip.name) = 'биллинг'
+			  AND opt->>'name' = 'внутренняя' AND i.properties->>ip.id::text = opt->>'id'
+		)`
+
 func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 	businessID, _, ok := businessRequestIDs(w, r)
 	if !ok {
@@ -298,18 +311,29 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			  AND NOT EXISTS (SELECT 1 FROM business_task_economics e WHERE e.business_id = $1 AND e.issue_id = c.issue_id AND e.status <> 'superseded')
 			ORDER BY c.created_at DESC LIMIT 200
 		) q`},
+		// Grouped by project as well as client: a client with both an SEO and a
+		// support deal has one capped agreement per project, and a client-wide
+		// sum would credit each of them with the other's work.
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.month, q.client_id), '[]'::jsonb) FROM (
-			SELECT bcp.client_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM') AS month,
+			SELECT bcp.client_id, c.project_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM') AS month,
 			       sum(c.price_rub) AS billed_rub, count(DISTINCT c.issue_id) AS issue_count
 			FROM client_billing_charge c
+			JOIN issue i ON i.id = c.issue_id AND i.workspace_id = c.workspace_id
 			LEFT JOIN client_billing_period per ON per.id = c.period_id
 			JOIN business_client_project bcp ON bcp.project_id = c.project_id AND bcp.business_id = $1
-			WHERE c.status <> 'void'
-			GROUP BY bcp.client_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM')
+			WHERE c.status <> 'void' AND NOT `+businessInternalChargeSQL+`
+			GROUP BY bcp.client_id, c.project_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM')
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.month DESC, q.client_name, q.issue_title), '[]'::jsonb) FROM (
 			SELECT bcp.client_id, bc.canonical_name AS client_name,
 			       to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM') AS month,
+			       -- The day the work was charged, so a cap window anchored on the
+			       -- invoice day can be summed client-side.
+			       c.created_at::date AS charged_on,
+			       -- Work already carried by an issued invoice: it belongs to the
+			       -- period that was billed, not to the ceiling being watched now.
+			       COALESCE(per.status, '') AS period_status,
+			       `+businessInternalChargeSQL+` AS is_internal,
 			       c.issue_id, i.title AS issue_title, i.number AS issue_number,
 			       c.project_id, p.title AS project_title, c.price_rub, c.status
 			FROM client_billing_charge c

@@ -61,6 +61,7 @@ import { FILTER_ITEM_CLASS, HoverCheck } from "../common/hover-check";
 import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
 import { BusinessBillingTab } from "./business-billing-tab";
+import { BusinessCapMeter, hasCapMeter } from "./business-cap-meter";
 import { BusinessClientCard } from "./business-client-card";
 import { BusinessClientCreateSheet } from "./business-client-create";
 import { BusinessCostsTab } from "./business-costs-tab";
@@ -575,14 +576,31 @@ export function BusinessPage() {
   ), [data?.receivables, receivableStatuses, receivableClients, receivableReviewOnly, receivableOverdueOnly]);
 
   const agreementMeta = useMemo(() => {
-    const map = new Map<string, { name: string; model: string; cap: number; channel: string }>();
-    for (const row of data?.agreements ?? []) map.set(String(row.id), { name: String(row.name ?? ""), model: String(row.model ?? ""), cap: Number(row.cap_rub ?? 0), channel: String(row.payment_channel ?? "") });
+    const map = new Map<string, { name: string; model: string; cap: number; channel: string; project: string }>();
+    for (const row of data?.agreements ?? []) map.set(String(row.id), { name: String(row.name ?? ""), model: String(row.model ?? ""), cap: Number(row.cap_rub ?? 0), channel: String(row.payment_channel ?? ""), project: String(row.project_id ?? "") });
     return map;
   }, [data?.agreements]);
 
+  // Every live ceiling, so the owner can see at a glance which client is
+  // burning theirs faster than the period runs out.
+  const cappedAgreements = useMemo(() => (data?.agreements ?? [])
+    .filter((row) => String(row.status ?? "") === "active" && hasCapMeter(row))
+    .sort((a, b) => String(a.client_name ?? "").localeCompare(String(b.client_name ?? "")) || String(a.name ?? "").localeCompare(String(b.name ?? ""))),
+  [data?.agreements]);
+
+  // Totals arrive per client *and* project. Both readings are kept: an
+  // agreement pinned to a project must count only that project's work, while a
+  // deal without one (two sites under a single contract) counts the client.
   const billingByClientMonth = useMemo(() => {
     const map = new Map<string, number>();
-    for (const row of data?.billing_month_client_totals ?? []) map.set(`${String(row.client_id)}|${String(row.month)}`, Number(row.billed_rub ?? 0));
+    const add = (key: string, amount: number) => map.set(key, (map.get(key) ?? 0) + amount);
+    for (const row of data?.billing_month_client_totals ?? []) {
+      const client = String(row.client_id);
+      const month = String(row.month);
+      const billed = Number(row.billed_rub ?? 0);
+      add(`${client}|${String(row.project_id ?? "")}|${month}`, billed);
+      add(`${client}||${month}`, billed);
+    }
     return map;
   }, [data?.billing_month_client_totals]);
 
@@ -606,7 +624,7 @@ export function BusinessPage() {
       if (isTruthyFlag(row.is_overdue)) totals.overdue += rest;
       if (planned === 0 && paid === 0) {
         const meta = agreementMeta.get(String(row.agreement_id));
-        const estKey = `${String(row.client_id)}|${monthKey}`;
+        const estKey = `${String(row.client_id)}|${meta?.project ?? ""}|${monthKey}`;
         if (meta && (meta.model === "time_material" || meta.model === "cap") && !estimateUsed.has(estKey)) {
           const billed = billingByClientMonth.get(estKey) ?? 0;
           const estimated = meta.cap > 0 ? Math.min(billed, meta.cap) : billed;
@@ -633,7 +651,7 @@ export function BusinessPage() {
       const meta = agreementMeta.get(String(row.agreement_id));
       let estimated = 0;
       if (planned === 0 && paid === 0 && meta && (meta.model === "time_material" || meta.model === "cap")) {
-        const estKey = `${String(row.client_id)}|${monthKey}`;
+        const estKey = `${String(row.client_id)}|${meta.project}|${monthKey}`;
         if (!estimateUsed.has(estKey)) {
           const billed = billingByClientMonth.get(estKey) ?? 0;
           estimated = meta.cap > 0 ? Math.min(billed, meta.cap) : billed;
@@ -1158,6 +1176,28 @@ export function BusinessPage() {
                       ) : null,
                     }}
                   />
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+        <Section title={t(($) => $.sections.caps)}>
+          <p className="text-[11px] text-muted-foreground">{t(($) => $.cap.hint)}</p>
+          {cappedAgreements.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t(($) => $.cap.empty)}</div>
+          ) : (
+            <div className="grid gap-2 @3xl:grid-cols-2">
+              {cappedAgreements.map((agreement) => (
+                <div key={String(agreement.id)} className="space-y-1.5 rounded-lg border p-2.5">
+                  <button
+                    type="button"
+                    className="text-left text-xs font-medium hover:underline"
+                    onClick={() => setOpenClientID(String(agreement.client_id ?? ""))}
+                  >
+                    {String(agreement.client_name ?? "")}
+                    <span className="text-muted-foreground"> · {String(agreement.name ?? "")}</span>
+                  </button>
+                  <BusinessCapMeter agreement={agreement} charges={data?.billing_tasks ?? []} locale={locale} />
                 </div>
               ))}
             </div>

@@ -20,6 +20,7 @@ import {
 } from "@multica/ui/components/ui/sheet";
 import { cn } from "@multica/ui/lib/utils";
 import { projectBillingState, useElbaDirectory } from "./business-billing-tab";
+import { BusinessCapMeter, hasCapMeter } from "./business-cap-meter";
 import { BusinessClientContracts } from "./business-client-contracts";
 import { useT } from "../i18n";
 
@@ -263,6 +264,9 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                       <Tag>{tt(`values.${text(agreement, "service_type")}`, { defaultValue: text(agreement, "service_type") })}</Tag>
                       <Tag>{tt(`values.${text(agreement, "model")}`, { defaultValue: text(agreement, "model") })}</Tag>
                     </div>
+                    {hasCapMeter(agreement) && (
+                      <BusinessCapMeter agreement={agreement} charges={data.billing_tasks ?? []} locale={locale} />
+                    )}
                     <div className="flex flex-wrap items-end gap-2">
                       {money.includes("amount") && (
                         <Field label={tt("columns.amount_rub", { defaultValue: "amount" })}>

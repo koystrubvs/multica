@@ -130,7 +130,8 @@
     "year_dynamics": "Dynamics: plan vs fact by month",
     "month_dynamics": "Dynamics: plan vs fact by day",
     "task_calculation": "Task calculation",
-    "billing_candidates": "Billed tasks ready to estimate"
+    "billing_candidates": "Billed tasks ready to estimate",
+    "caps": "Agreement caps"
   },
   "actions": {
     "add_client": "Add client",
@@ -462,6 +463,19 @@
     "owner": "owner ≥50%",
     "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
     "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "cap": {
+    "title": "Period cap",
+    "period_share": "Period elapsed",
+    "cap_share": "Cap used",
+    "used": "Used",
+    "remaining": "Left",
+    "days_left": "Days to invoice",
+    "over": "Cap exceeded",
+    "faster": "The cap is burning down faster than the period runs out",
+    "no_charges": "No priced tasks in this period yet",
+    "empty": "No active agreements with a cap",
+    "hint": "The window runs from the invoice day; amounts come from the task calculation."
   },
   "bank": {
     "source": "Data source",

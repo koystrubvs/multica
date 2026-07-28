@@ -130,7 +130,8 @@
     "year_dynamics": "动态：按月计划与实际",
     "month_dynamics": "Dynamics: plan vs fact by day",
     "task_calculation": "Task calculation",
-    "billing_candidates": "可评估的计费任务"
+    "billing_candidates": "可评估的计费任务",
+    "caps": "协议上限"
   },
   "actions": {
     "add_client": "添加客户",
@@ -462,6 +463,19 @@
     "owner": "所有者 ≥50%",
     "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
     "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "cap": {
+    "title": "周期上限",
+    "period_share": "周期已过",
+    "cap_share": "上限已用",
+    "used": "已用",
+    "remaining": "剩余",
+    "days_left": "距开票天数",
+    "over": "已超上限",
+    "faster": "上限消耗快于周期推进",
+    "no_charges": "本周期还没有计价任务",
+    "empty": "没有设置上限的生效协议",
+    "hint": "周期自开票日起算，金额取自任务计费。"
   },
   "bank": {
     "source": "Data source",

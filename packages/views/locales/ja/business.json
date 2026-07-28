@@ -130,7 +130,8 @@
     "year_dynamics": "推移：月別の計画と実績",
     "month_dynamics": "Dynamics: plan vs fact by day",
     "task_calculation": "Task calculation",
-    "billing_candidates": "見積可能な課金タスク"
+    "billing_candidates": "見積可能な課金タスク",
+    "caps": "契約ごとの上限"
   },
   "actions": {
     "add_client": "顧客を追加",
@@ -462,6 +463,19 @@
     "owner": "所有者 ≥50%",
     "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
     "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "cap": {
+    "title": "期間の上限",
+    "period_share": "期間の経過",
+    "cap_share": "上限の消化",
+    "used": "消化額",
+    "remaining": "残り",
+    "days_left": "請求日まで",
+    "over": "上限を超過",
+    "faster": "期間の進みより上限の消化が速い",
+    "no_charges": "この期間に金額の付いたタスクはまだありません",
+    "empty": "上限のある有効な契約はありません",
+    "hint": "期間は請求日を起点に計算し、金額はタスク集計から取得します。"
   },
   "bank": {
     "source": "Data source",

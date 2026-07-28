@@ -130,7 +130,8 @@
     "year_dynamics": "추이: 월별 계획 대 실적",
     "month_dynamics": "Dynamics: plan vs fact by day",
     "task_calculation": "Task calculation",
-    "billing_candidates": "평가 가능한 청구 작업"
+    "billing_candidates": "평가 가능한 청구 작업",
+    "caps": "계약별 상한"
   },
   "actions": {
     "add_client": "고객 추가",
@@ -462,6 +463,19 @@
     "owner": "소유자 ≥50%",
     "task_calculation_hint": "Tasks and amounts from technical billing, grouped by client and period.",
     "no_task_calculation": "No priced tasks for the selected period"
+  },
+  "cap": {
+    "title": "기간 상한",
+    "period_share": "기간 경과",
+    "cap_share": "상한 사용",
+    "used": "사용",
+    "remaining": "남음",
+    "days_left": "청구일까지",
+    "over": "상한 초과",
+    "faster": "기간보다 상한이 더 빨리 소진되고 있습니다",
+    "no_charges": "이 기간에 가격이 매겨진 작업이 아직 없습니다",
+    "empty": "상한이 있는 활성 계약이 없습니다",
+    "hint": "기간은 청구일부터 계산하며 금액은 작업 정산에서 가져옵니다."
   },
   "bank": {
     "source": "Data source",
