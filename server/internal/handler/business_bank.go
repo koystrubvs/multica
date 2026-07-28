@@ -696,6 +696,176 @@ func (h *Handler) CreateBusinessTransactionMatch(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
+// A receivable only reaches 'paid' through a confirmed bank match, which leaves
+// money that never touches the business account — personal card, cash — with no
+// way to be recorded. This settles a receivable the owner points at directly:
+// the receipt is written into the money ledger and matched in one transaction.
+// Auto-match is deliberately bypassed, because the target is chosen rather than
+// guessed from the amount.
+type recordBusinessReceivablePaymentRequest struct {
+	AmountRUB      string  `json:"amount_rub"`
+	ReceivedOn     string  `json:"received_on"`
+	PaymentChannel string  `json:"payment_channel"`
+	Notes          *string `json:"notes"`
+	IdempotencyKey string  `json:"idempotency_key"`
+}
+
+// Settlement guards stay pure so the rules that protect a receivable from being
+// overpaid are testable without a database.
+func receivablePaymentBlocker(status string, remaining, amount int64) (int, string) {
+	switch {
+	case containsBusinessString([]string{"skipped", "written_off"}, status):
+		return http.StatusConflict, "skipped and written-off receivables cannot take payments"
+	case remaining <= 0:
+		return http.StatusConflict, "receivable is already fully paid"
+	case amount > remaining:
+		return http.StatusConflict, "amount exceeds the outstanding balance"
+	}
+	return 0, ""
+}
+
+// The ledger records the channel the money actually arrived through, so a card
+// transfer is never reported as bank turnover.
+func receivablePaymentSource(channel string) string {
+	if channel == "personal_card" {
+		return "personal_card"
+	}
+	return "manual"
+}
+
+func receivablePaymentPurpose(notes, agreementName, periodKey string) string {
+	if trimmed := strings.TrimSpace(notes); trimmed != "" {
+		return trimmed
+	}
+	if trimmed := strings.TrimSpace(agreementName); trimmed != "" {
+		return trimmed + " · " + periodKey
+	}
+	return periodKey
+}
+
+func (h *Handler) RecordBusinessReceivablePayment(w http.ResponseWriter, r *http.Request) {
+	businessID, userID, ok := businessRequestIDs(w, r)
+	if !ok {
+		return
+	}
+	receivableID := chi.URLParam(r, "receivableId")
+	if _, ok := parseUUIDOrBadRequest(w, receivableID, "receivable_id"); !ok {
+		return
+	}
+	var request recordBusinessReceivablePaymentRequest
+	if !decodeBusinessJSON(w, r, &request) {
+		return
+	}
+	receivedOn, err := time.Parse("2006-01-02", strings.TrimSpace(request.ReceivedOn))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "received_on must use YYYY-MM-DD")
+		return
+	}
+	amount, err := parseBusinessBankMoney(request.AmountRUB)
+	if err != nil || amount <= 0 {
+		writeError(w, http.StatusBadRequest, "amount_rub must be positive")
+		return
+	}
+	if strings.TrimSpace(request.IdempotencyKey) == "" {
+		writeError(w, http.StatusBadRequest, "idempotency_key is required")
+		return
+	}
+	if request.PaymentChannel == "" {
+		request.PaymentChannel = "bank"
+	}
+	if !containsBusinessString([]string{"bank", "personal_card", "cash", "other"}, request.PaymentChannel) {
+		writeError(w, http.StatusBadRequest, "payment_channel is invalid")
+		return
+	}
+
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record payment")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	var (
+		status, periodKey, clientName string
+		agreementName                 *string
+		remaining                     int64
+	)
+	err = tx.QueryRow(r.Context(), `
+		SELECT r.status, r.period_key,
+		       round((r.planned_amount_rub - r.paid_amount_rub) * 100)::bigint,
+		       c.canonical_name, a.name
+		FROM business_receivable r
+		JOIN business_client c ON c.business_id = r.business_id AND c.id = r.client_id
+		LEFT JOIN business_agreement a ON a.business_id = r.business_id AND a.id = r.agreement_id
+		WHERE r.business_id = $1 AND r.id = $2
+		FOR UPDATE OF r
+	`, businessID, receivableID).Scan(&status, &periodKey, &remaining, &clientName, &agreementName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "receivable not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record payment")
+		return
+	}
+	if code, reason := receivablePaymentBlocker(status, remaining, amount); code != 0 {
+		writeError(w, code, reason)
+		return
+	}
+
+	source := receivablePaymentSource(request.PaymentChannel)
+	purpose := receivablePaymentPurpose(stringValue(request.Notes), stringValue(agreementName), periodKey)
+	// One key namespaces both rows: a retried request re-reads the same ledger
+	// entry and the same match instead of paying the receivable twice.
+	key := "receivable-payment:" + strings.TrimSpace(request.IdempotencyKey)
+
+	var transactionID string
+	err = tx.QueryRow(r.Context(), `
+		INSERT INTO business_bank_transaction (
+			business_id, source, dedup_key, booked_on, direction, amount_rub,
+			counterparty_name, purpose, classification, classification_confidence, raw_payload
+		) VALUES ($1,$2,$3,$4,'inbound',$5::numeric/100,$6,NULLIF($7,''),'client_income','confirmed',
+			jsonb_build_object('created_by',$8::text,'receivable_id',$9::text,'payment_channel',$10::text))
+		ON CONFLICT (business_id,dedup_key) WHERE voided_at IS NULL DO UPDATE SET updated_at=now()
+		RETURNING id::text
+	`, businessID, source, key, dateOnly(receivedOn), amount, clientName, purpose, userID, receivableID, request.PaymentChannel).Scan(&transactionID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record payment")
+		return
+	}
+
+	var matchID string
+	err = tx.QueryRow(r.Context(), `
+		INSERT INTO business_transaction_match (
+			business_id, transaction_id, target_type, target_id, amount_rub, status,
+			suggested_by, confirmed_by, confirmed_at, idempotency_key, notes
+		) VALUES ($1,$2,'receivable',$3,$4::numeric/100,'confirmed',$5,$5,now(),$6,'receivable payment')
+		ON CONFLICT (business_id,idempotency_key) DO UPDATE SET updated_at=now()
+		RETURNING id::text
+	`, businessID, transactionID, receivableID, amount, userID, key).Scan(&matchID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record payment")
+		return
+	}
+	if err := recalculateBusinessReceivableFunding(r.Context(), tx, businessID, receivableID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update receivable funding")
+		return
+	}
+	if err := h.insertBusinessAudit(r.Context(), tx, businessID, userID, "receivable.payment.record", "business_receivable", receivableID, "manual payment", nil, nil); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record payment")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record payment")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"receivable_id":  receivableID,
+		"transaction_id": transactionID,
+		"match_id":       matchID,
+	})
+}
+
 type createBusinessCostRequest struct {
 	TransactionID *string `json:"transaction_id"`
 	Category      string  `json:"category"`

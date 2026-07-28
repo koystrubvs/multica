@@ -55,6 +55,12 @@ vi.mock("@multica/core/config", () => ({
   useFeatureEnabled: () => true,
 }));
 
+const businessAction = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+
+vi.mock("@multica/core/api", () => ({
+  api: { businessAction },
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
     const shared = {
@@ -159,6 +165,95 @@ describe("BusinessPage layout", () => {
     } finally {
       snapshot.transactions = originalTransactions;
     }
+  });
+});
+
+describe("receivable payments", () => {
+  const month = new Date().toISOString().slice(0, 7);
+
+  async function withReceivables<T>(rows: Record<string, unknown>[], body: () => Promise<T>): Promise<T> {
+    const originalReceivables = snapshot.receivables;
+    const originalAgreements = snapshot.agreements;
+    snapshot.receivables = rows as typeof snapshot.receivables;
+    snapshot.agreements = [
+      { id: "agreement-card", name: "Client — SEO", client_id: "client-1", model: "fixed", payment_channel: "personal_card" },
+      { id: "agreement-bank", name: "Client — support", client_id: "client-1", model: "fixed", payment_channel: "bank" },
+    ] as typeof snapshot.agreements;
+    try {
+      return await body();
+    } finally {
+      snapshot.receivables = originalReceivables;
+      snapshot.agreements = originalAgreements;
+    }
+  }
+
+  function receivable(overrides: Record<string, unknown>): Record<string, unknown> {
+    return {
+      client_id: "client-1",
+      client_name: "Client",
+      agreement_id: "agreement-card",
+      period_key: month,
+      planned_amount_rub: "50000.00",
+      paid_amount_rub: "0",
+      status: "overdue",
+      invoice_on: `${month}-01`,
+      due_on: `${month}-08`,
+      is_overdue: true,
+      ...overrides,
+    };
+  }
+
+  it("records a payment from the side panel opened for the picked receivable", async () => {
+    await withReceivables([receivable({ id: "receivable-1" })], async () => {
+      const { container } = render(<BusinessPage />);
+      fireEvent.click(screen.getAllByRole("tab")[1]!);
+
+      // The row itself only carries a trigger; the fields live in the drawer.
+      expect(container.querySelector('input[name="received_on"]')).toBeNull();
+      fireEvent.click(screen.getByTestId("record-payment-trigger"));
+
+      const dateInput = await screen.findByDisplayValue(/^\d{4}-\d{2}-\d{2}$/);
+      const form = dateInput.closest("form")!;
+      // The outstanding balance is the default so the common case is one click.
+      expect(form.querySelector('input[name="amount"]')).toHaveValue(50000);
+      // Card agreements preselect their own channel, never bank.
+      expect(form.querySelector('select[name="channel"]')).toHaveValue("personal_card");
+
+      businessAction.mockClear();
+      fireEvent.submit(form);
+
+      expect(businessAction).toHaveBeenCalledTimes(1);
+      const [businessId, path, body] = businessAction.mock.calls[0]!;
+      expect(businessId).toBe("business-1");
+      expect(path).toBe("receivables/receivable-1/payments");
+      expect(body).toMatchObject({
+        amount_rub: "50000",
+        received_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        payment_channel: "personal_card",
+      });
+      expect(String((body as { idempotency_key: string }).idempotency_key)).not.toBe("");
+    });
+  });
+
+  it("leaves bank agreements to statement reconciliation", async () => {
+    await withReceivables([receivable({ id: "receivable-bank", agreement_id: "agreement-bank" })], async () => {
+      render(<BusinessPage />);
+      fireEvent.click(screen.getAllByRole("tab")[1]!);
+
+      expect(screen.queryByTestId("record-payment-trigger")).not.toBeInTheDocument();
+    });
+  });
+
+  it("offers no payment action for receivables that cannot take one", async () => {
+    await withReceivables([
+      receivable({ id: "receivable-paid", status: "paid", paid_amount_rub: "50000.00" }),
+      receivable({ id: "receivable-written-off", status: "written_off", due_on: `${month}-21` }),
+    ], async () => {
+      render(<BusinessPage />);
+      fireEvent.click(screen.getAllByRole("tab")[1]!);
+
+      expect(screen.queryByTestId("record-payment-trigger")).not.toBeInTheDocument();
+    });
   });
 });
 

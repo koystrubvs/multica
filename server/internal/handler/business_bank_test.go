@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"net/http"
 	"testing"
 	"time"
 
@@ -141,6 +142,54 @@ func TestBusinessReceivablePaidStatus(t *testing.T) {
 	}
 	if got := businessReceivablePaidStatus(100000, 0, "cap"); got != "" {
 		t.Fatalf("unpaid: got %q", got)
+	}
+}
+
+func TestReceivablePaymentBlocker(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    string
+		remaining int64
+		amount    int64
+		wantCode  int
+	}{
+		{name: "overdue receivable accepts payment", status: "overdue", remaining: 5_000_000, amount: 5_000_000},
+		{name: "partial payment allowed", status: "invoiced", remaining: 5_000_000, amount: 1_000_000},
+		{name: "skipped rejected", status: "skipped", remaining: 5_000_000, amount: 1_000_000, wantCode: http.StatusConflict},
+		{name: "written off rejected", status: "written_off", remaining: 5_000_000, amount: 1_000_000, wantCode: http.StatusConflict},
+		{name: "fully paid rejected", status: "paid", remaining: 0, amount: 1_000_000, wantCode: http.StatusConflict},
+		{name: "overpayment rejected", status: "expected", remaining: 5_000_000, amount: 5_000_001, wantCode: http.StatusConflict},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			code, reason := receivablePaymentBlocker(test.status, test.remaining, test.amount)
+			if code != test.wantCode {
+				t.Fatalf("code=%d reason=%q, want %d", code, reason, test.wantCode)
+			}
+			if (reason != "") != (test.wantCode != 0) {
+				t.Fatalf("reason=%q does not match code=%d", reason, code)
+			}
+		})
+	}
+}
+
+func TestReceivablePaymentLedgerFields(t *testing.T) {
+	if got := receivablePaymentSource("personal_card"); got != "personal_card" {
+		t.Fatalf("card source: got %q", got)
+	}
+	for _, channel := range []string{"bank", "cash", "other", ""} {
+		if got := receivablePaymentSource(channel); got != "manual" {
+			t.Fatalf("channel %q: got source %q, want manual", channel, got)
+		}
+	}
+	if got := receivablePaymentPurpose("  paid to card  ", "TrueSmile — SEO", "2026-07"); got != "paid to card" {
+		t.Fatalf("notes purpose: got %q", got)
+	}
+	if got := receivablePaymentPurpose("", "TrueSmile — SEO", "2026-07"); got != "TrueSmile — SEO · 2026-07" {
+		t.Fatalf("agreement purpose: got %q", got)
+	}
+	if got := receivablePaymentPurpose("", "   ", "2026-07"); got != "2026-07" {
+		t.Fatalf("period purpose: got %q", got)
 	}
 }
 

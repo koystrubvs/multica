@@ -940,6 +940,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 						r.Patch("/agreements/{agreementId}", h.UpdateBusinessAgreement)
 						r.Post("/receivables/generate", h.GenerateBusinessReceivables)
 						r.Patch("/receivables/{receivableId}", h.UpdateBusinessReceivable)
+						r.Post("/receivables/{receivableId}/payments", h.RecordBusinessReceivablePayment)
 					})
 
 					r.Group(func(r chi.Router) {

@@ -64,6 +64,7 @@ import { BusinessBillingTab } from "./business-billing-tab";
 import { BusinessClientCard } from "./business-client-card";
 import { BusinessClientCreateSheet } from "./business-client-create";
 import { BusinessCostsTab } from "./business-costs-tab";
+import { BusinessReceivablePaymentSheet } from "./business-receivable-payment";
 
 type Tab = "overview" | "calendar" | "clients" | "billing" | "bank" | "costs" | "economics" | "team";
 
@@ -122,6 +123,14 @@ function text(row: BusinessRow, key: string): string {
 function rub(value: string | number | undefined): string {
   const amount = Number(value ?? 0);
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function receivableRemaining(row: BusinessRow): number {
+  return Math.max(Number(row.planned_amount_rub ?? 0) - Number(row.paid_amount_rub ?? 0), 0);
+}
+
+function receivableAcceptsPayment(row: BusinessRow): boolean {
+  return !["paid", "skipped", "written_off"].includes(String(row.status ?? "")) && receivableRemaining(row) > 0;
 }
 
 export function groupUnresolvedBankCounterparties(rows: BusinessRow[]): BusinessRow[] {
@@ -474,6 +483,7 @@ export function BusinessPage() {
   const [periodMode, setPeriodMode] = useState<"month" | "year">("month");
   const [tab, setTab] = useState<Tab>("overview");
   const [openClientID, setOpenClientID] = useState("");
+  const [paymentReceivableID, setPaymentReceivableID] = useState("");
   const [createClientOpen, setCreateClientOpen] = useState(false);
   const [createCostOpen, setCreateCostOpen] = useState(false);
   const [busy, setBusy] = useState("");
@@ -565,8 +575,8 @@ export function BusinessPage() {
   ), [data?.receivables, receivableStatuses, receivableClients, receivableReviewOnly, receivableOverdueOnly]);
 
   const agreementMeta = useMemo(() => {
-    const map = new Map<string, { name: string; model: string; cap: number }>();
-    for (const row of data?.agreements ?? []) map.set(String(row.id), { name: String(row.name ?? ""), model: String(row.model ?? ""), cap: Number(row.cap_rub ?? 0) });
+    const map = new Map<string, { name: string; model: string; cap: number; channel: string }>();
+    for (const row of data?.agreements ?? []) map.set(String(row.id), { name: String(row.name ?? ""), model: String(row.model ?? ""), cap: Number(row.cap_rub ?? 0), channel: String(row.payment_channel ?? "") });
     return map;
   }, [data?.agreements]);
 
@@ -783,10 +793,16 @@ export function BusinessPage() {
   const metrics = dashboard.data;
   const clientOptions = (data.clients ?? []).map((row) => ({ value: String(row.id), label: String(row.canonical_name) }));
   const projectOptions = (data.projects ?? []).map((row) => ({ value: String(row.project_id), label: String(row.project_title ?? row.project_id) }));
-  const matchableReceivables = (data.receivables ?? []).filter((row) => {
-    const status = String(row.status ?? "");
-    return !["paid", "skipped", "written_off"].includes(status) && Math.max(Number(row.planned_amount_rub ?? 0) - Number(row.paid_amount_rub ?? 0), 0) > 0;
-  });
+  const matchableReceivables = (data.receivables ?? []).filter(receivableAcceptsPayment);
+  const clientChannels = new Map((data.clients ?? []).map((row) => [String(row.id), String(row.primary_payment_channel ?? "bank")]));
+  const paymentChannelFor = (row: BusinessRow): string =>
+    agreementMeta.get(String(row.agreement_id))?.channel || clientChannels.get(String(row.client_id)) || "bank";
+  // Money that goes through the business account is reconciled from the bank
+  // statement, so a manual entry there would only duplicate it. The action
+  // belongs to the agreements that are paid past the account — card or cash.
+  const offersManualPayment = (row: BusinessRow): boolean =>
+    receivableAcceptsPayment(row) && paymentChannelFor(row) !== "bank";
+  const paymentReceivable = (data.receivables ?? []).find((row) => String(row.id) === paymentReceivableID) ?? null;
   const serviceOptions = SERVICE_TYPES.map((value) => ({ value, label: tt(`values.${value}`, { defaultValue: value }) }));
   const econWorkerRow = (data.workers ?? []).find((row) => String(row.id) === econWorker) ?? (data.workers ?? [])[0];
   const effWorkerID = econWorker || String(econWorkerRow?.id ?? "");
@@ -1139,7 +1155,29 @@ export function BusinessPage() {
                       {group.overdue > 0 && <>{" · "}<span className="font-medium text-destructive">{t(($) => $.metrics.overdue)}: {group.overdue}</span></>}
                     </span>
                   </div>
-                  <RowTable tt={tt} locale={locale} rows={group.rows} columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "receivable_status" }]} empty={t(($) => $.empty)} />
+                  <RowTable
+                    tt={tt}
+                    locale={locale}
+                    rows={group.rows}
+                    columns={[{ key: "client_name" }, { key: "agreement_name" }, { key: "planned_amount_rub", kind: "money" }, { key: "by_tasks", kind: "bool" }, { key: "paid_amount_rub", kind: "money" }, { key: "due_on", kind: "date" }, { key: "status", kind: "receivable_status" }]}
+                    empty={t(($) => $.empty)}
+                    extra={{
+                      header: "",
+                      render: (row) => offersManualPayment(row) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-6 whitespace-nowrap px-2 text-[11px]"
+                          data-testid="record-payment-trigger"
+                          disabled={busy !== ""}
+                          onClick={() => setPaymentReceivableID(String(row.id))}
+                        >
+                          {t(($) => $.actions.record_payment)}
+                        </Button>
+                      ) : null,
+                    }}
+                  />
                 </div>
               ))}
             </div>
@@ -1322,6 +1360,14 @@ export function BusinessPage() {
         data={data}
         onClose={() => setOpenClientID("")}
         onChanged={async () => { await Promise.all([snapshot.refetch(), dashboard.refetch()]); }}
+      />
+
+      <BusinessReceivablePaymentSheet
+        businessID={businessID}
+        receivable={paymentReceivable}
+        defaultChannel={paymentReceivable ? paymentChannelFor(paymentReceivable) : "personal_card"}
+        onClose={() => setPaymentReceivableID("")}
+        onRecorded={async () => { await Promise.all([snapshot.refetch(), dashboard.refetch()]); }}
       />
 
       <BusinessClientCreateSheet
