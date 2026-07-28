@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 
 const VIEWS_ROOT = join(__dirname, "..");
 
@@ -51,7 +51,9 @@ function sourceFiles(subdirs: string[]): { path: string; text: string }[] {
   return subdirs
     .flatMap((d) => walk(join(VIEWS_ROOT, d)))
     .map((path) => ({
-      path: relative(VIEWS_ROOT, path),
+      // Posix separators so the sanctioned-exception paths below match on
+      // Windows too, where `relative` hands back backslashes.
+      path: relative(VIEWS_ROOT, path).split(sep).join("/"),
       text: stripComments(readFileSync(path, "utf8")),
     }));
 }

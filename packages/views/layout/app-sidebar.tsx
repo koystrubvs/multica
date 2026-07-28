@@ -24,7 +24,6 @@ import {
   Check,
   SquarePen,
   X,
-  Building2,
 } from "lucide-react";
 import { WorkspaceAvatar } from "../workspace/workspace-avatar";
 import { ActorAvatar } from "@multica/ui/components/common/actor-avatar";
@@ -129,6 +128,7 @@ type NavLabelKey =
   | "my_issues"
   | "issues"
   | "projects"
+  | "business"
   | "autopilots"
   | "agents"
   | "squads"
@@ -151,9 +151,7 @@ const workspaceNav: { key: NavKey; labelKey: NavLabelKey }[] = [
   { key: "projects", labelKey: "projects" },
   // Business is a primary workspace destination. Keep it beside Projects so
   // it stays visible without scrolling through the operational tool list.
-  // Its icon is an inline Building2 (see render) — a fork-local route not in
-  // WORKSPACE_PAGES, so routeIconForPath would fall back to the default icon.
-  { key: "business", labelKey: "projects" },
+  { key: "business", labelKey: "business" },
   { key: "autopilots", labelKey: "autopilots" },
   { key: "agents", labelKey: "agents" },
   { key: "squads", labelKey: "squads" },
@@ -358,7 +356,6 @@ interface AppSidebarProps {
 
 export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }: AppSidebarProps = {}) {
   const { t } = useT("layout");
-  const { t: businessT } = useT("business");
   const { pathname, push } = useNavigation();
   const user = useAuthStore((s) => s.user);
   const userId = useAuthStore((s) => s.user?.id);
@@ -759,8 +756,8 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                         render={<AppLink href={href} />}
                         className="text-muted-foreground hover:not-data-active:bg-sidebar-accent/70 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground"
                       >
-                        {item.key === "business" ? <Building2 /> : <Icon />}
-                        <span>{item.key === "business" ? businessT(($) => $.title) : t(($) => $.nav[item.labelKey])}</span>
+                        <Icon />
+                        <span>{t(($) => $.nav[item.labelKey])}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

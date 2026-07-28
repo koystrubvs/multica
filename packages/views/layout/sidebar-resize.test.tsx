@@ -22,7 +22,10 @@ describe("left sidebar resizing", () => {
 
   it("previews width directly and commits only when the pointer is released", () => {
     const stableConsumerRender = vi.fn();
-    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    // Spy on the instance, not Storage.prototype: when jsdom declines to hand
+    // out a localStorage the shared setup installs a plain in-memory one, and
+    // a prototype spy then silently records nothing.
+    const setItem = vi.spyOn(localStorage, "setItem");
 
     function StableSidebarConsumer() {
       useSidebar();
@@ -100,7 +103,10 @@ describe("left sidebar resizing", () => {
   });
 
   it("restores the committed width and cursor state when pointer capture is cancelled", () => {
-    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    // Spy on the instance, not Storage.prototype: when jsdom declines to hand
+    // out a localStorage the shared setup installs a plain in-memory one, and
+    // a prototype spy then silently records nothing.
+    const setItem = vi.spyOn(localStorage, "setItem");
     const { container } = renderWithI18n(
       <SidebarProvider>
         <Sidebar>
