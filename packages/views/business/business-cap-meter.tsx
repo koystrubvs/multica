@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { capProgress, resolveCapWindow, sumCapCharges, type CapCharge } from "@multica/core/business";
+import { capProgress, resolveCapWindow, sumCapCharges, type CapCharge } from "./cap-window";
 import type { BusinessRow } from "@multica/core/types";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
