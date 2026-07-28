@@ -309,6 +309,54 @@ func (h *Handler) sweepIssueDelta(ctx context.Context, issueID, projectID, works
 	return charge, true, nil
 }
 
+// internalIssuesInProject returns the issues the workspace has marked as
+// internal work. The client does not pay for those, so their usage never
+// becomes a charge.
+func (h *Handler) internalIssuesInProject(ctx context.Context, projectID pgtype.UUID) (map[string]bool, error) {
+	rows, err := h.DB.Query(ctx, `
+		SELECT i.id::text FROM issue i WHERE i.project_id = $1 AND `+issueMarkedInternalSQL, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	internal := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		internal[id] = true
+	}
+	return internal, rows.Err()
+}
+
+// confirmPeriodDrafts turns the period's drafts into the invoice line-up. The
+// "Биллинг" property is filled in after an issue closes, so work swept before
+// anyone marked it internal is voided here — this is the last point where the
+// period total can still be corrected.
+func (h *Handler) confirmPeriodDrafts(ctx context.Context, periodID, userID pgtype.UUID) (confirmed, voided int, err error) {
+	tag, err := h.DB.Exec(ctx, `
+		UPDATE client_billing_charge c
+		SET status = 'void', adjusted_reason = 'внутренняя задача', updated_at = now()
+		FROM issue i
+		WHERE i.id = c.issue_id AND c.period_id = $1 AND c.status <> 'void' AND `+issueMarkedInternalSQL, periodID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("void internal charges: %w", err)
+	}
+	voided = int(tag.RowsAffected())
+	if voided > 0 {
+		slog.Info("billing: internal charges voided before confirm",
+			"period_id", uuidToString(periodID), "count", voided)
+	}
+	rows, err := h.Queries.ConfirmDraftChargesInPeriod(ctx, db.ConfirmDraftChargesInPeriodParams{
+		UserID: userID, PeriodID: periodID,
+	})
+	if err != nil {
+		return 0, voided, err
+	}
+	return len(rows), voided, nil
+}
+
 // sweepProjectBilling walks every issue of the project (ANY status), bills the
 // unbilled usage delta into draft charges attached to the open period, and
 // returns them. Prices and the FX rate freeze at sweep time.
@@ -324,6 +372,10 @@ func (h *Handler) sweepProjectBilling(ctx context.Context, project db.Project, c
 	chargeUsages, err := h.Queries.ListChargeUsageByProject(ctx, project.ID)
 	if err != nil {
 		return nil, fmt.Errorf("charge ledger: %w", err)
+	}
+	internal, err := h.internalIssuesInProject(ctx, project.ID)
+	if err != nil {
+		return nil, fmt.Errorf("internal issues: %w", err)
 	}
 
 	baselines := make(map[string]map[billingUsageKey]*billingUsageLine)
@@ -355,7 +407,12 @@ func (h *Handler) sweepProjectBilling(ctx context.Context, project db.Project, c
 	fx = math.Round(fx*10000) / 10000
 
 	created := []db.CreateClientBillingChargeRow{}
+	skipped := 0
 	for key, rows := range byIssue {
+		if internal[key] {
+			skipped++
+			continue
+		}
 		baseline := baselines[key]
 		if baseline == nil {
 			baseline = map[billingUsageKey]*billingUsageLine{}
@@ -370,7 +427,7 @@ func (h *Handler) sweepProjectBilling(ctx context.Context, project db.Project, c
 		}
 	}
 	slog.Info("billing: sweep completed", "project_id", uuidToString(project.ID),
-		"period_id", uuidToString(period.ID), "charges_created", len(created))
+		"period_id", uuidToString(period.ID), "charges_created", len(created), "internal_skipped", skipped)
 	return created, nil
 }
 

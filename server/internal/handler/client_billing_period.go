@@ -413,13 +413,11 @@ func (h *Handler) CloseBillingPeriod(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if confirmed, err := h.Queries.ConfirmDraftChargesInPeriod(r.Context(), db.ConfirmDraftChargesInPeriodParams{
-		PeriodID: period.ID, UserID: userUUID,
-	}); err != nil {
+	if confirmed, _, err := h.confirmPeriodDrafts(r.Context(), period.ID, userUUID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to confirm period drafts")
 		return
-	} else if len(confirmed) > 0 {
-		slog.Info("billing: drafts auto-confirmed at close", "period_id", uuidToString(period.ID), "count", len(confirmed))
+	} else if confirmed > 0 {
+		slog.Info("billing: drafts auto-confirmed at close", "period_id", uuidToString(period.ID), "count", confirmed)
 	}
 	total, err := h.Queries.SumConfirmedChargesInPeriod(r.Context(), period.ID)
 	if err != nil {

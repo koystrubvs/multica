@@ -226,9 +226,7 @@ func (h *Handler) PrepareBusinessBillingRuns(w http.ResponseWriter, r *http.Requ
 		for _, per := range after {
 			if per.Status == "ready" && !readyBefore[uuidToString(per.ID)] {
 				readyMarked++
-				if _, err := h.Queries.ConfirmDraftChargesInPeriod(r.Context(), db.ConfirmDraftChargesInPeriodParams{
-					UserID: userUUID, PeriodID: per.ID,
-				}); err != nil {
+				if _, _, err := h.confirmPeriodDrafts(r.Context(), per.ID, userUUID); err != nil {
 					slog.Warn("billing prepare: confirm drafts failed", "period_id", uuidToString(per.ID), "error", err)
 				}
 				total, _ := h.Queries.SumConfirmedChargesInPeriod(r.Context(), per.ID)
@@ -303,9 +301,8 @@ func (h *Handler) ConfirmBusinessBillingPeriod(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "sweep failed: "+err.Error())
 		return
 	}
-	if _, err := h.Queries.ConfirmDraftChargesInPeriod(r.Context(), db.ConfirmDraftChargesInPeriodParams{
-		UserID: userUUID, PeriodID: periodUUID,
-	}); err != nil {
+	_, internalVoided, err := h.confirmPeriodDrafts(r.Context(), periodUUID, userUUID)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to confirm draft charges")
 		return
 	}
@@ -353,6 +350,7 @@ func (h *Handler) ConfirmBusinessBillingPeriod(w http.ResponseWriter, r *http.Re
 	resp := map[string]any{
 		"period":             closed,
 		"economics_accepted": econAccepted,
+		"internal_voided":    internalVoided,
 	}
 	if reportURL != "" {
 		resp["report_file"] = reportURL

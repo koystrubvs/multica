@@ -179,11 +179,11 @@ func nullableJSON(value json.RawMessage) any {
 // property the agents fill in when they close an issue. Anything not marked
 // internal counts as billable — the property is filled in after the fact, and
 // treating "not yet marked" as internal would empty every ceiling.
-// Requires `c` (client_billing_charge) and `i` (issue) in scope.
-const businessInternalChargeSQL = `EXISTS (
+// Requires `i` (issue) in scope.
+const issueMarkedInternalSQL = `EXISTS (
 			SELECT 1 FROM issue_property ip
 			CROSS JOIN LATERAL jsonb_array_elements(ip.config->'options') opt
-			WHERE ip.workspace_id = c.workspace_id AND lower(ip.name) = 'биллинг'
+			WHERE ip.workspace_id = i.workspace_id AND lower(ip.name) = 'биллинг'
 			  AND opt->>'name' = 'внутренняя' AND i.properties->>ip.id::text = opt->>'id'
 		)`
 
@@ -324,7 +324,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			JOIN issue i ON i.id = c.issue_id AND i.workspace_id = c.workspace_id
 			LEFT JOIN client_billing_period per ON per.id = c.period_id
 			JOIN business_client_project bcp ON bcp.project_id = c.project_id AND bcp.business_id = $1
-			WHERE c.status <> 'void' AND NOT `+businessInternalChargeSQL+`
+			WHERE c.status <> 'void' AND NOT `+issueMarkedInternalSQL+`
 			GROUP BY bcp.client_id, c.project_id, to_char(COALESCE(per.ends_on - 1, c.created_at::date), 'YYYY-MM')
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.month DESC, q.client_name, q.issue_title), '[]'::jsonb) FROM (
@@ -336,7 +336,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			       -- Work already carried by an issued invoice: it belongs to the
 			       -- period that was billed, not to the ceiling being watched now.
 			       COALESCE(per.status, '') AS period_status,
-			       `+businessInternalChargeSQL+` AS is_internal,
+			       `+issueMarkedInternalSQL+` AS is_internal,
 			       c.issue_id, i.title AS issue_title, i.number AS issue_number,
 			       c.project_id, p.title AS project_title, c.price_rub, c.status
 			FROM client_billing_charge c
