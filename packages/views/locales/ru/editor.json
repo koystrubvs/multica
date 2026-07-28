@@ -111,6 +111,10 @@
 	},
 	"upload": {
 		"failed": "Не удалось загрузить {{filename}}: {{reason}}",
-		"in_progress": "Загрузка…"
+		"in_progress": "Загрузка…",
+		"interrupted": "Загрузка прервана — файл не сохранён. Прикрепите его заново.",
+		"remove": "Удалить",
+		"uploading_label": "Загружается {{filename}}…",
+		"failed_label": "Не удалось загрузить {{filename}}"
 	}
 }
