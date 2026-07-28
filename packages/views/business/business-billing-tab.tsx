@@ -94,6 +94,44 @@ export function projectBillingState(row: BusinessRow, contractorId: string): Pro
   return "off";
 }
 
+// The client's agreement already answers "does this bill have a ceiling":
+// a capped agreement with a hard limit means the invoice must be trimmed to
+// the cap, anything else means it must not. The billing mode below repeats
+// that answer per contractor and nothing keeps the two in sync, so the row
+// says when they disagree instead of silently invoicing the wrong amount.
+export type BillingModeExpectation = { mode: "postpaid" | "subscription"; fee: number; hardCaps: number };
+
+export type BillingModeMismatch =
+  | { kind: "cap_missing"; amount: number }
+  | { kind: "cap_extra" }
+  | { kind: "fee_differs"; amount: number; current: number }
+  | { kind: "many_caps" };
+
+export function agreementBillingExpectation(agreements: BusinessRow[], clientID: string): BillingModeExpectation {
+  const hardCaps = agreements.filter((row) =>
+    String(row.client_id ?? "") === clientID
+    && text(row, "status") === "active"
+    && text(row, "model") === "cap"
+    && text(row, "cap_mode") !== "advisory");
+  if (hardCaps.length === 0) return { mode: "postpaid", fee: 0, hardCaps: 0 };
+  const fees = hardCaps.map((row) => Number(row.cap_rub ?? 0)).filter((value) => value > 0);
+  return { mode: "subscription", fee: fees.length > 0 ? Math.min(...fees) : 0, hardCaps: hardCaps.length };
+}
+
+export function billingModeMismatch(
+  draft: { mode: string; fee: string },
+  expectation: BillingModeExpectation,
+): BillingModeMismatch | null {
+  const capped = draft.mode === "subscription";
+  if (expectation.hardCaps > 1) return { kind: "many_caps" };
+  if (expectation.mode === "subscription" && !capped) return { kind: "cap_missing", amount: expectation.fee };
+  if (expectation.mode === "postpaid" && capped) return { kind: "cap_extra" };
+  if (!capped || expectation.fee <= 0) return null;
+  const current = Number(draft.fee.trim() === "" ? 0 : draft.fee);
+  if (!Number.isFinite(current) || current === expectation.fee) return null;
+  return { kind: "fee_differs", amount: expectation.fee, current };
+}
+
 export function BusinessBillingTab({ businessID, data, onChanged }: {
   businessID: string;
   data: BusinessSnapshot;
@@ -250,6 +288,9 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                 const draft = draftFor(payer);
                 const clientProjects = projectsByClient.get(String(payer.client_id)) ?? [];
                 const cap = Number(draft.fee || 0);
+                const mismatch = bank
+                  ? billingModeMismatch(draft, agreementBillingExpectation(data.agreements ?? [], String(payer.client_id)))
+                  : null;
                 return (
                   <TableRow key={id}>
                     <TableCell className="max-w-40 py-2 align-top text-xs font-medium">
@@ -300,6 +341,17 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
                             ? t(($) => $.billing.cap_formula, { amount: rub(cap) })
                             : t(($) => $.billing.postpaid_formula)}
                         </p>
+                        {mismatch && (
+                          <p className="max-w-64 rounded bg-amber-500/10 px-1.5 py-1 text-[11px] leading-4 text-amber-600 dark:text-amber-400">
+                            {mismatch.kind === "cap_missing"
+                              ? t(($) => $.billing.agreement_cap_missing, { amount: rub(mismatch.amount) })
+                              : mismatch.kind === "cap_extra"
+                                ? t(($) => $.billing.agreement_cap_extra)
+                                : mismatch.kind === "fee_differs"
+                                  ? t(($) => $.billing.agreement_fee_differs, { amount: rub(mismatch.amount), current: rub(mismatch.current) })
+                                  : t(($) => $.billing.agreement_many_caps)}
+                          </p>
+                        )}
                       </div>}
                     </TableCell>
                     <TableCell className="py-2 text-right align-top">
