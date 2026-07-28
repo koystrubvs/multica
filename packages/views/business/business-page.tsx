@@ -1077,6 +1077,32 @@ export function BusinessPage() {
           </div>
         </Section>
 
+        {/* Ceilings sit next to the payment calendar rather than inside the
+            money tab: they are the one number worth catching mid-period, and
+            the overview is where the owner looks first. */}
+        <Section title={t(($) => $.sections.caps)}>
+          <p className="text-[11px] text-muted-foreground">{t(($) => $.cap.hint)}</p>
+          {cappedAgreements.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t(($) => $.cap.empty)}</div>
+          ) : (
+            <div className="grid gap-2 @3xl:grid-cols-2 @5xl:grid-cols-3">
+              {cappedAgreements.map((agreement) => (
+                <div key={String(agreement.id)} className="space-y-1.5 rounded-lg border p-2.5">
+                  <button
+                    type="button"
+                    className="text-left text-xs font-medium hover:underline"
+                    onClick={() => setOpenClientID(String(agreement.client_id ?? ""))}
+                  >
+                    {String(agreement.client_name ?? "")}
+                    <span className="text-muted-foreground"> · {String(agreement.name ?? "")}</span>
+                  </button>
+                  <BusinessCapMeter agreement={agreement} charges={data?.billing_tasks ?? []} locale={locale} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
         <Section title={t(($) => $.metric_groups.bank)}>
           <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
             <Metric label={t(($) => $.metrics.client_income)} value={rub(metrics.bank_client_income_rub)} />
@@ -1200,28 +1226,6 @@ export function BusinessPage() {
                       ) : null,
                     }}
                   />
-                </div>
-              ))}
-            </div>
-          )}
-        </Section>
-        <Section title={t(($) => $.sections.caps)}>
-          <p className="text-[11px] text-muted-foreground">{t(($) => $.cap.hint)}</p>
-          {cappedAgreements.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">{t(($) => $.cap.empty)}</div>
-          ) : (
-            <div className="grid gap-2 @3xl:grid-cols-2">
-              {cappedAgreements.map((agreement) => (
-                <div key={String(agreement.id)} className="space-y-1.5 rounded-lg border p-2.5">
-                  <button
-                    type="button"
-                    className="text-left text-xs font-medium hover:underline"
-                    onClick={() => setOpenClientID(String(agreement.client_id ?? ""))}
-                  >
-                    {String(agreement.client_name ?? "")}
-                    <span className="text-muted-foreground"> · {String(agreement.name ?? "")}</span>
-                  </button>
-                  <BusinessCapMeter agreement={agreement} charges={data?.billing_tasks ?? []} locale={locale} />
                 </div>
               ))}
             </div>
