@@ -696,15 +696,39 @@ export function BusinessPage() {
 
   const unresolvedCounterparties = useMemo(() => groupUnresolvedBankCounterparties(periodTransactions), [periodTransactions]);
 
+  // Receipts booked before the ledger existed have nothing to reconcile
+  // against, and the register goes back to 2018. The first receivable is where
+  // "unmatched" starts meaning "needs work".
+  const reconcileFrom = useMemo(() => {
+    let earliest = "";
+    for (const row of data?.receivables ?? []) {
+      const start = String(row.period_start ?? "").slice(0, 10);
+      if (start && (earliest === "" || start < earliest)) earliest = start;
+    }
+    return earliest;
+  }, [data?.receivables]);
+
+  const isUnreconciled = (row: BusinessRow): boolean => (
+    String(row.direction) === "inbound"
+    && !["transfer", "vitmax_transit"].includes(String(row.classification))
+    && !isTruthyFlag(row.is_matched)
+  );
+
   const filteredTransactions = useMemo(() => {
     const needle = txSearch.trim().toLowerCase();
     return periodTransactions.filter((row) =>
       (txClasses.length === 0 || txClasses.includes(String(row.classification)))
       && (txDirections.length === 0 || txDirections.includes(String(row.direction)))
-      && (!txUnmatchedOnly || (String(row.direction) === "inbound" && !["transfer", "vitmax_transit"].includes(String(row.classification)) && !isTruthyFlag(row.is_matched)))
+      && (!txUnmatchedOnly || (isUnreconciled(row) && (reconcileFrom === "" || String(row.booked_on ?? "") >= reconcileFrom)))
       && (!needle || `${String(row.counterparty_name ?? "")} ${String(row.purpose ?? "")} ${String(row.counterparty_inn ?? "")}`.toLowerCase().includes(needle))
     ).map((row) => ({ ...row, match_state: isTruthyFlag(row.is_matched) ? "matched" : "unmatched" }) as BusinessRow);
-  }, [periodTransactions, txClasses, txDirections, txUnmatchedOnly, txSearch]);
+  }, [periodTransactions, txClasses, txDirections, txUnmatchedOnly, txSearch, reconcileFrom]);
+
+  // Never a silent cut: say how many receipts the ledger date dropped.
+  const legacyUnmatchedCount = useMemo(() => {
+    if (!txUnmatchedOnly || reconcileFrom === "") return 0;
+    return periodTransactions.filter((row) => isUnreconciled(row) && String(row.booked_on ?? "") < reconcileFrom).length;
+  }, [periodTransactions, txUnmatchedOnly, reconcileFrom]);
 
   const taskBillingGroups = useMemo(() => {
     const groups = new Map<string, { month: string; client_name: string; task_amount_rub: number; issues: Map<string, string> }>();
@@ -1241,6 +1265,11 @@ export function BusinessPage() {
         <Toolbar>
           <div className="flex min-w-0 items-center gap-2">
             <ResultCount shown={filteredTransactions.length} total={periodTransactions.length} />
+            {legacyUnmatchedCount > 0 && (
+              <span className="whitespace-nowrap text-xs text-muted-foreground" data-testid="legacy-unmatched">
+                {t(($) => $.bank.before_ledger)}: {legacyUnmatchedCount}
+              </span>
+            )}
             <span data-testid="bank-summary" className="hidden whitespace-nowrap text-xs tabular-nums text-muted-foreground lg:inline">
               {t(($) => $.values.inbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.inbound)}</span>
               {" · "}{t(($) => $.values.outbound)}: <span className="font-medium text-foreground">{rub(transactionTotals.outbound)}</span>

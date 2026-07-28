@@ -492,7 +492,8 @@
       "manual_counterparty_resolution": "銀行の取引先を手動で分類",
       "vitmax_transit_excluded": "VitMax の通過取引 — 個人収益から除外",
       "own_account_transfer_excluded": "自己口座間の振替 — 収益・費用から除外"
-    }
+    },
+    "before_ledger": "台帳開始前のため非表示"
   },
   "card": {
     "details": "顧客情報",

@@ -492,7 +492,8 @@
       "manual_counterparty_resolution": "Контрагент разобран вручную в банке",
       "vitmax_transit_excluded": "Транзит VitMax — не учитывается в личном доходе",
       "own_account_transfer_excluded": "Перевод между своими счетами — не учитывается в доходах и расходах"
-    }
+    },
+    "before_ledger": "Скрыто: до начала учёта"
   },
   "card": {
     "details": "Данные клиента",

@@ -492,7 +492,8 @@
       "manual_counterparty_resolution": "은행 거래처를 수동으로 분류",
       "vitmax_transit_excluded": "VitMax 경유 거래 — 개인 수익에서 제외",
       "own_account_transfer_excluded": "본인 계좌 간 이체 — 수익 및 비용에서 제외"
-    }
+    },
+    "before_ledger": "장부 시작 전이라 숨김"
   },
   "card": {
     "details": "고객 정보",

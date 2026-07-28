@@ -492,7 +492,8 @@
       "manual_counterparty_resolution": "Bank counterparty resolved manually",
       "vitmax_transit_excluded": "VitMax transit — excluded from personal revenue",
       "own_account_transfer_excluded": "Own-account transfer — excluded from revenue and expenses"
-    }
+    },
+    "before_ledger": "Skipped, booked before the ledger"
   },
   "card": {
     "details": "Client details",

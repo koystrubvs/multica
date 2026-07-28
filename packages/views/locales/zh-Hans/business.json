@@ -492,7 +492,8 @@
       "manual_counterparty_resolution": "已手动整理银行交易对手",
       "vitmax_transit_excluded": "VitMax 过账 — 不计入个人收入",
       "own_account_transfer_excluded": "自有账户间转账 — 不计入收入和支出"
-    }
+    },
+    "before_ledger": "早于账目起点，已隐藏"
   },
   "card": {
     "details": "客户信息",
