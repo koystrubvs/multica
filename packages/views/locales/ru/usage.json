@@ -26,10 +26,12 @@
     "title_tokens": "Токены по дням",
     "title_time": "Время выполнения по дням",
     "title_tasks": "Задачи по дням",
+    "title_errors": "Ошибки по дням",
     "metric_cost": "Стоимость",
     "metric_tokens": "Токены",
     "metric_time": "Время",
     "metric_tasks": "Задачи",
+    "metric_errors": "Ошибки",
     "no_data": "Нет использования в этом окне."
   },
   "weekly": {
@@ -37,7 +39,31 @@
     "title_tokens": "Токены по неделям",
     "title_time": "Время выполнения по неделям",
     "title_tasks": "Задачи по неделям",
+    "title_errors": "Ошибки по неделям",
     "partial_label": "{{range}} (частично · {{covered}} / 7 дней)"
+  },
+  "errors": {
+    "tooltip_rate": "Доля ошибок",
+    "class": {
+      "auth": "Авторизация",
+      "rate_limit": "Лимит запросов",
+      "timeout": "Таймаут",
+      "provider": "Провайдер",
+      "runtime": "Среда выполнения",
+      "agent": "Агент",
+      "other": "Прочее"
+    },
+    "title": "Ошибки",
+    "summary": "Неудачных запусков: {{failed}} из {{total}} · {{rate}}",
+    "by_class": "По типам",
+    "by_agent": "Чаще всего падают",
+    "other_agents": "Другие агенты",
+    "agent_rate": "{{failed}} / {{total}} · {{rate}}",
+    "no_data": "Неудачных запусков в этом окне нет.",
+    "show_reasons": "Показать коды ошибок",
+    "hide_reasons": "Скрыть коды ошибок",
+    "show_all": "Показать все ({{count}})",
+    "show_less": "Показать топ-{{count}}"
   },
   "leaderboard": {
     "title": "Лидерборд",

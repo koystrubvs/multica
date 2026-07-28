@@ -154,7 +154,8 @@
   "picker": {
     "no_project": "Без проекта",
     "remove": "Убрать из проекта",
-    "empty": "Пока нет проектов"
+    "empty": "Пока нет проектов",
+    "search_placeholder": "Поиск проектов..."
   },
   "chip": {
     "fallback_label": "Проект"

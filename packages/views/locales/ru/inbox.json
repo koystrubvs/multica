@@ -50,7 +50,8 @@
     "reaction_added": "Реакция",
     "quick_create_done": "Создано с агентом",
     "quick_create_failed": "Создание с агентом не удалось",
-    "billing_budget_alert": "Алерт по бюджету биллинга"
+    "billing_budget_alert": "Алерт по бюджету биллинга",
+    "quick_create_unconfirmed": "Создание агентом не подтверждено"
   },
   "labels": {
     "set_status_to": "Установить статус на",

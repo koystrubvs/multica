@@ -163,6 +163,7 @@
   "detail": {
     "not_found": "Эта задача не существует или был удалён в этом рабочем пространстве.",
     "breadcrumb_project_unknown": "Неизвестный проект",
+    "back": "Назад",
     "back_to_issues": "Назад к Задачи",
     "title_placeholder": "Заголовок задачи",
     "desc_placeholder": "Добавьте описание...",
