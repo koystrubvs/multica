@@ -29,7 +29,10 @@ const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as c
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 const AGREEMENT_MODELS = ["fixed", "cap", "time_material", "project"] as const;
 
-type TT = (key: string, options?: { defaultValue?: string }) => string;
+type TT = (
+  key: string,
+  options?: { defaultValue?: string; count?: number },
+) => string;
 
 function text(row: BusinessRow, key: string): string {
   const value = row[key];
