@@ -33,9 +33,15 @@ export function localToday(): string {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
-/** True for agreements this meter can say anything about. */
+/**
+ * True for agreements this meter can say anything about. Irregular support has
+ * no invoice day, so there is no period to measure a ceiling against — showing
+ * one would mean inventing a calendar month the client never agreed to.
+ */
 export function hasCapMeter(agreement: BusinessRow): boolean {
-  return String(agreement.model ?? "") === "cap" && Number(agreement.cap_rub ?? 0) > 0;
+  return String(agreement.model ?? "") === "cap"
+    && Number(agreement.cap_rub ?? 0) > 0
+    && Number(agreement.invoice_day ?? 0) > 0;
 }
 
 /** The charges from `billing_tasks` that count against one agreement's ceiling. */

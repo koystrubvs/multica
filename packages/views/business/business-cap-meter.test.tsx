@@ -20,9 +20,13 @@ function charge(row: Partial<BusinessRow>): BusinessRow {
 
 describe("hasCapMeter", () => {
   it("only speaks for capped agreements with a ceiling set", () => {
-    expect(hasCapMeter({ model: "cap", cap_rub: "25000" })).toBe(true);
-    expect(hasCapMeter({ model: "cap", cap_rub: null })).toBe(false);
-    expect(hasCapMeter({ model: "fixed", cap_rub: "25000" })).toBe(false);
+    expect(hasCapMeter({ model: "cap", cap_rub: "25000", invoice_day: 30 })).toBe(true);
+    expect(hasCapMeter({ model: "cap", cap_rub: null, invoice_day: 30 })).toBe(false);
+    expect(hasCapMeter({ model: "fixed", cap_rub: "25000", invoice_day: 30 })).toBe(false);
+  });
+
+  it("stays silent for irregular support, which has no invoice day", () => {
+    expect(hasCapMeter({ model: "cap", cap_rub: "50000", invoice_day: null })).toBe(false);
   });
 });
 
