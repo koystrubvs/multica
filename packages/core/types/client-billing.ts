@@ -188,7 +188,7 @@ export interface ClientBillingCharge {
   issue_title?: string;
 }
 
-export type ClientBillingPeriodStatus = "open" | "closed" | "invoiced" | "paid";
+export type ClientBillingPeriodStatus = "open" | "ready" | "closed" | "invoiced" | "paid";
 
 /** One invoicing cycle of a project (phase 2, migration 121). */
 export interface ClientBillingPeriod {
@@ -209,6 +209,58 @@ export interface ClientBillingPeriod {
   paid_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Business billing queue row (period + client/contractor context). */
+export interface BusinessBillingRunCharge {
+  id: string;
+  issue_id: string;
+  issue_title: string;
+  price_rub: number;
+  status: string;
+  created_at: string;
+}
+
+export interface BusinessBillingRun {
+  period_id: string;
+  project_id: string;
+  project_title: string;
+  workspace_id: string;
+  client_id: string | null;
+  client_name: string;
+  elba_contractor_id: string | null;
+  billing_mode: string;
+  anchor_day: number;
+  starts_on: string;
+  ends_on: string;
+  status: ClientBillingPeriodStatus;
+  total_rub: number;
+  confirmed_total_rub: number;
+  charge_count: number;
+  draft_count: number;
+  elba_invoice_id: string | null;
+  elba_act_id: string | null;
+  report_file: string | null;
+  elba_invoice_url: string | null;
+  elba_act_url: string | null;
+  charges?: BusinessBillingRunCharge[];
+  ready_on: string;
+}
+
+export interface BusinessBillingRunsResponse {
+  runs: BusinessBillingRun[];
+}
+
+export interface ConfirmBusinessBillingPeriodResult {
+  period: ClientBillingPeriod;
+  economics_accepted?: number;
+  report_file?: string;
+  elba_invoice_id?: string | null;
+  elba_act_id?: string | null;
+  elba_invoice_url?: string | null;
+  elba_act_url?: string | null;
+  elba_error?: string;
+  elba_skipped?: boolean;
 }
 
 /** Live progress for the cycle covering today (GET .../periods/current). */

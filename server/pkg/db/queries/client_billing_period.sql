@@ -60,14 +60,72 @@ UPDATE client_billing_period
 SET last_alert_percent = @percent, updated_at = now()
 WHERE id = @id AND last_alert_percent < @percent;
 
--- name: CloseClientBillingPeriod :one
+-- name: MarkClientBillingPeriodReady :one
+-- Freeze preview total and flip open -> ready when the cycle has elapsed.
+-- New work continues in a successor open period.
 UPDATE client_billing_period
-SET status = 'closed', total_rub = @total_rub::float8, closed_at = now(), updated_at = now()
+SET status = 'ready', total_rub = @total_rub::float8, updated_at = now()
 WHERE id = @id AND status = 'open'
 RETURNING id, project_id, workspace_id, starts_on, ends_on, status,
        total_rub::float8 AS total_rub, last_alert_percent,
        elba_invoice_id, elba_act_id, report_file,
        closed_at, paid_at, created_at, updated_at;
+
+-- name: CloseClientBillingPeriod :one
+-- Accepts open (legacy / early close) or ready (reviewed package).
+UPDATE client_billing_period
+SET status = 'closed', total_rub = @total_rub::float8, closed_at = now(), updated_at = now()
+WHERE id = @id AND status IN ('open', 'ready')
+RETURNING id, project_id, workspace_id, starts_on, ends_on, status,
+       total_rub::float8 AS total_rub, last_alert_percent,
+       elba_invoice_id, elba_act_id, report_file,
+       closed_at, paid_at, created_at, updated_at;
+
+-- name: ListBusinessBillingRunPeriods :many
+-- Periods for the Business billing queue: open (upcoming), ready (review),
+-- and recently invoiced. Scoped to projects mapped into this business.
+SELECT per.id, per.project_id, per.workspace_id, per.starts_on, per.ends_on, per.status,
+       per.total_rub::float8 AS total_rub, per.last_alert_percent,
+       per.elba_invoice_id, per.elba_act_id, per.report_file,
+       per.closed_at, per.paid_at, per.created_at, per.updated_at,
+       p.title AS project_title,
+       cfg.elba_contractor_id,
+       cfg.mode AS billing_mode,
+       cfg.anchor_day,
+       cfg.enabled AS billing_enabled,
+       bcp.client_id,
+       bc.canonical_name AS client_name,
+       COALESCE((
+         SELECT COUNT(*)::int FROM client_billing_charge c
+         WHERE c.period_id = per.id AND c.status <> 'void'
+       ), 0)::int AS charge_count,
+       COALESCE((
+         SELECT SUM(c.price_rub)::float8 FROM client_billing_charge c
+         WHERE c.period_id = per.id AND c.status = 'confirmed'
+       ), 0)::float8 AS confirmed_total_rub,
+       COALESCE((
+         SELECT COUNT(*)::int FROM client_billing_charge c
+         WHERE c.period_id = per.id AND c.status = 'draft'
+       ), 0)::int AS draft_count
+FROM client_billing_period per
+JOIN project p ON p.id = per.project_id
+JOIN client_billing_config cfg ON cfg.project_id = per.project_id AND cfg.enabled
+JOIN business_client_project bcp ON bcp.project_id = per.project_id AND bcp.business_id = @business_id
+LEFT JOIN business_client bc ON bc.id = bcp.client_id
+WHERE per.status IN ('open', 'ready', 'closed', 'invoiced')
+  AND (
+    per.status IN ('open', 'ready', 'closed')
+    OR per.updated_at >= now() - interval '90 days'
+  )
+ORDER BY
+  CASE per.status
+    WHEN 'ready' THEN 0
+    WHEN 'closed' THEN 1
+    WHEN 'open' THEN 2
+    ELSE 3
+  END,
+  per.ends_on ASC,
+  p.title ASC;
 
 -- name: ReopenClientBillingPeriod :one
 UPDATE client_billing_period

@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/featureflags"
 	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/pkg/featureflag"
@@ -184,7 +185,8 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.value), '[]'::jsonb) FROM (SELECT * FROM business_client_alias WHERE business_id = $1 ORDER BY value) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.name), '[]'::jsonb) FROM (SELECT * FROM business_client_payer WHERE business_id = $1 ORDER BY name) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.project_title), '[]'::jsonb) FROM (
-			SELECT bcp.*, p.title AS project_title, p.status AS project_status, w.name AS workspace_name, w.slug AS workspace_slug,
+			SELECT bcp.*, p.title AS project_title, p.status AS project_status, p.project_type,
+			       w.name AS workspace_name, w.slug AS workspace_slug,
 			       bc.canonical_name AS client_name,
 			       cb.enabled AS billing_enabled, cb.mode AS billing_mode,
 			       cb.elba_contractor_id AS billing_contractor_id, cb.subscription_fee_rub AS billing_subscription_fee_rub
@@ -203,7 +205,7 @@ func (h *Handler) GetBusinessSnapshot(w http.ResponseWriter, r *http.Request) {
 			ORDER BY w.name
 		) q`},
 		{query: `SELECT COALESCE(jsonb_agg(to_jsonb(q) ORDER BY q.workspace_name, q.project_title), '[]'::jsonb) FROM (
-			SELECT p.id AS project_id, p.title AS project_title, p.status AS project_status,
+			SELECT p.id AS project_id, p.title AS project_title, p.status AS project_status, p.project_type,
 			       w.id AS workspace_id, w.name AS workspace_name, w.slug AS workspace_slug
 			FROM business_workspace bw
 			JOIN workspace w ON w.id = bw.workspace_id
@@ -1310,10 +1312,28 @@ func (h *Handler) UpdateBusinessPayer(w http.ResponseWriter, r *http.Request) {
 type mapBusinessProjectRequest struct {
 	WorkspaceID   string  `json:"workspace_id"`
 	ProjectID     string  `json:"project_id"`
+	// ServiceType is optional and ignored when the project has project_type set.
+	// Kept for older clients; the canonical source is project.project_type.
 	ServiceType   string  `json:"service_type"`
 	Billable      *bool   `json:"billable"`
 	PortalVisible *bool   `json:"portal_visible"`
 	Notes         *string `json:"notes"`
+}
+
+// businessServiceTypeFromProject maps project.project_type onto
+// business_client_project.service_type. Transit projects are internal for
+// billing economics; unclassified projects default to development.
+func businessServiceTypeFromProject(projectType string) string {
+	switch strings.TrimSpace(projectType) {
+	case "support", "seo", "development":
+		return projectType
+	case "transit":
+		return "internal"
+	case "content", "internal":
+		return projectType
+	default:
+		return "development"
+	}
 }
 
 func (h *Handler) MapBusinessClientProject(w http.ResponseWriter, r *http.Request) {
@@ -1333,10 +1353,6 @@ func (h *Handler) MapBusinessClientProject(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if _, valid := parseUUIDOrBadRequest(w, request.ProjectID, "project_id"); !valid {
-		return
-	}
-	if !containsBusinessString([]string{"development", "support", "seo", "content", "internal"}, request.ServiceType) {
-		writeError(w, http.StatusBadRequest, "invalid service_type")
 		return
 	}
 	billable := true
@@ -1361,6 +1377,19 @@ func (h *Handler) MapBusinessClientProject(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "project is outside business workspace registry")
 		return
 	}
+	var projectType pgtype.Text
+	if err := tx.QueryRow(r.Context(), `
+		SELECT project_type FROM project WHERE id = $1 AND workspace_id = $2
+	`, request.ProjectID, request.WorkspaceID).Scan(&projectType); err != nil {
+		writeError(w, http.StatusBadRequest, "project not found")
+		return
+	}
+	serviceType := businessServiceTypeFromProject("")
+	if projectType.Valid && projectType.String != "" {
+		serviceType = businessServiceTypeFromProject(projectType.String)
+	} else if containsBusinessString([]string{"development", "support", "seo", "content", "internal"}, request.ServiceType) {
+		serviceType = request.ServiceType
+	}
 	var before json.RawMessage
 	before, _ = queryBusinessRowJSON(r.Context(), tx.QueryRow(r.Context(), `SELECT to_jsonb(x) FROM business_client_project x WHERE project_id = $1 FOR UPDATE`, request.ProjectID))
 	raw, err := queryBusinessRowJSON(r.Context(), tx.QueryRow(r.Context(), `
@@ -1372,7 +1401,7 @@ func (h *Handler) MapBusinessClientProject(w http.ResponseWriter, r *http.Reques
 			billable = EXCLUDED.billable, portal_visible = EXCLUDED.portal_visible,
 			notes = EXCLUDED.notes, updated_at = now()
 		RETURNING to_jsonb(business_client_project)
-	`, businessID, clientID, request.WorkspaceID, request.ProjectID, request.ServiceType, billable, portalVisible, request.Notes))
+	`, businessID, clientID, request.WorkspaceID, request.ProjectID, serviceType, billable, portalVisible, request.Notes))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "failed to map project")
 		return

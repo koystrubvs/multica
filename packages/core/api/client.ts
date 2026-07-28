@@ -77,6 +77,8 @@ import type {
   ClientBillingContractorConfigUpdate,
   ContractorPeriodGroup,
   ContractorInvoiceResult,
+  BusinessBillingRunsResponse,
+  ConfirmBusinessBillingPeriodResult,
   ElbaEntity,
   BusinessAccount,
   BusinessDashboard,
@@ -1942,12 +1944,11 @@ export class ApiClient {
     return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/charges`);
   }
 
-  /** Closing auto-invoices into Elba when the project has a contractor;
-   *  elba_error carries the push failure (period stays closed, retryable). */
+  /** Closing freezes the period; Elba invoice is a separate /invoice or Business confirm step. */
   async closeBillingPeriod(
     projectId: string,
     periodId: string,
-  ): Promise<{ period: ClientBillingPeriod; elba_error?: string }> {
+  ): Promise<{ period: ClientBillingPeriod }> {
     return this.fetch(`/api/projects/${projectId}/billing/periods/${periodId}/close`, { method: "POST" });
   }
 
@@ -3309,6 +3310,36 @@ export class ApiClient {
 
   async getBusinessSnapshot(businessId: string): Promise<BusinessSnapshot> {
     return this.fetch(`/api/businesses/${businessId}/snapshot`);
+  }
+
+  async listBusinessBillingRuns(
+    businessId: string,
+    opts?: { includeCharges?: boolean },
+  ): Promise<BusinessBillingRunsResponse> {
+    const q = opts?.includeCharges ? "?include=charges" : "";
+    return this.fetch(`/api/businesses/${businessId}/billing/runs${q}`);
+  }
+
+  async prepareBusinessBillingRuns(
+    businessId: string,
+  ): Promise<{ projects_prepared: number; periods_marked_ready: number }> {
+    return this.fetch(`/api/businesses/${businessId}/billing/prepare`, { method: "POST" });
+  }
+
+  async confirmBusinessBillingPeriod(
+    businessId: string,
+    periodId: string,
+  ): Promise<ConfirmBusinessBillingPeriodResult> {
+    return this.fetch(`/api/businesses/${businessId}/billing/periods/${periodId}/confirm`, {
+      method: "POST",
+    });
+  }
+
+  async getBusinessBillingPeriodReport(
+    businessId: string,
+    periodId: string,
+  ): Promise<{ report_file: string }> {
+    return this.fetch(`/api/businesses/${businessId}/billing/periods/${periodId}/report`);
   }
 
   async businessAction<T = Record<string, unknown>>(

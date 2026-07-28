@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { toast } from "sonner";
 import { api } from "@multica/core/api";
 import type { BusinessRow, BusinessSnapshot } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
@@ -72,6 +73,8 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<ClientTab>("overview");
+  const [workspaceFilter, setWorkspaceFilter] = useState("");
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const { contractors } = useElbaDirectory();
 
   const clientID = client ? String(client.id) : "";
@@ -86,6 +89,18 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
   ];
   const agreements = (data.agreements ?? []).filter((row) => String(row.client_id) === clientID);
   const projects = (data.projects ?? []).filter((row) => String(row.client_id) === clientID);
+  const linkedProjectIDs = useMemo(
+    () => new Set(projects.map((row) => String(row.project_id))),
+    [projects],
+  );
+  const unlinkedProjects = useMemo(
+    () => (data.available_projects ?? []).filter((row) => !linkedProjectIDs.has(String(row.project_id))),
+    [data.available_projects, linkedProjectIDs],
+  );
+  const selectableProjects = useMemo(
+    () => unlinkedProjects.filter((row) => !workspaceFilter || String(row.workspace_id) === workspaceFilter),
+    [unlinkedProjects, workspaceFilter],
+  );
   const payers = (data.payers ?? []).filter((row) => String(row.client_id) === clientID);
   const receivables = (data.receivables ?? [])
     .filter((row) => String(row.client_id) === clientID)
@@ -95,20 +110,37 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
     .filter((row) => String(row.direction) === "inbound" && payerInns.has(text(row, "counterparty_inn")))
     .slice(0, 8);
 
-  const run = async (key: string, action: () => Promise<unknown>) => {
+  const run = async (key: string, action: () => Promise<unknown>, successMessage?: string) => {
     setBusy(key); setError("");
     try {
       await action();
       await onChanged();
+      toast.success(successMessage ?? t(($) => $.success));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setError(message);
+      toast.error(message);
     } finally {
       setBusy("");
     }
   };
 
+  const toggleProject = (projectID: string) => {
+    setSelectedProjects((prev) => (
+      prev.includes(projectID) ? prev.filter((id) => id !== projectID) : [...prev, projectID]
+    ));
+  };
+
   return (
-    <Sheet open={!!client} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Sheet open={!!client} onOpenChange={(open) => {
+      if (!open) {
+        setSelectedProjects([]);
+        setWorkspaceFilter("");
+        setError("");
+        setTab("overview");
+        onClose();
+      }
+    }}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 data-[side=right]:sm:max-w-3xl">
         {client && <>
           <SheetHeader className="border-b px-4 py-3">
@@ -229,27 +261,23 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
 
           {tab === "projects" && (
           <CardSection title={t(($) => $.sections.projects)}>
-            <div className="space-y-1.5">
+            <div className="space-y-3">
+              {projects.length === 0 && (
+                <div className="text-xs text-muted-foreground">{tt("card.no_linked_projects", { defaultValue: "No projects linked yet." })}</div>
+              )}
               {projects.map((row) => {
                 const clientContractor = text(payers.find((payer) => text(payer, "elba_contractor_id")) ?? {}, "elba_contractor_id");
                 const state = projectBillingState(row, clientContractor);
+                const projectType = text(row, "project_type") || text(row, "service_type");
                 return (
-                  <form key={String(row.id)} className="flex items-center gap-2 text-xs" onSubmit={(event) => {
-                    const fd = formData(event);
-                    void run(`project-${String(row.id)}`, () => api.businessAction(businessID, `clients/${clientID}/projects`, {
-                      workspace_id: row.workspace_id,
-                      project_id: row.project_id,
-                      service_type: fd.get("service"),
-                      billable: isTrue(row.billable),
-                      portal_visible: isTrue(row.portal_visible),
-                      notes: row.notes ?? null,
-                    }, "PUT"));
-                  }}>
-                    <span className="min-w-0 flex-1 truncate" title={text(row, "project_title")}>{text(row, "project_title")}</span>
+                  <div key={String(row.id)} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate font-medium" title={text(row, "project_title")}>{text(row, "project_title")}</span>
                     <span className="text-muted-foreground">{text(row, "workspace_name")}</span>
-                    <NativeSelect size="sm" name="service" aria-label={t(($) => $.fields.service_type)} defaultValue={text(row, "service_type")}>
-                      {SERVICE_TYPES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
-                    </NativeSelect>
+                    {projectType && (
+                      <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        {tt(`values.${projectType}`, { defaultValue: projectType })}
+                      </span>
+                    )}
                     <span className={cn(
                       "inline-flex items-center whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium",
                       state === "linked" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
@@ -258,20 +286,112 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                     )}>
                       {state === "linked" ? t(($) => $.billing.state_linked) : state === "mismatch" ? t(($) => $.billing.state_mismatch) : t(($) => $.billing.state_off)}
                     </span>
-                    <Button type="submit" size="sm" variant="ghost" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
-                  </form>
+                  </div>
                 );
               })}
-              <form className="flex flex-wrap items-start gap-1.5" onSubmit={(event) => { const fd = formData(event); const workspace = String(fd.get("workspace") ?? ""); const selected = fd.getAll("project").map(String).filter(Boolean); const candidates = selected.length > 0 ? (data.available_projects ?? []).filter((row) => selected.includes(String(row.project_id))) : (data.available_projects ?? []).filter((row) => workspace && String(row.workspace_id) === workspace); void run("map", () => Promise.all(candidates.map((row) => api.businessAction(businessID, `clients/${clientID}/projects`, { workspace_id: row.workspace_id, project_id: row.project_id, service_type: fd.get("service"), billable: true }, "PUT")))); event.currentTarget.reset(); }}>
-                <NativeSelect size="sm" name="workspace" aria-label={t(($) => $.fields.workspace)}>
-                  <NativeSelectOption value="">{t(($) => $.fields.choose_projects)}</NativeSelectOption>
-                  {(data.available_workspaces ?? []).map((row) => <NativeSelectOption key={text(row, "workspace_id")} value={text(row, "workspace_id")}>{t(($) => $.fields.entire_workspace)}: {text(row, "workspace_name")}</NativeSelectOption>)}
+
+              <form
+                className="space-y-2 rounded-lg border p-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const chosenIDs = selectedProjects.length > 0
+                    ? selectedProjects
+                    : (workspaceFilter
+                      ? selectableProjects.map((row) => String(row.project_id))
+                      : []);
+                  const candidates = unlinkedProjects.filter((row) => chosenIDs.includes(String(row.project_id)));
+                  if (candidates.length === 0) {
+                    const message = tt("card.select_projects_required", {
+                      defaultValue: "Select at least one project, or choose a whole workspace.",
+                    });
+                    setError(message);
+                    toast.error(message);
+                    return;
+                  }
+                  void run(
+                    "map",
+                    async () => {
+                      await Promise.all(candidates.map((row) => api.businessAction(businessID, `clients/${clientID}/projects`, {
+                        workspace_id: row.workspace_id,
+                        project_id: row.project_id,
+                        billable: true,
+                      }, "PUT")));
+                      setSelectedProjects([]);
+                      setWorkspaceFilter("");
+                    },
+                    tt("card.mapped_toast", { count: candidates.length, defaultValue: `Linked projects: ${candidates.length}` }),
+                  );
+                }}
+              >
+                <div className="text-[11px] font-medium text-muted-foreground">
+                  {tt("card.link_projects", { defaultValue: "Link more projects" })}
+                </div>
+                <NativeSelect
+                  size="sm"
+                  name="workspace"
+                  aria-label={t(($) => $.fields.workspace)}
+                  value={workspaceFilter}
+                  onChange={(event) => {
+                    setWorkspaceFilter(event.target.value);
+                    setSelectedProjects([]);
+                  }}
+                >
+                  <NativeSelectOption value="">{tt("card.filter_all_workspaces", { defaultValue: "All workspaces" })}</NativeSelectOption>
+                  {(data.available_workspaces ?? []).map((row) => (
+                    <NativeSelectOption key={text(row, "workspace_id")} value={text(row, "workspace_id")}>
+                      {t(($) => $.fields.entire_workspace)}: {text(row, "workspace_name")}
+                    </NativeSelectOption>
+                  ))}
                 </NativeSelect>
-                <select multiple name="project" aria-label={t(($) => $.fields.projects)} className="min-h-20 min-w-64 rounded-md border bg-background px-2 py-1 text-xs">
-                  {(data.available_projects ?? []).map((row) => <option key={text(row, "project_id")} value={text(row, "project_id")}>{text(row, "workspace_name")} · {text(row, "project_title")}</option>)}
-                </select>
-                <NativeSelect size="sm" name="service">{SERVICE_TYPES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}</NativeSelect>
-                <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.map_projects)}</Button>
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
+                  {selectableProjects.length === 0 ? (
+                    <div className="px-1 py-2 text-xs text-muted-foreground">
+                      {tt("card.no_available_projects", { defaultValue: "No unlinked projects left." })}
+                    </div>
+                  ) : (
+                    selectableProjects.map((row) => {
+                      const id = text(row, "project_id");
+                      const checked = selectedProjects.includes(id);
+                      const projectType = text(row, "project_type");
+                      return (
+                        <label
+                          key={id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-muted/60",
+                            checked && "bg-muted/40",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-3.5 accent-primary"
+                            checked={checked}
+                            onChange={() => toggleProject(id)}
+                          />
+                          <span className="min-w-0 flex-1 truncate" title={`${text(row, "workspace_name")} · ${text(row, "project_title")}`}>
+                            {text(row, "workspace_name")} · {text(row, "project_title")}
+                          </span>
+                          {projectType && (
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              {tt(`values.${projectType}`, { defaultValue: projectType })}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>
+                  {t(($) => $.actions.map_projects)}
+                  {selectedProjects.length > 0 ? ` (${selectedProjects.length})` : workspaceFilter ? ` · ${selectableProjects.length}` : ""}
+                </Button>
+                {workspaceFilter && selectedProjects.length === 0 && selectableProjects.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {tt("card.workspace_link_hint", {
+                      count: selectableProjects.length,
+                      defaultValue: `Without checkboxes, all ${selectableProjects.length} projects in this workspace will be linked.`,
+                    })}
+                  </p>
+                )}
               </form>
             </div>
           </CardSection>

@@ -94,18 +94,18 @@ func (h *Handler) ensureOpenBillingPeriod(ctx context.Context, cfg db.GetClientB
 			if today.Before(latest.EndsOn.Time) {
 				return db.GetOpenClientBillingPeriodRow(latest), nil
 			}
-			// The open period has elapsed — freeze it with whatever is
-			// confirmed and chain the next cycle.
+			// The open period has elapsed — mark it ready for human review
+			// (Business billing runs) and chain the next open cycle for new work.
 			total, sumErr := h.Queries.SumConfirmedChargesInPeriod(ctx, latest.ID)
 			if sumErr != nil {
 				return db.GetOpenClientBillingPeriodRow{}, sumErr
 			}
-			if _, closeErr := h.Queries.CloseClientBillingPeriod(ctx, db.CloseClientBillingPeriodParams{
+			if _, readyErr := h.Queries.MarkClientBillingPeriodReady(ctx, db.MarkClientBillingPeriodReadyParams{
 				ID: latest.ID, TotalRub: total,
-			}); closeErr != nil && !errors.Is(closeErr, pgx.ErrNoRows) {
-				return db.GetOpenClientBillingPeriodRow{}, closeErr
+			}); readyErr != nil && !errors.Is(readyErr, pgx.ErrNoRows) {
+				return db.GetOpenClientBillingPeriodRow{}, readyErr
 			}
-			slog.Info("billing: auto-closed elapsed period",
+			slog.Info("billing: marked elapsed period ready for review",
 				"period_id", uuidToString(latest.ID), "total_rub", total)
 		}
 		start, end = nextPeriodBounds(latest.EndsOn.Time, pm, today)
@@ -439,18 +439,10 @@ func (h *Handler) CloseBillingPeriod(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("billing: period closed", "period_id", uuidToString(closed.ID), "total_rub", closed.TotalRub)
 
-	// Auto-invoice: when the project is wired to an Elba contractor (and the
-	// workspace to an organization), closing immediately creates the счёт +
-	// акт. Failure keeps the period `closed` — the UI can retry via the
-	// explicit /invoice endpoint.
-	resp := map[string]any{"period": closed}
-	if invoiced, pushErr := h.pushPeriodToElba(r.Context(), project, db.GetClientBillingPeriodInProjectRow(closed)); pushErr == nil {
-		resp["period"] = invoiced
-	} else if !errors.Is(pushErr, errElbaSkipped) {
-		slog.Warn("billing: elba auto-invoice failed", "period_id", uuidToString(closed.ID), "error", pushErr)
-		resp["elba_error"] = pushErr.Error()
-	}
-	writeJSON(w, http.StatusOK, resp)
+	// Closing no longer auto-pushes to Elba. Human review happens in Business
+	// billing runs (`ready` → confirm), which closes then calls /invoice (or
+	// the package confirm endpoint). Retry remains on POST .../invoice.
+	writeJSON(w, http.StatusOK, map[string]any{"period": closed})
 }
 
 // errElbaSkipped marks "not configured for this project" — a normal state,

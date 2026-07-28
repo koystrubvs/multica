@@ -916,6 +916,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/dashboard/series", h.GetBusinessDashboardSeries)
 					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Post("/recurring-costs", h.CreateBusinessRecurringCost)
 					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Patch("/recurring-costs/{costId}", h.UpdateBusinessRecurringCost)
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/billing/runs", h.ListBusinessBillingRuns)
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Post("/billing/prepare", h.PrepareBusinessBillingRuns)
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Post("/billing/periods/{periodId}/confirm", h.ConfirmBusinessBillingPeriod)
+					r.With(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessDashboard)).Get("/billing/periods/{periodId}/report", h.GetBusinessBillingPeriodReport)
 
 					r.Group(func(r chi.Router) {
 						r.Use(handler.RequireBusinessFeature(opts.FeatureFlags, featureflags.BusinessClientsUI))

@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, ApiError } from "@multica/core/api";
-import type { BusinessRow, BusinessSnapshot, ContractorPeriodGroup } from "@multica/core/types";
+import type { BusinessBillingRun, BusinessRow, BusinessSnapshot, ContractorPeriodGroup } from "@multica/core/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import {
@@ -35,6 +35,7 @@ export const businessBillingKeys = {
   orgs: () => ["client-billing", "elba-orgs"] as const,
   contractorConfigs: () => ["client-billing", "contractor-configs"] as const,
   invoiceable: () => ["client-billing", "invoiceable-groups"] as const,
+  runs: (businessId: string) => ["business-billing-runs", businessId] as const,
 };
 
 type ElbaRow = { id: string; [key: string]: unknown };
@@ -221,6 +222,8 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
 
   return (
     <div className="space-y-6">
+      <BillingRunsQueue businessID={businessID} onChanged={onChanged} />
+
       <section className="space-y-1.5">
         <h2 className="text-sm font-medium">{t(($) => $.billing.contractors_title)}</h2>
         <p className="text-[11px] text-muted-foreground">{t(($) => $.billing.contractors_hint)}</p>
@@ -373,6 +376,210 @@ export function BusinessBillingTab({ businessID, data, onChanged }: {
 
       <BillingDefaults wsConfig={wsConfig} orgId={orgId} />
     </div>
+  );
+}
+
+function fmtRunDate(value: string): string {
+  if (!value) return "—";
+  const day = value.slice(0, 10);
+  const [y, m, d] = day.split("-");
+  if (!y || !m || !d) return day;
+  return `${d}.${m}.${y}`;
+}
+
+function runStatusLabel(status: string, t: ReturnType<typeof useT<"business">>["t"]): string {
+  switch (status) {
+    case "ready":
+      return t(($) => $.billing.runs_status_ready);
+    case "open":
+      return t(($) => $.billing.runs_status_upcoming);
+    case "closed":
+      return t(($) => $.billing.runs_status_closed);
+    case "invoiced":
+      return t(($) => $.billing.runs_status_invoiced);
+    default:
+      return status;
+  }
+}
+
+function BillingRunsQueue({ businessID, onChanged }: {
+  businessID: string;
+  onChanged: () => Promise<unknown>;
+}) {
+  const { t } = useT("business");
+  const qc = useQueryClient();
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const runs = useQuery({
+    queryKey: businessBillingKeys.runs(businessID),
+    queryFn: () => api.listBusinessBillingRuns(businessID, { includeCharges: true }),
+  });
+
+  const prepareMut = useMutation({
+    mutationFn: () => api.prepareBusinessBillingRuns(businessID),
+    onSuccess: (result) => {
+      toast.success(t(($) => $.billing.runs_prepare_toast, {
+        ready: result.periods_marked_ready,
+        projects: result.projects_prepared,
+      }));
+      qc.invalidateQueries({ queryKey: businessBillingKeys.runs(businessID) });
+      void onChanged();
+    },
+    onError: (cause) => toast.error(cause instanceof Error ? cause.message : String(cause)),
+  });
+
+  const confirmMut = useMutation({
+    mutationFn: (periodId: string) => api.confirmBusinessBillingPeriod(businessID, periodId),
+    onSuccess: (result) => {
+      if (result.elba_error) {
+        toast.error(result.elba_error);
+      } else if (result.elba_skipped === true) {
+        toast.success(t(($) => $.billing.runs_confirm_no_elba));
+      } else {
+        toast.success(t(($) => $.billing.runs_confirm_toast));
+      }
+      qc.invalidateQueries({ queryKey: businessBillingKeys.runs(businessID) });
+      qc.invalidateQueries({ queryKey: businessBillingKeys.invoiceable() });
+      void onChanged();
+    },
+    onError: (cause) => toast.error(cause instanceof Error ? cause.message : String(cause)),
+  });
+
+  const items = runs.data?.runs ?? [];
+  const ready = items.filter((row) => row.status === "ready");
+  const upcoming = items.filter((row) => row.status === "open");
+  const recent = items.filter((row) => row.status === "invoiced" || row.status === "closed");
+
+  const renderRow = (row: BusinessBillingRun) => {
+    const open = expanded === row.period_id;
+    const amount = row.confirmed_total_rub || row.total_rub;
+    return (
+      <div key={row.period_id} className="rounded-lg border p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
+            onClick={() => setExpanded(open ? null : row.period_id)}
+          >
+            <div className="text-xs font-medium">
+              {row.client_name || row.project_title}
+              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                {runStatusLabel(row.status, t)}
+              </span>
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {row.project_title}
+              <span className="mx-1">·</span>
+              {fmtRunDate(row.starts_on)} — {fmtRunDate(row.ends_on)}
+              <span className="mx-1">·</span>
+              <span className="tabular-nums">{rub(amount)}</span>
+              <span className="mx-1">·</span>
+              {t(($) => $.billing.runs_tasks, { count: row.charge_count })}
+            </div>
+          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(row.status === "ready") && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={confirmMut.isPending}
+                onClick={() => confirmMut.mutate(row.period_id)}
+              >
+                {t(($) => $.billing.runs_confirm)}
+              </Button>
+            )}
+            {row.report_file && (
+              <a
+                href={row.report_file}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-xs hover:bg-muted"
+              >
+                {t(($) => $.billing.runs_pdf)}
+              </a>
+            )}
+            {row.elba_invoice_url && (
+              <a
+                href={row.elba_invoice_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-xs hover:bg-muted"
+              >
+                {t(($) => $.billing.runs_bill)}
+              </a>
+            )}
+            {row.elba_act_url && (
+              <a
+                href={row.elba_act_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-7 items-center rounded-lg border border-border bg-background px-2.5 text-xs hover:bg-muted"
+              >
+                {t(($) => $.billing.runs_act)}
+              </a>
+            )}
+          </div>
+        </div>
+        {open && (row.charges?.length ?? 0) > 0 && (
+          <ul className="mt-2 space-y-0.5 border-t pt-2 text-[11px] text-muted-foreground">
+            {row.charges!.map((charge) => (
+              <li key={charge.id} className="flex justify-between gap-3">
+                <span className="truncate">{charge.issue_title}</span>
+                <span className="tabular-nums">{rub(charge.price_rub)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <section className="space-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium">{t(($) => $.billing.runs_title)}</h2>
+          <p className="text-[11px] text-muted-foreground">{t(($) => $.billing.runs_hint)}</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs"
+          disabled={prepareMut.isPending}
+          onClick={() => prepareMut.mutate()}
+        >
+          {t(($) => $.billing.runs_prepare)}
+        </Button>
+      </div>
+      {runs.isLoading ? (
+        <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{t(($) => $.loading)}</div>
+      ) : items.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">{t(($) => $.billing.runs_empty)}</div>
+      ) : (
+        <div className="space-y-3">
+          {ready.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-medium text-muted-foreground">{t(($) => $.billing.runs_ready_group)}</div>
+              {ready.map(renderRow)}
+            </div>
+          )}
+          {upcoming.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-medium text-muted-foreground">{t(($) => $.billing.runs_upcoming_group)}</div>
+              {upcoming.map(renderRow)}
+            </div>
+          )}
+          {recent.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-medium text-muted-foreground">{t(($) => $.billing.runs_recent_group)}</div>
+              {recent.map(renderRow)}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

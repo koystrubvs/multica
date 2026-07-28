@@ -21,7 +21,6 @@ import {
 import { useT } from "../i18n";
 
 const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
-const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 
 type TT = (key: string, options?: { defaultValue?: string }) => string;
 
@@ -55,7 +54,6 @@ export function BusinessClientCreateSheet({ businessID, availableProjects, open,
     const name = String(fd.get("name") ?? "").trim();
     if (!name) return;
     const projectIDs = fd.getAll("project").map(String).filter(Boolean);
-    const serviceType = String(fd.get("service") ?? "development");
     setBusy(true);
     setError("");
     try {
@@ -71,7 +69,6 @@ export function BusinessClientCreateSheet({ businessID, availableProjects, open,
         await Promise.all(chosen.map((row) => api.businessAction(businessID, `clients/${clientID}/projects`, {
           workspace_id: row.workspace_id,
           project_id: row.project_id,
-          service_type: serviceType,
           billable: true,
         }, "PUT")));
       }
@@ -142,20 +139,14 @@ export function BusinessClientCreateSheet({ businessID, availableProjects, open,
                     {availableProjects.map((row) => (
                       <option key={text(row, "project_id")} value={text(row, "project_id")}>
                         {text(row, "workspace_name")} · {text(row, "project_title")}
+                        {text(row, "project_type") ? ` · ${tt(`values.${text(row, "project_type")}`, { defaultValue: text(row, "project_type") })}` : ""}
                       </option>
                     ))}
                   </select>
                 </label>
-                <label className="block space-y-1">
-                  <span className={FIELD_LABEL}>{t(($) => $.fields.service_type)}</span>
-                  <NativeSelect name="service" defaultValue="development" className="w-full">
-                    {SERVICE_TYPES.map((value) => (
-                      <NativeSelectOption key={value} value={value}>
-                        {tt(`values.${value}`, { defaultValue: value })}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  {tt("card.project_type_from_project", { defaultValue: "Project type is taken from the project settings." })}
+                </p>
               </div>
             )}
           </div>
