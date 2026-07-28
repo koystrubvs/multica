@@ -66,17 +66,17 @@ func TestPickAutoMatchReceivable(t *testing.T) {
 	dueLate := time.Date(2026, 7, 24, 0, 0, 0, 0, time.UTC)
 
 	t.Run("picks closest remaining under cap", func(t *testing.T) {
-		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+		id, taken, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
 			{ID: "seo", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-07"},
 			{ID: "support", Remaining: 10_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 		})
-		if !ok || id != "seo" {
-			t.Fatalf("got id=%q ok=%v, want seo", id, ok)
+		if !ok || id != "seo" || taken != 5_000_000 {
+			t.Fatalf("got id=%q taken=%d ok=%v, want seo taking the full payment", id, taken, ok)
 		}
 	})
 
 	t.Run("picks support for near-cap payment", func(t *testing.T) {
-		id, ok := pickAutoMatchReceivable(9_820_000, []autoMatchReceivableCandidate{
+		id, _, ok := pickAutoMatchReceivable(9_820_000, []autoMatchReceivableCandidate{
 			{ID: "seo", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-07"},
 			{ID: "support", Remaining: 10_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 		})
@@ -88,7 +88,7 @@ func TestPickAutoMatchReceivable(t *testing.T) {
 	t.Run("settles the oldest debt when amounts tie", func(t *testing.T) {
 		// A recurring agreement generates identical future periods, so equal
 		// remaining amounts are the norm rather than a sign of ambiguity.
-		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+		id, _, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
 			{ID: "august", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-08"},
 			{ID: "july", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 		})
@@ -98,7 +98,7 @@ func TestPickAutoMatchReceivable(t *testing.T) {
 	})
 
 	t.Run("refuses when amount, due date and period all tie", func(t *testing.T) {
-		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+		id, _, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
 			{ID: "a", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 			{ID: "b", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 		})
@@ -108,7 +108,7 @@ func TestPickAutoMatchReceivable(t *testing.T) {
 	})
 
 	t.Run("prefers a dated receivable over an undated one", func(t *testing.T) {
-		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+		id, _, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
 			{ID: "dated", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 			{ID: "undated", Remaining: 5_000_000, PeriodKey: "2026-07"},
 		})
@@ -117,12 +117,43 @@ func TestPickAutoMatchReceivable(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects amount above remaining", func(t *testing.T) {
-		id, ok := pickAutoMatchReceivable(6_000_000, []autoMatchReceivableCandidate{
+	t.Run("settles the receivable in full and leaves the change unattributed", func(t *testing.T) {
+		// The client transfers 13 000 every month: 7 000 is our fee, the rest is
+		// passed on. The fee must read as paid, the change must stay visible.
+		id, taken, ok := pickAutoMatchReceivable(1_300_000, []autoMatchReceivableCandidate{
+			{ID: "support", Remaining: 700_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "support" || taken != 700_000 {
+			t.Fatalf("got id=%q taken=%d ok=%v, want support taking 700000", id, taken, ok)
+		}
+	})
+
+	t.Run("prefers a receivable the payment fits into over a smaller one", func(t *testing.T) {
+		id, taken, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+			{ID: "small", Remaining: 4_900_000, DueOn: &dueEarly, PeriodKey: "2026-06"},
+			{ID: "exact", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "exact" || taken != 5_000_000 {
+			t.Fatalf("got id=%q taken=%d ok=%v, want exact", id, taken, ok)
+		}
+	})
+
+	t.Run("settles the oldest debt first when the payment covers several", func(t *testing.T) {
+		id, taken, ok := pickAutoMatchReceivable(1_300_000, []autoMatchReceivableCandidate{
+			{ID: "august", Remaining: 700_000, DueOn: &dueLate, PeriodKey: "2026-08"},
+			{ID: "july", Remaining: 700_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "july" || taken != 700_000 {
+			t.Fatalf("got id=%q taken=%d ok=%v, want july", id, taken, ok)
+		}
+	})
+
+	t.Run("ignores a zero payment", func(t *testing.T) {
+		id, taken, ok := pickAutoMatchReceivable(0, []autoMatchReceivableCandidate{
 			{ID: "seo", Remaining: 5_000_000, PeriodKey: "2026-07"},
 		})
-		if ok || id != "" {
-			t.Fatalf("got id=%q ok=%v, want no match", id, ok)
+		if ok || id != "" || taken != 0 {
+			t.Fatalf("got id=%q taken=%d ok=%v, want no match", id, taken, ok)
 		}
 	})
 }

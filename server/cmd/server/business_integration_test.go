@@ -230,6 +230,87 @@ func TestBusinessSystemLifecycle(t *testing.T) {
 	}
 }
 
+// Money can arrive late for a period, never long before it. A receipt from an
+// earlier year used to settle a current period, because auto-matching only
+// looked at the client and the open balance.
+func TestBusinessAutoMatchIgnoresStalePayments(t *testing.T) {
+	ctx := context.Background()
+	var businessID, projectID string
+	if err := testPool.QueryRow(ctx, `INSERT INTO business_account(name,owner_user_id) VALUES ('Stale Match Business',$1) RETURNING id`, testUserID).Scan(&businessID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cleanupBusinessIntegrationFixture(context.Background(), t, businessID) })
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_account_member(business_id,user_id,role) VALUES ($1,$2,'owner')`, businessID, testUserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_workspace(business_id,workspace_id,kind) VALUES ($1,$2,'operational')`, businessID, testWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `INSERT INTO project(workspace_id,title,status) VALUES ($1,'Stale match support','in_progress') RETURNING id`, testWorkspaceID).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+
+	client := businessRequest(t, http.MethodPost, businessID, "/clients", map[string]any{
+		"canonical_name": "Stale Match Client", "status": "active", "primary_payment_channel": "bank",
+	}, http.StatusCreated)
+	clientID := client["id"].(string)
+	businessRequest(t, http.MethodPost, businessID, "/clients/"+clientID+"/payers", map[string]any{
+		"name": "Stale Match Payer", "inn": "7712345678", "status": "active", "payment_channel": "bank",
+	}, http.StatusCreated)
+
+	now := time.Now().UTC()
+	month := now.Format("2006-01")
+	businessRequest(t, http.MethodPost, businessID, "/agreements", map[string]any{
+		"client_id": clientID, "project_id": nil, "service_type": "support",
+		"agreement_key": "stale-match-support", "version": 1, "name": "Stale match support",
+		"model": "fixed", "amount_rub": "7000", "invoice_day": 1, "due_days": 7,
+		"period_months": 1, "payment_channel": "bank", "effective_from": now.Format("2006-01-02"),
+		"status": "active", "terms": map[string]any{},
+	}, http.StatusCreated)
+	businessRequest(t, http.MethodPost, businessID, "/receivables/generate", map[string]any{"from_month": month, "months": 1}, http.StatusOK)
+
+	matchCount := func() int {
+		var count int
+		if err := testPool.QueryRow(ctx, `
+			SELECT count(*) FROM business_transaction_match m
+			JOIN business_receivable r ON r.id = m.target_id AND m.target_type = 'receivable'
+			WHERE r.business_id = $1 AND m.status = 'confirmed'
+		`, businessID).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+	payment := func(bookedOn, amount, key string) {
+		businessRequest(t, http.MethodPost, businessID, "/bank/transactions", map[string]any{
+			"booked_on": bookedOn, "direction": "inbound", "amount_rub": amount,
+			"counterparty_name": "Stale Match Payer", "counterparty_inn": "7712345678",
+			"classification": "client_income", "idempotency_key": key,
+		}, http.StatusCreated)
+	}
+
+	payment(now.AddDate(-1, 0, 0).Format("2006-01-02"), "7000", "stale-match-old")
+	if got := matchCount(); got != 0 {
+		t.Fatalf("a year-old receipt settled a current period: %d match(es)", got)
+	}
+
+	// The same amount arriving inside the period does match, and a payment that
+	// bundles money we pass on settles only our part.
+	payment(now.Format("2006-01-02"), "13000", "stale-match-current")
+	if got := matchCount(); got != 1 {
+		t.Fatalf("current payment did not match: %d match(es)", got)
+	}
+	var planned, paid, status string
+	if err := testPool.QueryRow(ctx, `
+		SELECT planned_amount_rub::text, paid_amount_rub::text, status
+		FROM business_receivable WHERE business_id = $1
+	`, businessID).Scan(&planned, &paid, &status); err != nil {
+		t.Fatal(err)
+	}
+	if planned != "7000.00" || paid != "7000.00" || status != "paid" {
+		t.Fatalf("expected 7000.00 of 7000.00 paid, got planned=%s paid=%s status=%s", planned, paid, status)
+	}
+}
+
 // A capped agreement plans from the work actually tracked in the project's
 // billing period. The cap only bounds that number when the client agreed to a
 // hard limit; otherwise the real amount is planned and flagged for review.

@@ -978,18 +978,32 @@ type autoMatchReceivableCandidate struct {
 }
 
 // pickAutoMatchReceivable chooses a unique best open receivable for an inbound
-// payment. Score is |remaining - amount|; ties on the best score are refused.
-func pickAutoMatchReceivable(amountKopecks int64, candidates []autoMatchReceivableCandidate) (string, bool) {
+// payment and returns how much of the payment it takes. Score is
+// |remaining - amount|; ties on the best score are refused.
+//
+// A payment larger than the receivable settles it in full and leaves the change
+// unattributed: clients whose transfer bundles our fee with money we pass on to
+// someone else (13 000 arrives, 7 000 is ours) would otherwise stay unmatched
+// forever. Receivables the payment fits into are still preferred, so an exact
+// payment never gets consumed by a smaller open period.
+func pickAutoMatchReceivable(amountKopecks int64, candidates []autoMatchReceivableCandidate) (string, int64, bool) {
+	if amountKopecks <= 0 {
+		return "", 0, false
+	}
 	eligible := make([]autoMatchReceivableCandidate, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.Remaining >= amountKopecks && amountKopecks > 0 {
+		if candidate.Remaining > 0 {
 			eligible = append(eligible, candidate)
 		}
 	}
 	if len(eligible) == 0 {
-		return "", false
+		return "", 0, false
 	}
+	fits := func(candidate autoMatchReceivableCandidate) bool { return candidate.Remaining >= amountKopecks }
 	sort.SliceStable(eligible, func(i, j int) bool {
+		if fits(eligible[i]) != fits(eligible[j]) {
+			return fits(eligible[i])
+		}
 		di := absInt64(eligible[i].Remaining - amountKopecks)
 		dj := absInt64(eligible[j].Remaining - amountKopecks)
 		if di != dj {
@@ -1012,9 +1026,16 @@ func pickAutoMatchReceivable(amountKopecks int64, candidates []autoMatchReceivab
 	// oldest open debt is what an accountant applies a receipt to. Only a true
 	// coin flip — same amount, same due date, same period — is left to a human.
 	if len(eligible) > 1 && sameAutoMatchRank(eligible[0], eligible[1], amountKopecks) {
-		return "", false
+		return "", 0, false
 	}
-	return eligible[0].ID, true
+	return eligible[0].ID, minInt64(amountKopecks, eligible[0].Remaining), true
+}
+
+func minInt64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func sameAutoMatchRank(first, second autoMatchReceivableCandidate, amountKopecks int64) bool {
@@ -1090,13 +1111,14 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		direction, classification, counterpartyName string
 		counterpartyINN                             *string
 		amountKopecks                               int64
+		bookedOn                                    time.Time
 	)
 	err := tx.QueryRow(ctx, `
 		SELECT direction, classification, counterparty_name, counterparty_inn,
-		       round(amount_rub * 100)::bigint
+		       round(amount_rub * 100)::bigint, booked_on
 		FROM business_bank_transaction
 		WHERE business_id = $1 AND id = $2 AND voided_at IS NULL
-	`, businessID, transactionID).Scan(&direction, &classification, &counterpartyName, &counterpartyINN, &amountKopecks)
+	`, businessID, transactionID).Scan(&direction, &classification, &counterpartyName, &counterpartyINN, &amountKopecks, &bookedOn)
 	if err != nil {
 		return err
 	}
@@ -1121,6 +1143,10 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		return nil
 	}
 
+	// Money can arrive late for a period that is already over, but it cannot
+	// arrive long before the work: without this bound a payment from years ago
+	// settles a current period, which is how a 2022 receipt once "paid" a 2026
+	// month. The month of slack covers prepayment for the period ahead.
 	rows, err := tx.Query(ctx, `
 		SELECT r.id::text,
 		       round((r.planned_amount_rub - r.paid_amount_rub) * 100)::bigint,
@@ -1131,7 +1157,8 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		  AND r.client_id = $2::uuid
 		  AND r.status IN ('expected', 'invoiced', 'overdue', 'partially_paid')
 		  AND (r.planned_amount_rub - r.paid_amount_rub) > 0
-	`, businessID, clientID)
+		  AND $3::date >= r.period_start - INTERVAL '31 days'
+	`, businessID, clientID, bookedOn.Format("2006-01-02"))
 	if err != nil {
 		return err
 	}
@@ -1149,7 +1176,7 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		return err
 	}
 
-	receivableID, ok := pickAutoMatchReceivable(amountKopecks, candidates)
+	receivableID, matchedKopecks, ok := pickAutoMatchReceivable(amountKopecks, candidates)
 	if !ok {
 		return nil
 	}
@@ -1166,7 +1193,7 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		)
 		ON CONFLICT (business_id, idempotency_key) DO UPDATE SET updated_at = now()
 		RETURNING id::text
-	`, businessID, transactionID, receivableID, amountKopecks, userID, idempotencyKey).Scan(&matchID)
+	`, businessID, transactionID, receivableID, matchedKopecks, userID, idempotencyKey).Scan(&matchID)
 	if err != nil {
 		return err
 	}
