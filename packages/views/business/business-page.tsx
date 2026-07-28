@@ -1070,26 +1070,6 @@ export function BusinessPage() {
           </div>
         </Section>
 
-        <Section title={periodMode === "month" ? t(($) => $.sections.month_dynamics) : t(($) => $.sections.year_dynamics)}>
-          <div className="space-y-2">
-            {chartData.length > 0 && (
-              <div className="rounded-lg border p-3">
-                <ChartContainer config={chartConfig} className="aspect-[5/2] w-full @3xl:aspect-[3/1]">
-                  <BarChart data={chartData} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={4} width={64} tickFormatter={(value: number) => new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(value)} />
-                    <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => `${rub(Number(value))} · ${String(chartConfig[name as keyof typeof chartConfig]?.label ?? name)}`} />} />
-                    <Bar dataKey="plan" fill="var(--color-plan)" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="fact" fill="var(--color-fact)" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ChartContainer>
-              </div>
-            )}
-            <RowTable tt={tt} locale={locale} rows={seriesPoints as unknown as BusinessRow[]} columns={[{ key: "month" }, { key: "expected_rub", kind: "money" }, { key: "bank_income_rub", kind: "money" }]} empty={t(($) => $.empty)} />
-          </div>
-        </Section>
-
         <div className="grid gap-2 @3xl:grid-cols-2">
           <div className="rounded-lg border p-3 text-xs text-muted-foreground"><AlertTriangle className="mr-1.5 inline size-3.5 text-warning"/>{t(($) => $.vitmax_note)}</div>
           <div className="rounded-lg border p-3 text-xs text-muted-foreground">{t(($) => $.no_penalties_note)}</div>
@@ -1193,6 +1173,28 @@ export function BusinessPage() {
             empty={t(($) => $.money.no_task_calculation)}
           />
         </Section>
+        {/* Plan against fact is a money question, so it sits with the money
+            rather than in the overview's wall of metrics. */}
+        <Section title={periodMode === "month" ? t(($) => $.sections.month_dynamics) : t(($) => $.sections.year_dynamics)}>
+          <div className="space-y-2">
+            {chartData.length > 0 && (
+              <div className="rounded-lg border p-3">
+                <ChartContainer config={chartConfig} className="aspect-[5/2] w-full @3xl:aspect-[3/1]">
+                  <BarChart data={chartData} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                    <YAxis tickLine={false} axisLine={false} tickMargin={4} width={64} tickFormatter={(value: number) => new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(value)} />
+                    <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => `${rub(Number(value))} · ${String(chartConfig[name as keyof typeof chartConfig]?.label ?? name)}`} />} />
+                    <Bar dataKey="plan" fill="var(--color-plan)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="fact" fill="var(--color-fact)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </div>
+            )}
+            <RowTable tt={tt} locale={locale} rows={seriesPoints as unknown as BusinessRow[]} columns={[{ key: "month" }, { key: "expected_rub", kind: "money" }, { key: "bank_income_rub", kind: "money" }]} empty={t(($) => $.empty)} />
+          </div>
+        </Section>
+
       </div>}
 
       {tab === "bank" && bankEnabled && <div className="space-y-6">

@@ -6,6 +6,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { IssueStatus, IssuePriority } from "../../types";
 import { ALL_STATUSES } from "../config";
+import { addDaysDateOnly, todayDateOnly } from "../date";
 import { createWorkspaceAwareStorage, registerForWorkspaceRehydration } from "../../platform/workspace-storage";
 import { defaultStorage } from "../../platform/storage";
 
@@ -84,10 +85,33 @@ export const DEFAULT_TABLE_COLUMNS: readonly TableColumnConfig[] = [
   { key: "labels", width: 220 },
 ];
 
+/** Quick ranges the header offers, in days ending today. */
+export type IssueDatePreset = 1 | 3 | 7;
+
 export interface IssueDateFilter {
   field: IssueDateField;
   from: string;
   to: string;
+  /**
+   * Set when the range came from a quick preset rather than the calendar. The
+   * range is stored resolved so filtering stays a plain date comparison, and
+   * the preset is what survives a reload: "last 7 days" has to mean the 7 days
+   * before today, not the 7 days before the day it was picked.
+   */
+  preset?: IssueDatePreset;
+}
+
+/** Resolves a preset against today. Custom ranges are returned untouched. */
+export function refreshIssueDateFilter(
+  filter: IssueDateFilter | null | undefined,
+): IssueDateFilter | null {
+  if (!filter) return null;
+  if (!filter.preset) return filter;
+  return {
+    ...filter,
+    from: addDaysDateOnly(1 - filter.preset),
+    to: todayDateOnly(),
+  };
 }
 
 export const SWIMLANE_GROUPINGS: SwimlaneGrouping[] = ["parent", "project", "assignee"];
@@ -475,8 +499,10 @@ export const viewStorePersistOptions = (name: string) => ({
     // state changes second-to-second, and a stored toggle would let users
     // return to an unexplained empty list. Keep it ephemeral. See the
     // field comment on IssueViewState.
-    // `dateFilter` is also intentionally not persisted: relative presets such
-    // as Today would otherwise become stale after a calendar-day rollover.
+    // `dateFilter` is persisted with its preset, and `merge` re-resolves the
+    // preset against today so a stored "last 7 days" never freezes on the day
+    // it was picked.
+    dateFilter: state.dateFilter,
     viewMode: state.viewMode,
     grouping: state.grouping,
     statusFilters: state.statusFilters,
@@ -548,6 +574,7 @@ export function mergeViewStatePersisted<T extends IssueViewState>(
   return {
     ...current,
     ...p,
+    dateFilter: refreshIssueDateFilter(p.dateFilter),
     cardProperties: {
       ...current.cardProperties,
       ...(p.cardProperties ?? {}),

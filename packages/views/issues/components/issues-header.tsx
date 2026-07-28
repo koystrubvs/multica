@@ -78,6 +78,7 @@ import {
   type ActorFilterValue,
   type IssueDateField,
   type IssueDateFilter,
+  type IssueDatePreset,
   type SortField,
   type IssueGrouping,
   type SwimlaneGrouping,
@@ -673,11 +674,14 @@ function DateSubContent({
     if (value) onChange({ ...value, field: next });
   };
 
-  const applyPreset = (days: 1 | 3 | 7) => {
+  // The preset travels with the range so a reload can re-resolve it against the
+  // new today instead of restoring the days that were current when it was set.
+  const applyPreset = (days: IssueDatePreset) => {
     onChange({
       field,
       from: addDaysDateOnly(1 - days),
       to: todayDateOnly(),
+      preset: days,
     });
   };
 

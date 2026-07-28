@@ -40,6 +40,7 @@ export {
   viewStoreSlice,
   viewStorePersistOptions,
   useClearFiltersOnWorkspaceChange,
+  refreshIssueDateFilter,
   SORT_OPTIONS,
   CARD_PROPERTY_OPTIONS,
   TABLE_SYSTEM_COLUMNS,
@@ -55,6 +56,7 @@ export {
   type TableColumnConfig,
   type TableGrouping,
   type TableCalculation,
+  type IssueDatePreset,
 } from "./view-store";
 export {
   ISSUE_SURFACE_VIEW_STORAGE_KEY,
