@@ -21,6 +21,10 @@ export interface BusinessDashboard {
   vitmax_transit_rub: string;
   transfer_rub: string;
   unknown_inbound_rub: string;
+  /** Money invoiced on the client's behalf and handed back; only the commission is ours. */
+  transit_body_rub: string;
+  transit_commission_rub: string;
+  transit_net_rub: string;
   task_value_rub: string;
   participant_accrued_rub: string;
   company_target_pool_rub: string;

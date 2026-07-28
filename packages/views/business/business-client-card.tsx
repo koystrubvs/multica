@@ -230,7 +230,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
           <div>
           {tab === "overview" && (
           <CardSection title={t(($) => $.card.details)}>
-            <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("client", () => api.businessAction(businessID, `clients/${clientID}`, { status: fd.get("status"), primary_payment_channel: fd.get("channel"), notes: fd.get("notes") }, "PATCH")); }}>
+            <form className="flex flex-wrap items-end gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("client", () => api.businessAction(businessID, `clients/${clientID}`, { status: fd.get("status"), primary_payment_channel: fd.get("channel"), notes: fd.get("notes"), transit_commission_percent: fd.get("transit_commission"), transit_tax_percent: fd.get("transit_tax") }, "PATCH")); }}>
               <NativeSelect size="sm" name="status" defaultValue={text(client, "status")}>
                 {CLIENT_STATUSES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
               </NativeSelect>
@@ -239,6 +239,14 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                 <NativeSelectOption value="personal_card">{tt("values.personal_card", { defaultValue: "personal_card" })}</NativeSelectOption>
               </NativeSelect>
               <Input name="notes" className="h-7 min-w-56 flex-1 text-xs" defaultValue={text(client, "notes")} placeholder={t(($) => $.fields.notes)} />
+              {/* Empty means the client is not a pass-through one at all; 0 means
+                  they are, and the whole difference goes back to them. */}
+              <Field label={tt("columns.transit_commission_percent", { defaultValue: "transit %" })}>
+                <Input name="transit_commission" inputMode="decimal" className="h-7 w-20 text-xs" defaultValue={client.transit_commission_percent == null ? "" : String(Number(client.transit_commission_percent))} />
+              </Field>
+              <Field label={tt("columns.transit_tax_percent", { defaultValue: "tax %" })}>
+                <Input name="transit_tax" inputMode="decimal" className="h-7 w-20 text-xs" defaultValue={client.transit_tax_percent == null ? "" : String(Number(client.transit_tax_percent))} />
+              </Field>
               <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
             </form>
           </CardSection>

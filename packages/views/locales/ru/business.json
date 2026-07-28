@@ -99,7 +99,11 @@
     "company_pool": "Пул компании (15%)",
     "owner_margin": "Целевая маржа (50%)",
     "paid_workers": "Выплачено команде",
-    "reserve_obligation": "Обязательства резерва"
+    "reserve_obligation": "Обязательства резерва",
+    "transit_body": "Транзит клиентов",
+    "transit_commission": "комиссия",
+    "transit_net": "чистыми после налога",
+    "client_income_hint": "свои работы и комиссия, без тела транзита"
   },
   "metric_groups": {
     "calendar": "Платёжный календарь за выбранный период",
@@ -266,7 +270,9 @@
     "task_amount_rub": "Сумма по задачам",
     "tasks_preview": "Какие задачи",
     "match_state": "Привязка",
-    "review_details": "Что проверить"
+    "review_details": "Что проверить",
+    "transit_commission_percent": "Комиссия с транзита, %",
+    "transit_tax_percent": "Налог с него, %"
   },
   "fields": {
     "name": "Название",

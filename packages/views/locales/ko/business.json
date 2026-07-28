@@ -99,7 +99,11 @@
     "company_pool": "회사 풀 (15%)",
     "owner_margin": "목표 마진 (50%)",
     "paid_workers": "팀 지급 완료",
-    "reserve_obligation": "준비금 채무"
+    "reserve_obligation": "준비금 채무",
+    "transit_body": "통과 금액",
+    "transit_commission": "수수료",
+    "transit_net": "세후 순액",
+    "client_income_hint": "자체 작업과 수수료만, 통과 금액 제외"
   },
   "metric_groups": {
     "calendar": "이달의 지급 달력",
@@ -266,7 +270,9 @@
     "task_amount_rub": "Task amount",
     "tasks_preview": "Included tasks",
     "match_state": "Match",
-    "review_details": "Review details"
+    "review_details": "Review details",
+    "transit_commission_percent": "통과 금액 수수료(%)",
+    "transit_tax_percent": "해당 세율(%)"
   },
   "fields": {
     "name": "이름",

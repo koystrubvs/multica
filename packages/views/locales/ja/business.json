@@ -99,7 +99,11 @@
     "company_pool": "会社プール（15%）",
     "owner_margin": "目標マージン（50%）",
     "paid_workers": "チームへ支払済み",
-    "reserve_obligation": "準備金債務"
+    "reserve_obligation": "準備金債務",
+    "transit_body": "通過分",
+    "transit_commission": "手数料",
+    "transit_net": "税引後",
+    "client_income_hint": "自社作業と手数料のみ、通過分は含まない"
   },
   "metric_groups": {
     "calendar": "当月の支払カレンダー",
@@ -266,7 +270,9 @@
     "task_amount_rub": "Task amount",
     "tasks_preview": "Included tasks",
     "match_state": "Match",
-    "review_details": "Review details"
+    "review_details": "Review details",
+    "transit_commission_percent": "通過分の手数料 (%)",
+    "transit_tax_percent": "その税率 (%)"
   },
   "fields": {
     "name": "名前",

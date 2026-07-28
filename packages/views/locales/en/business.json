@@ -99,7 +99,11 @@
     "company_pool": "Company pool (15%)",
     "owner_margin": "Target margin (50%)",
     "paid_workers": "Paid to team",
-    "reserve_obligation": "Reserve obligations"
+    "reserve_obligation": "Reserve obligations",
+    "transit_body": "Pass-through",
+    "transit_commission": "commission",
+    "transit_net": "net of tax",
+    "client_income_hint": "own work plus the commission, without the pass-through"
   },
   "metric_groups": {
     "calendar": "Payment calendar for the selected period",
@@ -266,7 +270,9 @@
     "task_amount_rub": "Task amount",
     "tasks_preview": "Included tasks",
     "match_state": "Match",
-    "review_details": "Review details"
+    "review_details": "Review details",
+    "transit_commission_percent": "Pass-through commission, %",
+    "transit_tax_percent": "Tax on it, %"
   },
   "fields": {
     "name": "Name",

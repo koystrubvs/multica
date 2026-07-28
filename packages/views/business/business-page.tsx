@@ -1104,8 +1104,15 @@ export function BusinessPage() {
         </Section>
 
         <Section title={t(($) => $.metric_groups.bank)}>
-          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4">
-            <Metric label={t(($) => $.metrics.client_income)} value={rub(metrics.bank_client_income_rub)} />
+          <div className="grid grid-cols-2 gap-2 @3xl:grid-cols-4 @5xl:grid-cols-5">
+            <Metric label={t(($) => $.metrics.client_income)} value={rub(metrics.bank_client_income_rub)} hint={Number(metrics.transit_body_rub ?? 0) > 0 ? t(($) => $.metrics.client_income_hint) : undefined} />
+            {Number(metrics.transit_body_rub ?? 0) > 0 && (
+              <Metric
+                label={t(($) => $.metrics.transit_body)}
+                value={rub(metrics.transit_body_rub)}
+                hint={`${t(($) => $.metrics.transit_commission)}: ${rub(metrics.transit_commission_rub)} · ${t(($) => $.metrics.transit_net)}: ${rub(metrics.transit_net_rub)}`}
+              />
+            )}
             <Metric label={t(($) => $.metrics.unmatched)} value={rub(metrics.unknown_inbound_rub)} hint={`${t(($) => $.filters.rows)}: ${metrics.unmatched_count ?? 0}`} warning={(metrics.unmatched_count ?? 0) > 0} onClick={() => { setTxClasses([]); setTxDirections(["inbound"]); setTxUnmatchedOnly(true); setTab("bank"); }} />
             <Metric label={t(($) => $.values.vitmax)} value={rub(metrics.vitmax_transit_rub)} />
             <Metric label={t(($) => $.values.transfers)} value={rub(metrics.transfer_rub)} />

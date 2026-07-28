@@ -99,7 +99,11 @@
     "company_pool": "公司池（15%）",
     "owner_margin": "目标利润率（50%）",
     "paid_workers": "已付团队",
-    "reserve_obligation": "储备义务"
+    "reserve_obligation": "储备义务",
+    "transit_body": "过账金额",
+    "transit_commission": "佣金",
+    "transit_net": "税后净额",
+    "client_income_hint": "仅自有工作与佣金，不含过账本金"
   },
   "metric_groups": {
     "calendar": "本月付款日历",
@@ -266,7 +270,9 @@
     "task_amount_rub": "Task amount",
     "tasks_preview": "Included tasks",
     "match_state": "Match",
-    "review_details": "Review details"
+    "review_details": "Review details",
+    "transit_commission_percent": "过账佣金 %",
+    "transit_tax_percent": "其税率 %"
   },
   "fields": {
     "name": "名称",

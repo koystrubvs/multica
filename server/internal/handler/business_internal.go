@@ -67,6 +67,9 @@ type BusinessDashboardResponse struct {
 	VitmaxTransitRUB       string `json:"vitmax_transit_rub"`
 	TransferRUB            string `json:"transfer_rub"`
 	UnknownInboundRUB      string `json:"unknown_inbound_rub"`
+	TransitBodyRUB         string `json:"transit_body_rub"`
+	TransitCommissionRUB   string `json:"transit_commission_rub"`
+	TransitNetRUB          string `json:"transit_net_rub"`
 	TaskValueRUB           string `json:"task_value_rub"`
 	ParticipantAccruedRUB  string `json:"participant_accrued_rub"`
 	CompanyTargetPoolRUB   string `json:"company_target_pool_rub"`
@@ -429,6 +432,9 @@ func (h *Handler) GetBusinessDashboard(w http.ResponseWriter, r *http.Request) {
 		&response.VitmaxTransitRUB,
 		&response.TransferRUB,
 		&response.UnknownInboundRUB,
+		&response.TransitBodyRUB,
+		&response.TransitCommissionRUB,
+		&response.TransitNetRUB,
 		&response.TaskValueRUB,
 		&response.ParticipantAccruedRUB,
 		&response.CompanyTargetPoolRUB,
@@ -543,6 +549,36 @@ recurring_cost_total AS (
 reserve AS (
 	SELECT COALESCE(sum(amount_rub), 0) AS balance FROM business_reserve_ledger WHERE business_id = $1::uuid
 ),
+-- Pass-through money. For a client we invoice above our own work, whatever is
+-- left of a receipt after it settles that work IS the pass-through: it travels
+-- back to the client and only the commission on it is ours. One payer row per
+-- transaction, so a client with several payers cannot count a receipt twice.
+transit_flow AS (
+	SELECT
+		GREATEST(t.amount_rub - COALESCE((
+			SELECT sum(m.amount_rub) FROM business_transaction_match m
+			WHERE m.business_id = t.business_id AND m.transaction_id = t.id AND m.status = 'confirmed'
+		), 0), 0) AS body,
+		client.transit_commission_percent AS commission_percent,
+		COALESCE(client.transit_tax_percent, 0) AS tax_percent
+	FROM scoped_transactions t
+	CROSS JOIN LATERAL (
+		SELECT bc.transit_commission_percent, bc.transit_tax_percent
+		FROM business_client_payer bp
+		JOIN business_client bc ON bc.id = bp.client_id AND bc.business_id = t.business_id
+		WHERE bp.business_id = t.business_id AND bp.inn = t.counterparty_inn
+		  AND bc.transit_commission_percent IS NOT NULL
+		LIMIT 1
+	) client
+	WHERE t.direction = 'inbound' AND t.classification = 'client_income'
+),
+transit AS (
+	SELECT
+		COALESCE(sum(body), 0) AS body,
+		COALESCE(sum(round(body * commission_percent / 100, 2)), 0) AS commission,
+		COALESCE(sum(round(body * (commission_percent - tax_percent) / 100, 2)), 0) AS net
+	FROM transit_flow
+),
 metrics AS (
 	SELECT
 		COALESCE((SELECT sum(planned_amount_rub) FROM scoped_receivable WHERE status = 'expected'), 0) AS expected,
@@ -550,7 +586,13 @@ metrics AS (
 		COALESCE((SELECT sum(paid_amount_rub) FROM scoped_receivable), 0) AS receivable_paid,
 		COALESCE((SELECT sum(GREATEST(planned_amount_rub - paid_amount_rub, 0)) FROM scoped_receivable WHERE status NOT IN ('paid','skipped','written_off') AND due_on < (now() AT TIME ZONE 'Asia/Yekaterinburg')::date), 0) AS overdue,
 		COALESCE((SELECT sum(planned_amount_rub) FROM scoped_receivable WHERE status = 'expected' AND invoice_on <= (now() AT TIME ZONE 'Asia/Yekaterinburg')::date), 0) AS not_invoiced,
-		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE direction = 'inbound' AND classification = 'client_income'), 0) AS bank_income,
+		-- Revenue is our own work plus the commission, never the pass-through
+		-- body: invoicing 350 000 to hand 280 000 back does not earn 350 000.
+		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE direction = 'inbound' AND classification = 'client_income'), 0)
+			- (SELECT body FROM transit) + (SELECT commission FROM transit) AS bank_income,
+		(SELECT body FROM transit) AS transit_body,
+		(SELECT commission FROM transit) AS transit_commission,
+		(SELECT net FROM transit) AS transit_net,
 		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE classification = 'vitmax_transit'), 0) AS vitmax_transit,
 		COALESCE((SELECT sum(amount_rub) FROM scoped_transactions WHERE classification = 'transfer'), 0) AS transfer,
 		COALESCE((SELECT sum(t.amount_rub) FROM scoped_transactions t
@@ -573,6 +615,7 @@ metrics AS (
 SELECT
 	expected::text, invoiced::text, receivable_paid::text, overdue::text, not_invoiced::text,
 	bank_income::text, vitmax_transit::text, transfer::text, unknown_inbound::text,
+	transit_body::text, transit_commission::text, transit_net::text,
 	task_value::text, participant_accrued::text, round(task_value * 0.15, 2)::text,
 	round(task_value * 0.50, 2)::text, company_costs::text, payable::text, paid_workers::text,
 	reserve_balance::text, reserve_obligation::text,
@@ -1067,6 +1110,10 @@ type updateBusinessClientRequest struct {
 	ManagerUserID         *string `json:"manager_user_id"`
 	PrimaryPaymentChannel *string `json:"primary_payment_channel"`
 	Notes                 *string `json:"notes"`
+	// Empty string clears the rate, which turns the client back into an
+	// ordinary one — 0 means "passes everything on and keeps nothing".
+	TransitCommissionPercent *string `json:"transit_commission_percent"`
+	TransitTaxPercent        *string `json:"transit_tax_percent"`
 }
 
 func (h *Handler) UpdateBusinessClient(w http.ResponseWriter, r *http.Request) {
@@ -1095,6 +1142,15 @@ func (h *Handler) UpdateBusinessClient(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for field, value := range map[string]*string{
+		"transit_commission_percent": request.TransitCommissionPercent,
+		"transit_tax_percent":        request.TransitTaxPercent,
+	} {
+		if value != nil && strings.TrimSpace(*value) != "" && !validBusinessMoney(strings.TrimSpace(*value)) {
+			writeError(w, http.StatusBadRequest, "invalid "+field)
+			return
+		}
+	}
 	tx, err := h.TxStarter.Begin(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to start transaction")
@@ -1117,11 +1173,14 @@ func (h *Handler) UpdateBusinessClient(w http.ResponseWriter, r *http.Request) {
 			manager_user_id = CASE WHEN $5::text IS NULL THEN manager_user_id ELSE NULLIF($5, '')::uuid END,
 			primary_payment_channel = COALESCE($6, primary_payment_channel),
 			notes = CASE WHEN $7::text IS NULL THEN notes ELSE NULLIF($7, '') END,
+			transit_commission_percent = CASE WHEN $8::text IS NULL THEN transit_commission_percent ELSE NULLIF($8, '')::numeric END,
+			transit_tax_percent = CASE WHEN $9::text IS NULL THEN transit_tax_percent ELSE NULLIF($9, '')::numeric END,
 			archived_at = CASE WHEN COALESCE($4, status) = 'lost' THEN COALESCE(archived_at, now()) ELSE NULL END,
 			updated_at = now()
 		WHERE id = $1 AND business_id = $2
 		RETURNING to_jsonb(business_client)
-	`, clientID, businessID, request.CanonicalName, request.Status, nullableString(request.ManagerUserID), request.PrimaryPaymentChannel, nullableString(request.Notes)))
+	`, clientID, businessID, request.CanonicalName, request.Status, nullableString(request.ManagerUserID), request.PrimaryPaymentChannel, nullableString(request.Notes),
+		request.TransitCommissionPercent, request.TransitTaxPercent))
 	if isUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "client name already exists")
 		return
