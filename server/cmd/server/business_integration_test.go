@@ -229,3 +229,91 @@ func TestBusinessSystemLifecycle(t *testing.T) {
 		t.Fatalf("expected accrual paid, got %s", accrualStatus)
 	}
 }
+
+// A capped agreement plans from the work actually tracked in the project's
+// billing period. The cap only bounds that number when the client agreed to a
+// hard limit; otherwise the real amount is planned and flagged for review.
+func TestBusinessCapAgreementPlansFromTrackedWork(t *testing.T) {
+	ctx := context.Background()
+	var businessID, projectID string
+	if err := testPool.QueryRow(ctx, `INSERT INTO business_account(name,owner_user_id) VALUES ('Cap Mode Business',$1) RETURNING id`, testUserID).Scan(&businessID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cleanupBusinessIntegrationFixture(context.Background(), t, businessID) })
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_account_member(business_id,user_id,role) VALUES ($1,$2,'owner')`, businessID, testUserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_workspace(business_id,workspace_id,kind) VALUES ($1,$2,'operational')`, businessID, testWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `INSERT INTO project(workspace_id,title,status) VALUES ($1,'Cap mode support','in_progress') RETURNING id`, testWorkspaceID).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Plan into next month so the fixture cannot collide with receivables the
+	// lifecycle test generates for the current one.
+	now := time.Now().UTC()
+	period := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0)
+	month := period.Format("2006-01")
+	start := period.Format("2006-01-02")
+	if _, err := testPool.Exec(ctx, `
+		INSERT INTO client_billing_period(project_id,workspace_id,starts_on,ends_on,total_rub)
+		VALUES ($1,$2,$3::date,($3::date + interval '1 month')::date,1500)
+	`, projectID, testWorkspaceID, start); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := testPool.Exec(context.Background(), `DELETE FROM client_billing_period WHERE project_id=$1`, projectID); err != nil {
+			t.Errorf("cleanup client_billing_period: %v", err)
+		}
+	})
+
+	client := businessRequest(t, http.MethodPost, businessID, "/clients", map[string]any{
+		"canonical_name": "Cap Mode Client", "status": "active", "primary_payment_channel": "bank",
+	}, http.StatusCreated)
+	clientID := client["id"].(string)
+	businessRequest(t, http.MethodPut, businessID, "/clients/"+clientID+"/projects", map[string]any{
+		"workspace_id": testWorkspaceID, "project_id": projectID, "service_type": "support", "billable": true,
+	}, http.StatusOK)
+
+	agreementID := func(key, capMode string) string {
+		created := businessRequest(t, http.MethodPost, businessID, "/agreements", map[string]any{
+			"client_id": clientID, "project_id": projectID, "service_type": "support",
+			"agreement_key": key, "version": 1, "name": "Cap " + capMode,
+			"model": "cap", "cap_rub": "1000", "cap_mode": capMode, "invoice_day": 1, "due_days": 7,
+			"period_months": 1, "payment_channel": "bank", "effective_from": start,
+			"status": "active", "terms": map[string]any{},
+		}, http.StatusCreated)
+		id, ok := created["id"].(string)
+		if !ok {
+			t.Fatalf("agreement %s: id missing in %v", key, created)
+		}
+		return id
+	}
+	strictID := agreementID("cap-mode-strict", "strict")
+	advisoryID := agreementID("cap-mode-advisory", "advisory")
+
+	businessRequest(t, http.MethodPost, businessID, "/receivables/generate", map[string]any{"from_month": month, "months": 1}, http.StatusOK)
+
+	planned := func(id string) (amount, source string, needsReview bool) {
+		if err := testPool.QueryRow(ctx, `
+			SELECT planned_amount_rub::text, source, needs_review FROM business_receivable
+			WHERE business_id=$1 AND agreement_id=$2 AND period_key=$3
+		`, businessID, id, month).Scan(&amount, &source, &needsReview); err != nil {
+			t.Fatal(err)
+		}
+		return amount, source, needsReview
+	}
+
+	amount, source, needsReview := planned(strictID)
+	if amount != "1000.00" || source != "billing_period" || needsReview {
+		t.Fatalf("hard limit: expected 1000.00 from billing_period without review, got %s/%s/%v", amount, source, needsReview)
+	}
+	amount, source, needsReview = planned(advisoryID)
+	if amount != "1500.00" || source != "billing_period" || !needsReview {
+		t.Fatalf("advisory limit: expected 1500.00 from billing_period flagged for review, got %s/%s/%v", amount, source, needsReview)
+	}
+
+	businessRequest(t, http.MethodPatch, businessID, "/agreements/"+strictID, map[string]any{"status": "expired"}, http.StatusOK)
+	businessRequest(t, http.MethodPatch, businessID, "/agreements/"+strictID, map[string]any{"status": "archived"}, http.StatusBadRequest)
+}

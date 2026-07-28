@@ -28,6 +28,13 @@ type ClientTab = "overview" | "contracts" | "finance" | "projects" | "payers" | 
 const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as const;
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 const AGREEMENT_MODELS = ["fixed", "cap", "time_material", "project"] as const;
+// Mirrors the CHECK constraint on business_agreement.status. The select used to
+// offer "archived", which the database has never accepted — every archive
+// attempt came back as a 500.
+const AGREEMENT_STATUSES = ["draft", "active", "paused", "expired", "superseded"] as const;
+// A ceiling means different things per client: for some it is a hard limit, for
+// others just the line above which we warn them.
+const AGREEMENT_CAP_MODES = ["strict", "advisory"] as const;
 
 // Every agreement used to render all three money inputs, so a fixed-fee deal
 // showed an empty "rate per hour" and a T&M deal showed an empty "amount" —
@@ -250,7 +257,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                 const id = String(agreement.id);
                 const money = AGREEMENT_MONEY_FIELDS[text(agreement, "model")] ?? ["amount"];
                 return (
-                  <form key={id} className="space-y-2 rounded-lg border p-2.5" onSubmit={(event) => { const fd = formData(event); void run(`agr-${id}`, () => api.businessAction(businessID, `agreements/${id}`, { name: fd.get("name"), amount_rub: fd.get("amount"), cap_rub: fd.get("cap"), hourly_rate_rub: fd.get("hourly"), invoice_day: fd.get("day"), status: fd.get("status"), needs_review: fd.get("review") === "on" }, "PATCH")); }}>
+                  <form key={id} className="space-y-2 rounded-lg border p-2.5" onSubmit={(event) => { const fd = formData(event); void run(`agr-${id}`, () => api.businessAction(businessID, `agreements/${id}`, { name: fd.get("name"), amount_rub: fd.get("amount"), cap_rub: fd.get("cap"), cap_mode: fd.get("cap_mode"), hourly_rate_rub: fd.get("hourly"), invoice_day: fd.get("day"), status: fd.get("status"), needs_review: fd.get("review") === "on" }, "PATCH")); }}>
                     <div className="flex items-center gap-1.5">
                       <Input required name="name" defaultValue={text(agreement, "name")} aria-label={t(($) => $.fields.name)} className="h-7 min-w-0 flex-1 text-xs font-medium" />
                       <Tag>{tt(`values.${text(agreement, "service_type")}`, { defaultValue: text(agreement, "service_type") })}</Tag>
@@ -267,6 +274,13 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                           <Input name="cap" inputMode="decimal" className="h-7 w-28 text-xs" defaultValue={agreement.cap_rub ? String(Number(agreement.cap_rub)) : ""} />
                         </Field>
                       )}
+                      {money.includes("cap") && (
+                        <Field label={tt("columns.cap_mode", { defaultValue: "cap mode" })}>
+                          <NativeSelect size="sm" name="cap_mode" defaultValue={text(agreement, "cap_mode") || "strict"}>
+                            {AGREEMENT_CAP_MODES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
+                          </NativeSelect>
+                        </Field>
+                      )}
                       {money.includes("hourly") && (
                         <Field label={tt("columns.hourly_rate_rub", { defaultValue: "rate" })}>
                           <Input name="hourly" inputMode="decimal" className="h-7 w-24 text-xs" defaultValue={agreement.hourly_rate_rub ? String(Number(agreement.hourly_rate_rub)) : ""} />
@@ -277,8 +291,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                       </Field>
                       <Field label={tt("columns.status", { defaultValue: "status" })}>
                         <NativeSelect size="sm" name="status" defaultValue={text(agreement, "status")}>
-                          <NativeSelectOption value="active">{tt("values.active", { defaultValue: "active" })}</NativeSelectOption>
-                          <NativeSelectOption value="archived">{tt("values.archived", { defaultValue: "archived" })}</NativeSelectOption>
+                          {AGREEMENT_STATUSES.map((value) => <NativeSelectOption key={value} value={value}>{tt(`values.${value}`, { defaultValue: value })}</NativeSelectOption>)}
                         </NativeSelect>
                       </Field>
                       <label className="flex h-7 items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(agreement.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>

@@ -658,6 +658,7 @@ type updateBusinessAgreementRequest struct {
 	AmountRUB      *string `json:"amount_rub"`
 	HourlyRateRUB  *string `json:"hourly_rate_rub"`
 	CapRUB         *string `json:"cap_rub"`
+	CapMode        *string `json:"cap_mode"`
 	InvoiceDay     *string `json:"invoice_day"`
 	DueDays        *string `json:"due_days"`
 	PaymentChannel *string `json:"payment_channel"`
@@ -666,9 +667,32 @@ type updateBusinessAgreementRequest struct {
 	NeedsReview    *bool   `json:"needs_review"`
 }
 
+// The database CHECK constraints are the dictionary for these fields. The
+// status list used to be `active` / `archived` here while the schema allowed
+// neither `archived` nor the four other real statuses, so archiving an
+// agreement from the UI failed with a 500 on the CHECK every time.
+var (
+	businessAgreementStatuses = []string{"draft", "active", "paused", "expired", "superseded"}
+	businessAgreementCapModes = []string{"strict", "advisory"}
+)
+
 func validBusinessMoney(value string) bool {
 	amount, err := strconv.ParseFloat(value, 64)
 	return err == nil && amount >= 0 && amount < 1e12
+}
+
+// businessMoneyExceeds compares two numeric strings as amounts. An empty or
+// unparsable limit means "no limit", so nothing exceeds it.
+func businessMoneyExceeds(value, limit string) bool {
+	limitAmount, err := strconv.ParseFloat(strings.TrimSpace(limit), 64)
+	if err != nil {
+		return false
+	}
+	amount, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil {
+		return false
+	}
+	return amount > limitAmount
 }
 
 func (h *Handler) UpdateBusinessAgreement(w http.ResponseWriter, r *http.Request) {
@@ -700,8 +724,12 @@ func (h *Handler) UpdateBusinessAgreement(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid payment_channel")
 		return
 	}
-	if request.Status != nil && !containsBusinessString([]string{"active", "archived"}, *request.Status) {
+	if request.Status != nil && !containsBusinessString(businessAgreementStatuses, *request.Status) {
 		writeError(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+	if request.CapMode != nil && !containsBusinessString(businessAgreementCapModes, *request.CapMode) {
+		writeError(w, http.StatusBadRequest, "invalid cap_mode")
 		return
 	}
 	for _, money := range []*string{request.AmountRUB, request.HourlyRateRUB, request.CapRUB} {
@@ -729,15 +757,15 @@ func (h *Handler) UpdateBusinessAgreement(w http.ResponseWriter, r *http.Request
 
 	var (
 		name, serviceType, model, paymentChannel, status string
-		amount                                           string
+		amount, capMode                                  string
 		hourly, cap, invoiceDay, dueDays                 *string
 		isEstimate, needsReview                          bool
 	)
 	err = tx.QueryRow(r.Context(), `
-		SELECT name, service_type, model, COALESCE(amount_rub::text, ''), hourly_rate_rub::text, cap_rub::text,
+		SELECT name, service_type, model, COALESCE(amount_rub::text, ''), hourly_rate_rub::text, cap_rub::text, cap_mode,
 		       invoice_day::text, due_days::text, payment_channel, status, is_estimate, needs_review
 		FROM business_agreement WHERE business_id = $1 AND id = $2 FOR UPDATE
-	`, businessID, agreementID).Scan(&name, &serviceType, &model, &amount, &hourly, &cap, &invoiceDay, &dueDays, &paymentChannel, &status, &isEstimate, &needsReview)
+	`, businessID, agreementID).Scan(&name, &serviceType, &model, &amount, &hourly, &cap, &capMode, &invoiceDay, &dueDays, &paymentChannel, &status, &isEstimate, &needsReview)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "agreement not found")
 		return
@@ -772,6 +800,9 @@ func (h *Handler) UpdateBusinessAgreement(w http.ResponseWriter, r *http.Request
 	if request.Status != nil {
 		status = *request.Status
 	}
+	if request.CapMode != nil {
+		capMode = *request.CapMode
+	}
 	if request.AmountRUB != nil && strings.TrimSpace(*request.AmountRUB) != "" {
 		amount = strings.TrimSpace(*request.AmountRUB)
 	}
@@ -789,10 +820,10 @@ func (h *Handler) UpdateBusinessAgreement(w http.ResponseWriter, r *http.Request
 	if _, err := tx.Exec(r.Context(), `
 		UPDATE business_agreement SET
 			name = $3, service_type = $4, model = $5, amount_rub = NULLIF($6, '')::numeric,
-			hourly_rate_rub = $7::numeric, cap_rub = $8::numeric, invoice_day = $9::int, due_days = COALESCE($10::int, due_days),
-			payment_channel = $11, status = $12, is_estimate = $13, needs_review = $14, updated_at = now()
+			hourly_rate_rub = $7::numeric, cap_rub = $8::numeric, cap_mode = $9, invoice_day = $10::int, due_days = COALESCE($11::int, due_days),
+			payment_channel = $12, status = $13, is_estimate = $14, needs_review = $15, updated_at = now()
 		WHERE business_id = $1 AND id = $2
-	`, businessID, agreementID, name, serviceType, model, amount, hourly, cap, invoiceDay, dueDays, paymentChannel, status, isEstimate, needsReview); err != nil {
+	`, businessID, agreementID, name, serviceType, model, amount, hourly, cap, capMode, invoiceDay, dueDays, paymentChannel, status, isEstimate, needsReview); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to update agreement")
 		return
 	}
@@ -1517,6 +1548,7 @@ type createBusinessAgreementRequest struct {
 	AmountRUB      *string         `json:"amount_rub"`
 	HourlyRateRUB  *string         `json:"hourly_rate_rub"`
 	CapRUB         *string         `json:"cap_rub"`
+	CapMode        string          `json:"cap_mode"`
 	InvoiceDay     *int32          `json:"invoice_day"`
 	DueDays        *int32          `json:"due_days"`
 	PeriodMonths   *int32          `json:"period_months"`
@@ -1570,6 +1602,13 @@ func (h *Handler) CreateBusinessAgreement(w http.ResponseWriter, r *http.Request
 	if request.PaymentChannel == "" {
 		request.PaymentChannel = "bank"
 	}
+	if request.CapMode == "" {
+		request.CapMode = "strict"
+	}
+	if !containsBusinessString(businessAgreementCapModes, request.CapMode) {
+		writeError(w, http.StatusBadRequest, "invalid cap_mode")
+		return
+	}
 	if request.Status == "" {
 		request.Status = "draft"
 	}
@@ -1597,15 +1636,15 @@ func (h *Handler) CreateBusinessAgreement(w http.ResponseWriter, r *http.Request
 	raw, err := queryBusinessRowJSON(r.Context(), tx.QueryRow(r.Context(), `
 		INSERT INTO business_agreement (
 			business_id, client_id, project_id, service_type, agreement_key, version, name, model,
-			amount_rub, hourly_rate_rub, cap_rub, invoice_day, due_days, period_months,
+			amount_rub, hourly_rate_rub, cap_rub, cap_mode, invoice_day, due_days, period_months,
 			payment_channel, effective_from, effective_to, status, is_estimate, needs_review, terms, created_by
 		) VALUES ($1, $2, NULLIF($3, '')::uuid, $4, $5, $6, $7, $8,
 			NULLIF($9, '')::numeric, NULLIF($10, '')::numeric, NULLIF($11, '')::numeric,
-			$12, $13, $14, $15, $16::date, NULLIF($17, '')::date, $18, $19, $20, $21, $22)
+			$12, $13, $14, $15, $16, $17::date, NULLIF($18, '')::date, $19, $20, $21, $22, $23)
 		RETURNING to_jsonb(business_agreement)
 	`, businessID, request.ClientID, stringValue(request.ProjectID), request.ServiceType, strings.TrimSpace(request.AgreementKey), request.Version,
 		strings.TrimSpace(request.Name), request.Model, stringValue(request.AmountRUB), stringValue(request.HourlyRateRUB), stringValue(request.CapRUB),
-		request.InvoiceDay, request.DueDays, request.PeriodMonths, request.PaymentChannel, request.EffectiveFrom, stringValue(request.EffectiveTo),
+		request.CapMode, request.InvoiceDay, request.DueDays, request.PeriodMonths, request.PaymentChannel, request.EffectiveFrom, stringValue(request.EffectiveTo),
 		request.Status, request.IsEstimate, request.NeedsReview, []byte(request.Terms), userID))
 	if isUniqueViolation(err) {
 		writeError(w, http.StatusConflict, "agreement version already exists")
@@ -1664,7 +1703,7 @@ func (h *Handler) GenerateBusinessReceivables(w http.ResponseWriter, r *http.Req
 	defer tx.Rollback(r.Context())
 	rows, err := tx.Query(r.Context(), `
 		SELECT id::text, client_id::text, COALESCE(project_id::text, ''), model,
-		       COALESCE(amount_rub::text, ''), COALESCE(cap_rub::text, ''),
+		       COALESCE(amount_rub::text, ''), COALESCE(cap_rub::text, ''), cap_mode,
 		       invoice_day, due_days, period_months, effective_from, effective_to,
 		       needs_review
 		FROM business_agreement
@@ -1676,17 +1715,17 @@ func (h *Handler) GenerateBusinessReceivables(w http.ResponseWriter, r *http.Req
 		return
 	}
 	type agreementRow struct {
-		ID, ClientID, ProjectID, Model, Amount, Cap string
-		InvoiceDay                                  *int32
-		DueDays, PeriodMonths                       int32
-		EffectiveFrom                               time.Time
-		EffectiveTo                                 *time.Time
-		NeedsReview                                 bool
+		ID, ClientID, ProjectID, Model, Amount, Cap, CapMode string
+		InvoiceDay                                           *int32
+		DueDays, PeriodMonths                                int32
+		EffectiveFrom                                        time.Time
+		EffectiveTo                                          *time.Time
+		NeedsReview                                          bool
 	}
 	agreements := make([]agreementRow, 0)
 	for rows.Next() {
 		var row agreementRow
-		if err := rows.Scan(&row.ID, &row.ClientID, &row.ProjectID, &row.Model, &row.Amount, &row.Cap,
+		if err := rows.Scan(&row.ID, &row.ClientID, &row.ProjectID, &row.Model, &row.Amount, &row.Cap, &row.CapMode,
 			&row.InvoiceDay, &row.DueDays, &row.PeriodMonths, &row.EffectiveFrom, &row.EffectiveTo, &row.NeedsReview); err != nil {
 			rows.Close()
 			writeError(w, http.StatusInternalServerError, "failed to read agreements")
@@ -1698,6 +1737,22 @@ func (h *Handler) GenerateBusinessReceivables(w http.ResponseWriter, r *http.Req
 	if err := rows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read agreements")
 		return
+	}
+	// The tracked work for a period lives in the project's billing period. Both
+	// capped and pure time-and-material agreements plan from it, so the lookup is
+	// shared; a missing period is not an error, it just means there is no fact yet.
+	billingFact := func(projectID string, periodStart, periodEndExclusive time.Time) (periodID string, total string, found bool) {
+		if projectID == "" {
+			return "", "", false
+		}
+		if err := tx.QueryRow(r.Context(), `
+			SELECT id::text, total_rub::text FROM client_billing_period
+			WHERE project_id = $1 AND starts_on < $3::date AND ends_on > $2::date
+			ORDER BY starts_on DESC LIMIT 1
+		`, projectID, periodStart.Format("2006-01-02"), periodEndExclusive.Format("2006-01-02")).Scan(&periodID, &total); err != nil {
+			return "", "", false
+		}
+		return periodID, total, true
 	}
 	inserted := int64(0)
 	for offset := int32(0); offset < request.Months; offset++ {
@@ -1715,21 +1770,32 @@ func (h *Handler) GenerateBusinessReceivables(w http.ResponseWriter, r *http.Req
 			billingPeriodID := ""
 			switch agreement.Model {
 			case "cap":
+				// A cap is "bill the work, but no higher than the ceiling", so the
+				// plan follows the tracked fact and the ceiling only bounds it. With
+				// no billing period to read from, the ceiling is the best forecast.
 				amount = agreement.Cap
+				if periodID, total, found := billingFact(agreement.ProjectID, periodStart, periodEndExclusive); found {
+					billingPeriodID = periodID
+					amount = total
+					source = "billing_period"
+					needsReview = false
+					if businessMoneyExceeds(total, agreement.Cap) {
+						if agreement.CapMode == "advisory" {
+							// The ceiling is a warning line for this client, not a
+							// limit: plan the real amount and flag it for review.
+							needsReview = true
+						} else {
+							amount = agreement.Cap
+						}
+					}
+				}
 			case "time_material":
 				amount = ""
-				if agreement.ProjectID != "" {
-					var total string
-					err := tx.QueryRow(r.Context(), `
-						SELECT id::text, total_rub::text FROM client_billing_period
-						WHERE project_id = $1 AND starts_on < $3::date AND ends_on > $2::date
-						ORDER BY starts_on DESC LIMIT 1
-					`, agreement.ProjectID, periodStart.Format("2006-01-02"), periodEndExclusive.Format("2006-01-02")).Scan(&billingPeriodID, &total)
-					if err == nil {
-						amount = total
-						source = "billing_period"
-						needsReview = false
-					}
+				if periodID, total, found := billingFact(agreement.ProjectID, periodStart, periodEndExclusive); found {
+					billingPeriodID = periodID
+					amount = total
+					source = "billing_period"
+					needsReview = false
 				}
 			}
 			if amount == "" {
