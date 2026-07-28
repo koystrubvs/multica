@@ -29,6 +29,18 @@ const CLIENT_STATUSES = ["active", "prospect", "paused", "leaving", "lost"] as c
 const SERVICE_TYPES = ["development", "support", "seo", "content"] as const;
 const AGREEMENT_MODELS = ["fixed", "cap", "time_material", "project"] as const;
 
+// Every agreement used to render all three money inputs, so a fixed-fee deal
+// showed an empty "rate per hour" and a T&M deal showed an empty "amount" —
+// the main reason the finance tab read as noise. Each model now shows only the
+// fields it actually uses; the rest keep their stored values untouched because
+// the PATCH endpoint treats an absent field as "leave as is".
+const AGREEMENT_MONEY_FIELDS: Record<string, readonly ("amount" | "cap" | "hourly")[]> = {
+  fixed: ["amount"],
+  project: ["amount"],
+  cap: ["cap", "hourly"],
+  time_material: ["hourly"],
+};
+
 type TT = (
   key: string,
   options?: { defaultValue?: string; count?: number },
@@ -52,6 +64,32 @@ function isTrue(value: unknown): boolean {
 function formData(event: FormEvent<HTMLFormElement>): FormData {
   event.preventDefault();
   return new FormData(event.currentTarget);
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="space-y-0.5">
+      <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex shrink-0 items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+function ReceivableBadge({ status, overdue, label }: { status: string; overdue: boolean; label: string }) {
+  const tone = status === "paid" || status === "partially_paid"
+    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+    : overdue || status === "overdue"
+      ? "bg-destructive/10 text-destructive"
+      : "bg-muted text-muted-foreground";
+  return <span className={cn("inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium", tone)}>{label}</span>;
 }
 
 function CardSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -108,6 +146,9 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
   const receivables = (data.receivables ?? [])
     .filter((row) => String(row.client_id) === clientID)
     .sort((a, b) => String(a.due_on ?? a.period_start ?? "").localeCompare(String(b.due_on ?? b.period_start ?? "")));
+  // A receivable row carries only its agreement id, but "Остаток по контра…"
+  // tells the owner nothing about which deal it belongs to.
+  const agreementNames = new Map(agreements.map((row) => [String(row.id), text(row, "name")]));
   const payerInns = new Set(payers.map((row) => text(row, "inn")).filter(Boolean));
   const bankRows = (data.transactions ?? [])
     .filter((row) => String(row.direction) === "inbound" && payerInns.has(text(row, "counterparty_inn")))
@@ -173,6 +214,12 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
             ))}
           </div>
 
+          {/* Tab panels share one wrapper so CardSection's `first:border-t-0`
+              can match again. Without it the sections were siblings of the
+              sticky tab strip, so the first one always drew its own top border
+              right under the strip's bottom border — a double rule on every
+              tab. */}
+          <div>
           {tab === "overview" && (
           <CardSection title={t(($) => $.card.details)}>
             <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { const fd = formData(event); void run("client", () => api.businessAction(businessID, `clients/${clientID}`, { status: fd.get("status"), primary_payment_channel: fd.get("channel"), notes: fd.get("notes") }, "PATCH")); }}>
@@ -201,20 +248,42 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
               {agreements.length === 0 && <div className="text-xs text-muted-foreground">{t(($) => $.empty)}</div>}
               {agreements.map((agreement) => {
                 const id = String(agreement.id);
+                const money = AGREEMENT_MONEY_FIELDS[text(agreement, "model")] ?? ["amount"];
                 return (
-                  <form key={id} className="flex flex-wrap items-center gap-1.5 rounded-lg border p-2" onSubmit={(event) => { const fd = formData(event); void run(`agr-${id}`, () => api.businessAction(businessID, `agreements/${id}`, { amount_rub: fd.get("amount"), cap_rub: fd.get("cap"), hourly_rate_rub: fd.get("hourly"), invoice_day: fd.get("day"), status: fd.get("status"), needs_review: fd.get("review") === "on" }, "PATCH")); }}>
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium" title={text(agreement, "name")}>{text(agreement, "name")}</span>
-                    <span className={cn("inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium", "bg-muted text-muted-foreground")}>{tt(`values.${text(agreement, "model")}`, { defaultValue: text(agreement, "model") })}</span>
-                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">{tt("columns.amount_rub", { defaultValue: "amount" })}<Input name="amount" inputMode="decimal" className="h-7 w-24 text-xs" defaultValue={agreement.amount_rub ? String(Number(agreement.amount_rub)) : ""} /></label>
-                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">{tt("columns.cap_rub", { defaultValue: "cap" })}<Input name="cap" inputMode="decimal" className="h-7 w-20 text-xs" defaultValue={agreement.cap_rub ? String(Number(agreement.cap_rub)) : ""} /></label>
-                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">{tt("columns.hourly_rate_rub", { defaultValue: "rate" })}<Input name="hourly" inputMode="decimal" className="h-7 w-16 text-xs" defaultValue={agreement.hourly_rate_rub ? String(Number(agreement.hourly_rate_rub)) : ""} /></label>
-                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground">{tt("columns.invoice_day", { defaultValue: "day" })}<Input name="day" inputMode="numeric" className="h-7 w-12 text-xs" defaultValue={agreement.invoice_day ? String(agreement.invoice_day) : ""} /></label>
-                    <NativeSelect size="sm" name="status" defaultValue={text(agreement, "status")}>
-                      <NativeSelectOption value="active">{tt("values.active", { defaultValue: "active" })}</NativeSelectOption>
-                      <NativeSelectOption value="archived">{tt("values.archived", { defaultValue: "archived" })}</NativeSelectOption>
-                    </NativeSelect>
-                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(agreement.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>
-                    <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                  <form key={id} className="space-y-2 rounded-lg border p-2.5" onSubmit={(event) => { const fd = formData(event); void run(`agr-${id}`, () => api.businessAction(businessID, `agreements/${id}`, { name: fd.get("name"), amount_rub: fd.get("amount"), cap_rub: fd.get("cap"), hourly_rate_rub: fd.get("hourly"), invoice_day: fd.get("day"), status: fd.get("status"), needs_review: fd.get("review") === "on" }, "PATCH")); }}>
+                    <div className="flex items-center gap-1.5">
+                      <Input required name="name" defaultValue={text(agreement, "name")} aria-label={t(($) => $.fields.name)} className="h-7 min-w-0 flex-1 text-xs font-medium" />
+                      <Tag>{tt(`values.${text(agreement, "service_type")}`, { defaultValue: text(agreement, "service_type") })}</Tag>
+                      <Tag>{tt(`values.${text(agreement, "model")}`, { defaultValue: text(agreement, "model") })}</Tag>
+                    </div>
+                    <div className="flex flex-wrap items-end gap-2">
+                      {money.includes("amount") && (
+                        <Field label={tt("columns.amount_rub", { defaultValue: "amount" })}>
+                          <Input name="amount" inputMode="decimal" className="h-7 w-28 text-xs" defaultValue={agreement.amount_rub ? String(Number(agreement.amount_rub)) : ""} />
+                        </Field>
+                      )}
+                      {money.includes("cap") && (
+                        <Field label={tt("columns.cap_rub", { defaultValue: "cap" })}>
+                          <Input name="cap" inputMode="decimal" className="h-7 w-28 text-xs" defaultValue={agreement.cap_rub ? String(Number(agreement.cap_rub)) : ""} />
+                        </Field>
+                      )}
+                      {money.includes("hourly") && (
+                        <Field label={tt("columns.hourly_rate_rub", { defaultValue: "rate" })}>
+                          <Input name="hourly" inputMode="decimal" className="h-7 w-24 text-xs" defaultValue={agreement.hourly_rate_rub ? String(Number(agreement.hourly_rate_rub)) : ""} />
+                        </Field>
+                      )}
+                      <Field label={tt("columns.invoice_day", { defaultValue: "day" })}>
+                        <Input name="day" inputMode="numeric" className="h-7 w-14 text-xs" defaultValue={agreement.invoice_day ? String(agreement.invoice_day) : ""} />
+                      </Field>
+                      <Field label={tt("columns.status", { defaultValue: "status" })}>
+                        <NativeSelect size="sm" name="status" defaultValue={text(agreement, "status")}>
+                          <NativeSelectOption value="active">{tt("values.active", { defaultValue: "active" })}</NativeSelectOption>
+                          <NativeSelectOption value="archived">{tt("values.archived", { defaultValue: "archived" })}</NativeSelectOption>
+                        </NativeSelect>
+                      </Field>
+                      <label className="flex h-7 items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(agreement.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>
+                      <Button type="submit" size="sm" variant="outline" className="ml-auto h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                    </div>
                   </form>
                 );
               })}
@@ -236,25 +305,44 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
                 const status = text(row, "status");
                 const editable = status !== "paid" && status !== "partially_paid";
                 const monthKey = String(row.due_on ?? row.period_start ?? "").slice(0, 7);
+                const overdue = isTrue(row.is_overdue);
+                const title = text(row, "notes") || agreementNames.get(String(row.agreement_id)) || text(row, "period_key");
+                const header = (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="shrink-0 tabular-nums text-muted-foreground">{monthKey}</span>
+                    <span className="min-w-0 flex-1 truncate" title={title}>{title}</span>
+                    <ReceivableBadge
+                      status={status}
+                      overdue={overdue}
+                      label={overdue && editable ? tt("values.overdue", { defaultValue: "overdue" }) : tt(`values.${status}`, { defaultValue: status })}
+                    />
+                  </div>
+                );
                 if (!editable) {
                   return (
-                    <div key={id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2 text-xs">
-                      <span className="tabular-nums text-muted-foreground">{monthKey}</span>
-                      <span className="min-w-0 flex-1 truncate">{text(row, "notes") || text(row, "period_key")}</span>
-                      <span className="font-medium tabular-nums">{rub(row.paid_amount_rub)}</span>
-                      <span className="inline-flex items-center rounded bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">{tt(`values.${status}`, { defaultValue: status })}</span>
+                    <div key={id} className="space-y-1.5 rounded-lg border p-2.5">
+                      {header}
+                      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+                        <span className="text-muted-foreground">{tt("columns.planned_amount_rub", { defaultValue: "planned" })}: <span className="font-medium tabular-nums text-foreground">{rub(row.planned_amount_rub)}</span></span>
+                        <span className="text-muted-foreground">{tt("columns.paid_amount_rub", { defaultValue: "paid" })}: <span className="font-medium tabular-nums text-foreground">{rub(row.paid_amount_rub)}</span></span>
+                      </div>
                     </div>
                   );
                 }
                 return (
-                  <form key={id} className="flex flex-wrap items-center gap-1.5 rounded-lg border p-2" onSubmit={(event) => { const fd = formData(event); void run(`rcv-${id}`, () => api.businessAction(businessID, `receivables/${id}`, { planned_amount_rub: fd.get("planned"), due_on: fd.get("due"), needs_review: fd.get("review") === "on" }, "PATCH")); }}>
-                    <span className="tabular-nums text-xs text-muted-foreground">{monthKey}</span>
-                    <span className="min-w-0 flex-1 truncate text-xs" title={text(row, "notes")}>{text(row, "notes") || text(row, "period_key")}</span>
-                    <Input name="planned" inputMode="decimal" className="h-7 w-24 text-xs" defaultValue={String(Number(row.planned_amount_rub ?? 0))} />
-                    <Input name="due" type="date" className="h-7 w-auto text-xs" defaultValue={text(row, "due_on")} />
-                    <label className="flex items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(row.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>
-                    <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
-                    <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" disabled={busy !== ""} onClick={() => void run(`skip-${id}`, () => api.businessAction(businessID, `receivables/${id}`, { status: "skipped" }, "PATCH"))}>{t(($) => $.actions.skip)}</Button>
+                  <form key={id} className="space-y-2 rounded-lg border p-2.5" onSubmit={(event) => { const fd = formData(event); void run(`rcv-${id}`, () => api.businessAction(businessID, `receivables/${id}`, { planned_amount_rub: fd.get("planned"), due_on: fd.get("due"), needs_review: fd.get("review") === "on" }, "PATCH")); }}>
+                    {header}
+                    <div className="flex flex-wrap items-end gap-2">
+                      <Field label={tt("columns.planned_amount_rub", { defaultValue: "planned" })}>
+                        <Input name="planned" inputMode="decimal" className="h-7 w-28 text-xs" defaultValue={String(Number(row.planned_amount_rub ?? 0))} />
+                      </Field>
+                      <Field label={tt("columns.due_on", { defaultValue: "due" })}>
+                        <Input name="due" type="date" className="h-7 w-auto text-xs" defaultValue={text(row, "due_on")} />
+                      </Field>
+                      <label className="flex h-7 items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" name="review" defaultChecked={isTrue(row.needs_review)} />{tt("columns.needs_review", { defaultValue: "review" })}</label>
+                      <Button type="submit" size="sm" variant="outline" className="ml-auto h-7 text-xs" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
+                      <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" disabled={busy !== ""} onClick={() => void run(`skip-${id}`, () => api.businessAction(businessID, `receivables/${id}`, { status: "skipped" }, "PATCH"))}>{t(($) => $.actions.skip)}</Button>
+                    </div>
                   </form>
                 );
               })}
@@ -449,6 +537,7 @@ export function BusinessClientCard({ businessID, client, data, onClose, onChange
             </div>
           </CardSection>
           )}
+          </div>
         </>}
       </SheetContent>
     </Sheet>
