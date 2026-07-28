@@ -307,6 +307,16 @@ func (s *ModulbankSyncer) persist(ctx context.Context, now time.Time, full bool,
 	}
 	defer tx.Rollback(ctx)
 
+	// Auto-match records who confirmed the link; the sync runs unattended, so it
+	// acts as the business owner exactly like the scheduled import batch does.
+	var ownerUserID string
+	if err := tx.QueryRow(ctx, `SELECT owner_user_id::text FROM business_account WHERE id=$1`, s.businessID).Scan(&ownerUserID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return result, errors.New("modulbank sync: configured business account does not exist")
+		}
+		return result, err
+	}
+
 	var batchID *string
 	if full {
 		id, batchErr := s.upsertFullSyncBatch(ctx, tx, now, len(operations))
@@ -393,6 +403,15 @@ func (s *ModulbankSyncer) persist(ctx context.Context, now time.Time, full bool,
 			return result, migrateErr
 		}
 		result.MatchesMigrated += migrated.RowsAffected()
+
+		// Receipts pulled from the bank API have to settle receivables the same
+		// way an imported statement does. Without this the money reached the
+		// ledger but every receivable stayed open until someone matched it by
+		// hand. Runs after the legacy migration so an already-linked operation is
+		// left alone by the auto-matcher's own guard.
+		if err := autoMatchBankTransactionToReceivable(ctx, tx, s.businessID, ownerUserID, transactionID); err != nil {
+			return result, err
+		}
 	}
 
 	if full {

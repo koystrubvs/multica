@@ -836,11 +836,30 @@ func pickAutoMatchReceivable(amountKopecks int64, candidates []autoMatchReceivab
 		}
 		return eligible[i].PeriodKey < eligible[j].PeriodKey
 	})
-	bestDistance := absInt64(eligible[0].Remaining - amountKopecks)
-	if len(eligible) > 1 && absInt64(eligible[1].Remaining-amountKopecks) == bestDistance {
+	// The list is already ordered by closeness, then due date, then period. Equal
+	// remaining amounts are the normal case for a recurring monthly agreement, so
+	// refusing on that alone left every such client permanently unmatched; the
+	// oldest open debt is what an accountant applies a receipt to. Only a true
+	// coin flip — same amount, same due date, same period — is left to a human.
+	if len(eligible) > 1 && sameAutoMatchRank(eligible[0], eligible[1], amountKopecks) {
 		return "", false
 	}
 	return eligible[0].ID, true
+}
+
+func sameAutoMatchRank(first, second autoMatchReceivableCandidate, amountKopecks int64) bool {
+	if absInt64(first.Remaining-amountKopecks) != absInt64(second.Remaining-amountKopecks) {
+		return false
+	}
+	switch {
+	case first.DueOn == nil && second.DueOn != nil:
+		return false
+	case first.DueOn != nil && second.DueOn == nil:
+		return false
+	case first.DueOn != nil && second.DueOn != nil && !first.DueOn.Equal(*second.DueOn):
+		return false
+	}
+	return first.PeriodKey == second.PeriodKey
 }
 
 func absInt64(value int64) int64 {

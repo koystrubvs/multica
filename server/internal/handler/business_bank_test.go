@@ -84,13 +84,35 @@ func TestPickAutoMatchReceivable(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses ambiguous same remaining", func(t *testing.T) {
+	t.Run("settles the oldest debt when amounts tie", func(t *testing.T) {
+		// A recurring agreement generates identical future periods, so equal
+		// remaining amounts are the norm rather than a sign of ambiguity.
+		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+			{ID: "august", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-08"},
+			{ID: "july", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "july" {
+			t.Fatalf("got id=%q ok=%v, want july", id, ok)
+		}
+	})
+
+	t.Run("refuses when amount, due date and period all tie", func(t *testing.T) {
 		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
 			{ID: "a", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
-			{ID: "b", Remaining: 5_000_000, DueOn: &dueLate, PeriodKey: "2026-08"},
+			{ID: "b", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
 		})
 		if ok || id != "" {
 			t.Fatalf("got id=%q ok=%v, want no match", id, ok)
+		}
+	})
+
+	t.Run("prefers a dated receivable over an undated one", func(t *testing.T) {
+		id, ok := pickAutoMatchReceivable(5_000_000, []autoMatchReceivableCandidate{
+			{ID: "dated", Remaining: 5_000_000, DueOn: &dueEarly, PeriodKey: "2026-07"},
+			{ID: "undated", Remaining: 5_000_000, PeriodKey: "2026-07"},
+		})
+		if !ok || id != "dated" {
+			t.Fatalf("got id=%q ok=%v, want dated", id, ok)
 		}
 	})
 
