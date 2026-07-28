@@ -138,12 +138,14 @@ function PeriodStatusBadge({ status }: { status: ClientBillingPeriod["status"] }
   const { t } = useT("projects");
   const styles: Record<ClientBillingPeriod["status"], string> = {
     open: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+    ready: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
     closed: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
     invoiced: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
     paid: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   };
   const labels: Record<ClientBillingPeriod["status"], string> = {
     open: t(($) => $.billing.period_status_open),
+    ready: t(($) => $.billing.period_status_ready),
     closed: t(($) => $.billing.period_status_closed),
     invoiced: t(($) => $.billing.period_status_invoiced),
     paid: t(($) => $.billing.period_status_paid),

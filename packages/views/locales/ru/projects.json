@@ -261,6 +261,7 @@
     "mark_paid": "Оплачен",
     "reopen_period": "Переоткрыть",
     "period_status_open": "Открыт",
+    "period_status_ready": "К выставлению",
     "period_status_closed": "Закрыт",
     "period_status_invoiced": "Выставлен счёт",
     "period_status_paid": "Оплачен",

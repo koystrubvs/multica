@@ -210,6 +210,7 @@
     "mark_paid": "Mark paid",
     "reopen_period": "Reopen",
     "period_status_open": "Open",
+    "period_status_ready": "Ready",
     "period_status_closed": "Closed",
     "period_status_invoiced": "Invoiced",
     "period_status_paid": "Paid",
