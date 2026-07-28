@@ -174,14 +174,10 @@ function CurrentPeriodCard({ projectId }: { projectId: string }) {
 
   const closeMut = useMutation({
     mutationFn: (periodId: string) => api.closeBillingPeriod(projectId, periodId),
-    onSuccess: (res) => {
-      if (res.elba_error) {
-        toast.error(t(($) => $.billing.elba_push_failed_toast, { error: res.elba_error }));
-      } else if (res.period.status === "invoiced") {
-        toast.success(t(($) => $.billing.period_invoiced_toast));
-      } else {
-        toast.success(t(($) => $.billing.period_closed_toast));
-      }
+    onSuccess: () => {
+      // Closing freezes the period only; Elba invoice is a separate Business
+      // confirm / POST .../invoice step (no auto-push on close).
+      toast.success(t(($) => $.billing.period_closed_toast));
       invalidatePeriods();
     },
     onError: () => toast.error(t(($) => $.billing.period_action_failed_toast)),
