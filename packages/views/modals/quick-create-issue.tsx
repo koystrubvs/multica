@@ -77,7 +77,6 @@ import {
   useComposerSubmit,
 } from "../editor";
 import { useIssueCreateUploads } from "./use-issue-create-uploads";
-import { ComposerUploadChips } from "../issues/components/composer-upload-chips";
 import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
 import { useT } from "../i18n";
 import { matchesPinyin } from "../editor/extensions/pinyin-match";
@@ -351,10 +350,8 @@ export function AgentCreatePanel({
   // logout, and reads `interrupted` after a reload. `gate` widens the editor
   // gate with the pool's placeholders.
   const {
-    uploads: draftUploads,
     attachments: pendingAttachments,
     handleUpload: handleUploadFile,
-    removeUpload,
     gate,
   } = useIssueCreateUploads("agent", uploadGate, editorRef);
   const { isDragOver, dropZoneProps } = useFileDropZone({
@@ -384,6 +381,10 @@ export function AgentCreatePanel({
     };
   }, []);
   const submittedDraftRef = useRef<IssueCreateDraft | null>(null);
+  // Set by `onAccepted` only on the branch that keeps the panel open and wipes
+  // the editor; read back by `afterAccepted`. The closing branch must not
+  // refocus an editor that is about to unmount with the dialog.
+  const refocusAfterAcceptRef = useRef(false);
 
   const composer = useComposerSubmit({
     editorRef,
@@ -459,7 +460,13 @@ export function AgentCreatePanel({
         return false;
       }
     },
+    // Continuous-creation mode puts the caret back so the next prompt can be
+    // typed immediately. Deliberately no `containerRef`: this is a dialog whose
+    // own focus trap already bounds where focus can be, and reclaiming it is the
+    // point of keep-open mode.
+    afterAccepted: () => (refocusAfterAcceptRef.current ? "refocus" : "none"),
     onAccepted: () => {
+      refocusAfterAcceptRef.current = false;
       // A successful create ends this whole draft (shared + manual + agent);
       // last-successful actor/project preferences were saved in onSubmit.
       // Success may only consume the draft it submitted: flush the editor's
@@ -480,7 +487,7 @@ export function AgentCreatePanel({
         setSentCount((c) => c + 1);
         setJustSent(true);
         setTimeout(() => setJustSent(false), 1500);
-        requestAnimationFrame(() => editorRef.current?.focus());
+        refocusAfterAcceptRef.current = true;
       } else {
         onClose();
       }
@@ -626,13 +633,6 @@ export function AgentCreatePanel({
           {isDragOver && <FileDropOverlay />}
         </div>
 
-        {draftUploads.some((u) => u.status !== "uploaded") && (
-          <ComposerUploadChips
-            uploads={draftUploads}
-            onRemove={removeUpload}
-            className="px-5 pb-1"
-          />
-        )}
 
         {error && (
           <div className="px-5 pb-2 text-xs text-destructive">{error}</div>

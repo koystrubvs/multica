@@ -190,6 +190,15 @@ vi.mock("../../editor", async () => ({
       clearContent: () => { valueRef.current = ""; setEditorValue(""); },
       focus: () => {},
       focusAtCoords: () => {},
+      // The top-level composer blurs after a posted comment (afterAccepted).
+      blur: () => {},
+      // Read by the submit-time upload gate; no uploads are exercised here.
+      hasActiveUploads: () => false,
+      // Placeholder rebuild contract: the real handle draws a card for an
+      // upload the document is not showing and reports whether it landed.
+      // Mocks track ids only — no document to draw into.
+      insertUploadPlaceholder: () => true,
+      settleUploadPlaceholder: () => false,
       uploadFile: () => {},
     }));
     return (
@@ -270,6 +279,8 @@ const mockApiObj = vi.hoisted(() => ({
   listChildIssues: vi.fn().mockResolvedValue({ issues: [] }),
   getChildIssueProgress: vi.fn().mockResolvedValue({ progress: [] }),
   getAgentTaskSnapshot: vi.fn().mockResolvedValue([]),
+  // The sub-issues header chip reads this narrowed to the parent issue.
+  getWorkspaceWorkingAgents: vi.fn().mockResolvedValue([]),
   listProperties: vi.fn().mockResolvedValue({ properties: [], total: 0 }),
   listIssues: vi.fn().mockResolvedValue({ issues: [], total: 0 }),
   uploadFile: vi.fn(),
@@ -622,6 +633,7 @@ describe("IssueDetail (shared)", () => {
     mockApiObj.listChildIssues.mockResolvedValue({ issues: [] });
     mockApiObj.getChildIssueProgress.mockResolvedValue({ progress: [] });
     mockApiObj.getAgentTaskSnapshot.mockResolvedValue([]);
+    mockApiObj.getWorkspaceWorkingAgents.mockResolvedValue([]);
     mockApiObj.listProperties.mockResolvedValue({ properties: [], total: 0 });
     mockApiObj.listIssues.mockResolvedValue({ issues: [], total: 0 });
     mockApiObj.getActiveTasksForIssue.mockResolvedValue({ tasks: [] });

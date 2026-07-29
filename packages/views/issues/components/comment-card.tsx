@@ -31,7 +31,6 @@ import { useActorName } from "@multica/core/workspace/hooks";
 import { useTimeAgo } from "../../i18n";
 import { ContentEditor, type ContentEditorRef, ReadonlyContent, useFileDropZone, FileDropOverlay, Attachment as AttachmentRenderer, AttachmentDownloadProvider, useUploadGate, useComposerSubmit } from "../../editor";
 import { useCommentUploads } from "./use-comment-uploads";
-import { ComposerUploadChips } from "./composer-upload-chips";
 import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
 import { api, dispatchReasonCode } from "@multica/core/api";
 import { ReplyInput } from "./reply-input";
@@ -692,9 +691,6 @@ function CommentRow({
               }
             />
           )}
-          {edit.uploads.some((u) => u.status !== "uploaded") && (
-            <ComposerUploadChips uploads={edit.uploads} onRemove={edit.removeUpload} className="mt-2 max-w-full" />
-          )}
           <div className="flex items-center justify-between gap-2 mt-2">
             <div className="min-w-0 flex-1">
               <CommentTriggerChips
@@ -1006,9 +1002,6 @@ function CommentCardImpl({
                         }
                         />
                       )}
-                    {edit.uploads.some((u) => u.status !== "uploaded") && (
-                      <ComposerUploadChips uploads={edit.uploads} onRemove={edit.removeUpload} className="max-w-full" />
-                    )}
                     <CommentTriggerChips
                       agents={edit.triggerPreview.agents}
                       blocked={edit.triggerPreview.blocked}

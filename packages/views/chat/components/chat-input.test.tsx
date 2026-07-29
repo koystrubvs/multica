@@ -17,6 +17,11 @@ const mockApiUploadFile = vi.hoisted(() => vi.fn());
 // delivers into the live editor through this method.
 const insertMarkdownSpy = vi.hoisted(() => vi.fn());
 
+// The real handle mints an id when it inserts the placeholder and hands it to
+// the uploader, which adopts it as the draft `clientUploadId`. Mocks must do
+// the same or the two records drift apart only in tests.
+let mockUploadIdSeq = 0;
+
 vi.mock("@multica/core/api", () => ({
   api: { uploadFile: mockApiUploadFile },
 }));
@@ -80,7 +85,7 @@ vi.mock("../../editor", async () => ({
       value?: string;
       onUpdate?: (md: string) => void;
       placeholder?: string;
-      onUploadFile?: (file: File) => Promise<UploadResult | null>;
+      onUploadFile?: (file: File, uploadId: string) => Promise<UploadResult | null>;
       onUploadingChange?: (uploading: boolean) => void;
       mentionMode?: string;
       mentionContextItems?: unknown[];
@@ -119,7 +124,7 @@ vi.mock("../../editor", async () => ({
         // the host learns about it through onUploadingChange, not by polling.
         if (uploadingRef.current === 1) onUploadingChange?.(true);
         try {
-          const result = await onUploadFile?.(file);
+          const result = await onUploadFile?.(file, `mock-upload-${++mockUploadIdSeq}`);
           if (result) {
             // Mirror the real editor (uploadAndInsertFile in
             // packages/views/editor/extensions/file-upload.ts): the
@@ -139,6 +144,11 @@ vi.mock("../../editor", async () => ({
         }
       },
       hasActiveUploads: () => uploadingRef.current > 0,
+      // Placeholder rebuild contract: the real handle draws a card for an
+      // upload the document is not showing and reports whether it landed.
+      // Mocks track ids only — no document to draw into.
+      insertUploadPlaceholder: () => true,
+      settleUploadPlaceholder: () => false,
       insertMarkdownAtEnd: (md: string) => {
         insertMarkdownSpy(md);
         valueRef.current = `${valueRef.current}\n\n${md}`.trim();
@@ -1291,8 +1301,11 @@ describe("ChatInput commit handoff", () => {
     await typeAndSend(onSend);
 
     expect(editorState.cleared).toBeGreaterThan(0);
-    expect(editorState.blurred).toBeGreaterThan(0);
     expect(useChatStore.getState().clearInputDraft).toHaveBeenCalledWith("__draft_new__");
+    // Chat is a conversation: the caret returns to the box for the next turn
+    // rather than being dropped (MUL-5181 follow-up).
+    await waitFor(() => expect(editorState.focused).toBeGreaterThan(0));
+    expect(editorState.blurred).toBe(0);
   });
 
   it("leaves the editor intact on a fire-and-forget commit but still clears the sent draft", async () => {
@@ -1307,5 +1320,9 @@ describe("ChatInput commit handoff", () => {
     expect(editorState.blurred).toBe(0);
     // …but the sent session's persisted draft is cleared regardless.
     expect(useChatStore.getState().clearInputDraft).toHaveBeenCalledWith("__draft_new__");
+    // And the caret must NOT be pulled into an editor that is showing someone
+    // else's draft: refocus is bound to having actually scrubbed the document.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(editorState.focused).toBe(0);
   });
 });

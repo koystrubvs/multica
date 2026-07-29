@@ -55,6 +55,14 @@ var ErrNoRuntimesToRegister = errors.New("no agent runtimes could be registered"
 // recover the task on a fresh attempt.
 var errTaskPrepareTimeout = errors.New("task preparation timed out")
 
+// errSkillBundleUnavailable marks a task that died in preparation because the
+// daemon could not download one of the agent's skill bundles. Carrying it as a
+// sentinel — rather than leaving handleTask to pattern-match the wrapped
+// transport error — is what lets the failure land on the platform-side
+// skill_bundle_unavailable reason instead of agent_error.unknown, which is not
+// on the server's retry allowlist. (MUL-5370)
+var errSkillBundleUnavailable = errors.New("skill bundle unavailable")
+
 const (
 	taskSlotWaitTimeout      = 2 * time.Second
 	taskSlotCapacityBackoff  = 5 * time.Second
@@ -3559,6 +3567,14 @@ func taskRunFailureReason(err error) string {
 	if errors.Is(err, errTaskPrepareTimeout) {
 		return taskfailure.ReasonTimeout.String()
 	}
+	// Checked after the prepare deadline: when the whole prepare budget ran
+	// out, runTask has already collapsed the error into errTaskPrepareTimeout
+	// and that classification is the more accurate one. This branch is for the
+	// per-skill download deadline firing inside a prepare budget that still had
+	// room (MUL-5370).
+	if errors.Is(err, errSkillBundleUnavailable) {
+		return taskfailure.ReasonSkillBundleUnavailable.String()
+	}
 	return taskfailure.Classify(err.Error()).String()
 }
 
@@ -3871,6 +3887,24 @@ func providerDisplayName(name string) string {
 	return strings.ToUpper(name[:1]) + name[1:]
 }
 
+// providerNeedsInlineSystemPrompt reports whether the runtime brief must ride
+// along in the turn itself (agent.ExecOptions.SystemPrompt) because the CLI
+// will not pick up the per-task context file execenv writes into the workdir.
+// This is the ONLY place that decides it, and it is the reason every other
+// backend sees an empty SystemPrompt.
+//
+// Adding a provider here is a real fix only when that CLI genuinely ignores its
+// context file — traecli was added because it reads .trae/rules/ and not
+// AGENTS.md, so its agents were silently missing the workflow section and left
+// issues stuck in `todo` with no comment and no error. Adding one that DOES
+// read the file just duplicates the brief on every turn.
+//
+// Confirmed to load their context file, so deliberately absent here. MUL-5392
+// probed each one over its real launch path with a canary in the context file
+// and no inline delivery: claude 2.1.220 (CLAUDE.md), codex 0.144.6 driving the
+// app-server (AGENTS.md), opencode 1.17.7 (AGENTS.md), pi 0.67.2 (AGENTS.md),
+// hermes 0.18.2 over ACP (AGENTS.md). kiro was confirmed earlier by a kiro-cli
+// 2.13.0 ACP smoke — see the call site. Still unprobed: grok, qoder, codebuddy.
 func providerNeedsInlineSystemPrompt(provider string) bool {
 	switch provider {
 	case "openclaw", "kimi", "traecli":
@@ -3901,8 +3935,11 @@ func gateResumeToReusedWorkdir(task *Task, taskCtx *execenv.TaskContextForEnv, e
 		task.PriorSessionID = ""
 		taskCtx.PriorSessionResumed = false
 		// The user expected this run to continue the prior conversation; surface
-		// the loss in the brief instead of silently restarting (MUL-4424).
+		// the loss instead of silently restarting (MUL-4424). Set it on BOTH
+		// carriers: the notice is rendered from `task` by BuildPrompt (MUL-5377
+		// moved it out of the brief), while taskCtx still drives execenv.
 		taskCtx.PriorSessionResumeUnavailable = true
+		task.PriorSessionResumeUnavailable = true
 	}
 	return reused
 }
@@ -4002,8 +4039,11 @@ func gateCodexResumeToRolloutPresence(task *Task, taskCtx *execenv.TaskContextFo
 	task.PriorSessionID = ""
 	taskCtx.PriorSessionResumed = false
 	// The user expected this run to continue the prior conversation; surface the
-	// loss in the brief instead of silently restarting (MUL-4424).
+	// loss instead of silently restarting (MUL-4424). Set it on BOTH carriers:
+	// the notice is rendered from `task` by BuildPrompt (MUL-5377 moved it out
+	// of the brief), while taskCtx still drives execenv.
 	taskCtx.PriorSessionResumeUnavailable = true
+	task.PriorSessionResumeUnavailable = true
 }
 
 const (
@@ -4107,9 +4147,18 @@ func (d *Daemon) ensureTaskSkillBundles(ctx context.Context, task *Task) error {
 	// that ultimately fails leaves the skills it did fetch cached for the next
 	// one. (GitHub #4505 / MUL-3650)
 	for _, ref := range misses {
+		started := time.Now()
 		bundle, err := d.resolveSkillBundle(ctx, task, ref)
 		if err != nil {
-			return fmt.Errorf("resolve skill bundles: %w", err)
+			// Name the skill, its declared size, and how long we actually
+			// waited. The bare "resolve skill bundles: context deadline
+			// exceeded" this replaced was indistinguishable from a generic
+			// network fault, and cost a community thread three hours of
+			// guesswork (MUL-5370): size + elapsed separate "this bundle is
+			// too big for the link" from "the link is dead".
+			return fmt.Errorf("%w: skill %q (id=%s, %d bytes) after %s: %w",
+				errSkillBundleUnavailable, ref.Name, ref.ID, ref.SizeBytes,
+				time.Since(started).Round(time.Millisecond), err)
 		}
 		resolved[skillRefKey(bundle.Source, bundle.ID)] = bundle
 	}

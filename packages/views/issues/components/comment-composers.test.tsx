@@ -20,8 +20,22 @@ const editorDefaultValues = vi.hoisted(() => ({
 // Observability + failure control for the write-back insert path (MUL-5181):
 // `insertMarkdownAtEnd` returns false while the (simulated) Tiptap instance
 // doesn't exist yet, exactly like the real handle.
+// Post-send caret policy: the top-level composer blurs (the page scrolls to the
+// posted comment instead), a thread reply keeps the caret for the next reply.
+const focusCalls = vi.hoisted(() => ({ focused: 0, blurred: 0 }));
 const insertMarkdownSpy = vi.hoisted(() => vi.fn());
+const insertPlaceholderSpy = vi.hoisted(() => vi.fn());
 const insertMarkdownBehavior = vi.hoisted(() => ({ succeed: true }));
+// Lets a test drop the editor's uploading placeholder out of the document
+// (Cmd+Z after a paste) without settling the upload behind it.
+const editorUploadSignal = vi.hoisted(
+  () => ({ notify: undefined as ((uploading: boolean) => void) | undefined }),
+);
+
+// The real handle mints an id when it inserts the placeholder and hands it to
+// the uploader, which adopts it as the draft `clientUploadId`. Mocks must do
+// the same or the two records drift apart only in tests.
+let mockUploadIdSeq = 0;
 
 vi.mock("@multica/core/api", () => ({
   api: { uploadFile: apiUploadFile },
@@ -77,7 +91,7 @@ vi.mock("../../editor", async () => ({
       defaultValue?: string;
       onUpdate?: (markdown: string) => void;
       placeholder?: string;
-      onUploadFile?: (file: File) => Promise<UploadResult | null>;
+      onUploadFile?: (file: File, uploadId: string) => Promise<UploadResult | null>;
       onUploadingChange?: (uploading: boolean) => void;
       onSubmit?: () => void;
       onReady?: () => void;
@@ -85,6 +99,7 @@ vi.mock("../../editor", async () => ({
     ref: Ref<unknown>,
   ) {
     editorDefaultValues.values.push(defaultValue);
+    editorUploadSignal.notify = onUploadingChange;
     const valueRef = useRef(defaultValue ?? "");
     // Mirrors the real editor's `uploading` node attrs: the placeholder exists
     // from before the await until the upload settles, `hasActiveUploads` reads
@@ -108,14 +123,14 @@ vi.mock("../../editor", async () => ({
       clearContent: () => {
         valueRef.current = "";
       },
-      focus: () => {},
+      focus: () => { focusCalls.focused += 1; },
       focusAtCoords: () => {},
-      blur: () => {},
+      blur: () => { focusCalls.blurred += 1; },
       uploadFile: async (file: File) => {
         inFlightRef.current += 1;
         if (inFlightRef.current === 1) onUploadingChange?.(true);
         try {
-          const result = await onUploadFile?.(file);
+          const result = await onUploadFile?.(file, `mock-upload-${++mockUploadIdSeq}`);
           if (!result || destroyedRef.current) return;
           valueRef.current = `${valueRef.current}\n${result.url}`.trim();
           onUpdate?.(valueRef.current);
@@ -125,6 +140,14 @@ vi.mock("../../editor", async () => ({
         }
       },
       hasActiveUploads: () => inFlightRef.current > 0,
+      // Placeholder rebuild contract: the real handle draws a card for an
+      // upload the document is not showing and reports whether it landed.
+      // Mocks track ids only — no document to draw into.
+      insertUploadPlaceholder: (upload: unknown) => {
+        insertPlaceholderSpy(upload);
+        return true;
+      },
+      settleUploadPlaceholder: () => false,
       insertMarkdownAtEnd: (md: string) => {
         insertMarkdownSpy(md);
         if (destroyedRef.current || !insertMarkdownBehavior.succeed) return false;
@@ -211,6 +234,7 @@ beforeEach(() => {
   uploadWithToast.mockReset();
   apiUploadFile.mockReset();
   insertMarkdownSpy.mockReset();
+  insertPlaceholderSpy.mockReset();
   insertMarkdownBehavior.succeed = true;
   localStorage.clear();
   useCommentComposerStore.setState({ sticky: true });
@@ -219,6 +243,8 @@ beforeEach(() => {
   // path and hide the shell the next test expects.
   useCommentDraftStore.setState({ drafts: {} });
   editorDefaultValues.values = [];
+  focusCalls.focused = 0;
+  focusCalls.blurred = 0;
 });
 
 describe("comment composers", () => {
@@ -346,6 +372,50 @@ describe("comment composers", () => {
     expect(screen.getByTestId("editor").closest("[aria-busy]")).toBeNull();
   });
 
+  // Post-send caret policy. The two composers deliberately disagree: posting a
+  // top-level comment ends the turn and drops the caret, while a thread reply
+  // leaves the user mid-conversation with the box ready for the next one.
+  it("blurs the top-level composer after a posted comment", async () => {
+    const { container } = renderCommentInput();
+
+    activateComposer("comment-composer-shell");
+    fireEvent.change(screen.getByTestId("editor"), { target: { value: "posted" } });
+    // Discard the focus the lazy shell→editor swap performed; what follows is
+    // entirely the post-send policy.
+    focusCalls.focused = 0;
+    fireEvent.click(getSubmitButton(container));
+
+    await waitFor(() => expect(focusCalls.blurred).toBeGreaterThan(0));
+    expect(focusCalls.focused).toBe(0);
+  });
+
+  it("keeps the caret in the reply box after a posted reply", async () => {
+    const { container } = renderReplyInput();
+
+    activateComposer("reply-composer-shell");
+    fireEvent.change(screen.getByTestId("editor"), { target: { value: "replied" } });
+    // Discard the shell→editor activation focus; what follows is the refocus.
+    focusCalls.focused = 0;
+    fireEvent.click(getSubmitButton(container));
+
+    await waitFor(() => expect(focusCalls.focused).toBeGreaterThan(0));
+    expect(focusCalls.blurred).toBe(0);
+  });
+
+  it("does not refocus the reply box when the send fails", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(false);
+    const { container } = renderReplyInput({ onSubmit });
+
+    activateComposer("reply-composer-shell");
+    fireEvent.change(screen.getByTestId("editor"), { target: { value: "nope" } });
+    focusCalls.focused = 0;
+    fireEvent.click(getSubmitButton(container));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(focusCalls.focused).toBe(0);
+  });
+
   // Regression: the tab-switch flush re-writes IDENTICAL content mid-flight;
   // that must not read as "edited during the request" — the posted comment's
   // draft still clears (it previously resurrected with Send re-enabled).
@@ -399,6 +469,38 @@ describe("comment composers", () => {
     });
 
     expect(useCommentDraftStore.getState().getDraft("new:issue-1")).toBe("draft A plus more");
+    // …and the post-send caret policy must stand down with it: the guard left
+    // the editor holding "draft A plus more", so blurring would yank the caret
+    // out of the sentence the user is still writing.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(focusCalls.blurred).toBe(0);
+  });
+
+  // Same coupling on the reply side: refocus is bound to having actually wiped
+  // the editor, not merely to acceptance.
+  it("does not refocus a reply box whose mid-flight draft was kept", async () => {
+    let resolveSubmit!: (v: boolean) => void;
+    const onSubmit = vi.fn(() => new Promise<boolean>((r) => { resolveSubmit = r; }));
+    renderReplyInput({ onSubmit, draftKey: "reply:issue-1:comment-1" });
+    activateComposer("reply-composer-shell");
+    const editor = screen.getByTestId("editor");
+    fireEvent.change(editor, { target: { value: "reply A" } });
+    fireEvent.keyDown(editor, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+
+    fireEvent.change(editor, { target: { value: "reply A plus more" } });
+    focusCalls.focused = 0;
+
+    await act(async () => {
+      resolveSubmit(true);
+      await Promise.resolve();
+    });
+
+    expect(useCommentDraftStore.getState().getDraft("reply:issue-1:comment-1")).toBe(
+      "reply A plus more",
+    );
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(focusCalls.focused).toBe(0);
   });
 
   // MUL-5181 P0: a submit that outlives its composer may only clear the draft
@@ -515,6 +617,106 @@ describe("comment composers — upload submit gate", () => {
 
     await waitFor(() => expect(getSubmitButton(container)).not.toBeDisabled());
     expect(getSubmitButton(container)).not.toHaveAttribute("aria-busy");
+  });
+
+
+
+  it("never asks the rebuild to draw an upload this mount started", async () => {
+    // The editor drew that node itself, synchronously, before the draft record
+    // existed. Registering the id at handleUpload rather than waiting for the
+    // effect to discover the node closes the window in which a delete could be
+    // undone by a redraw.
+    const { container } = renderCommentInput();
+    activateComposer("comment-composer-shell");
+    const pending = startPendingUpload(container, "mine.png");
+
+    await waitFor(() => expect(getSubmitButton(container)).toBeDisabled());
+    expect(insertPlaceholderSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pending.resolve(uploadAttachment("att-mine", "https://cdn.example/att-mine.png"));
+    });
+    expect(insertPlaceholderSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not redraw a placeholder the user deleted mid-upload", async () => {
+    // MUL-5181's rule: a placeholder the user removed stays removed. The
+    // rebuild runs once per id per mount, so the next store write cannot undo
+    // that decision — the send button is what still says the upload is live.
+    useCommentDraftStore.getState().addUpload("new:issue-1", {
+      clientUploadId: "u-deleted",
+      status: "uploading",
+      filename: "gone.png",
+      size: 1,
+    });
+    renderCommentInput();
+    await screen.findByTestId("editor");
+    await waitFor(() => expect(insertPlaceholderSpy).toHaveBeenCalledTimes(1));
+
+    // A second upload changes `uploads`, which re-runs the rebuild effect —
+    // the moment a naive implementation would redraw the first one.
+    act(() => {
+      useCommentDraftStore.getState().addUpload("new:issue-1", {
+        clientUploadId: "u-second",
+        status: "uploading",
+        filename: "other.png",
+        size: 1,
+      });
+    });
+
+    await waitFor(() =>
+      expect(
+        insertPlaceholderSpy.mock.calls.some(([u]) => u.uploadId === "u-second"),
+      ).toBe(true),
+    );
+    expect(
+      insertPlaceholderSpy.mock.calls.filter(([u]) => u.uploadId === "u-deleted"),
+    ).toHaveLength(1);
+  });
+
+  it("leaves nothing behind when an upload fails", async () => {
+    // The toast already said it, at the moment it happened, and the file is
+    // still on disk. A chip cannot retry (the bytes were never persisted) and
+    // `isMeaningful` counts it, so keeping one would hold an otherwise-empty
+    // draft alive across reloads until dismissed by hand.
+    const { container } = renderCommentInput();
+    activateComposer("comment-composer-shell");
+
+    const pending = startPendingUpload(container, "doomed.png");
+    await waitFor(() => expect(getSubmitButton(container)).toBeDisabled());
+
+    await act(async () => {
+      pending.fail();
+    });
+
+    await waitFor(() =>
+      expect(useCommentDraftStore.getState().getUploads("new:issue-1")).toHaveLength(0),
+    );
+    expect(screen.queryByText(/doomed\.png/)).toBeNull();
+    // The empty draft is gone with it, not kept alive by a dead placeholder.
+    expect(useCommentDraftStore.getState().getDraft("new:issue-1")).toBeFalsy();
+  });
+
+  it("rebuilds a placeholder for an upload inherited from the persisted draft", async () => {
+    // Started by a mount that is gone: its placeholder node died with that
+    // editor, and placeholders are never serialised, so the reopened composer
+    // has the record but no node. It draws one again — otherwise the composer
+    // looks idle while `gate` quietly blocks the send.
+    useCommentDraftStore.getState().addUpload("new:issue-1", {
+      clientUploadId: "from-a-previous-mount",
+      status: "uploading",
+      filename: "orphan.png",
+      size: 1,
+    });
+
+    renderCommentInput();
+    await screen.findByTestId("editor");
+
+    await waitFor(() =>
+      expect(insertPlaceholderSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ uploadId: "from-a-previous-mount", filename: "orphan.png" }),
+      ),
+    );
   });
 
   it("blocks the Cmd+Enter path while an upload is in flight", async () => {
