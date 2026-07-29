@@ -31,6 +31,7 @@
 
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -57,6 +58,7 @@ import { MAX_FILE_SIZE } from "@multica/core/constants/upload";
 import { useT } from "../i18n";
 import type { UploadGate } from "./use-upload-gate";
 import type { ContentEditorRef } from "./content-editor";
+import { pastedTextSource } from "./extensions/file-upload";
 
 const EMPTY_ATTACHMENTS: Attachment[] = [];
 
@@ -137,6 +139,13 @@ function deliverFinishedUpload(
 
   const md = attachmentMarkdown(attachment);
   const live = liveEditors.get(binding.registryKey);
+  // A composer showing this target rebuilt the placeholder on mount, so the
+  // finished attachment REPLACES it where the user last saw it instead of
+  // being appended a second time at the end.
+  if (live?.current?.settleUploadPlaceholder(clientUploadId, toUploadResult(attachment)) === true) {
+    binding.appendToBody(md);
+    return;
+  }
   if (live?.current?.insertMarkdownAtEnd(md) === true) {
     binding.appendToBody(md);
     return;
@@ -156,8 +165,42 @@ function deliverFinishedUpload(
   );
 }
 
+/**
+ * Put a failed paste-as-file's source text back where the user can see it.
+ *
+ * The mirror image of {@link deliverFinishedUpload}, and it exists for the
+ * same reason: the upload outlives the mount, so the composer that swallowed
+ * the paste may be gone by the time the failure lands. Unlike a dropped file,
+ * this content has no other copy — it was never written into the document and
+ * the tab it came from may be closed — so "the editor is gone, drop it" would
+ * be silent data loss.
+ *
+ * Restored as markdown, not literal text: had the paste never been converted,
+ * `markdown-paste` is exactly what would have handled it, so this reproduces
+ * what the user would have gotten. Live editor first (it lands at the end of
+ * the document, never mid-sentence at a caret the user has since moved), the
+ * persisted body otherwise.
+ */
+function deliverPastedTextBack(
+  binding: UploadDraftBinding | undefined,
+  editorRef: RefObject<ContentEditorRef | null>,
+  text: string,
+): void {
+  if (!binding) {
+    // No persistence context (a reply composer opened without a draft key):
+    // the live editor is the only place left to put it.
+    editorRef.current?.insertMarkdownAtEnd(text);
+    return;
+  }
+  // Same insurance as deliverFinishedUpload: a landed editor insert can still
+  // lose its debounced emit to a quick unmount, and both writes converge on
+  // identical content.
+  liveEditors.get(binding.registryKey)?.current?.insertMarkdownAtEnd(text);
+  binding.appendToBody(text);
+}
+
 export interface CoordinatedUploads {
-  /** Every upload for this composer (placeholders included) — for status chips. */
+  /** Every upload for this composer, placeholders included. */
   uploads: DraftUpload[];
   /** Completed attachment rows — the editor preview set; submit binds the
    *  subset whose link the body still references. */
@@ -254,13 +297,78 @@ export function useCoordinatedUploads(
     return done.length === 0 ? EMPTY_ATTACHMENTS : done;
   }, [uploads]);
 
+  // Rebuild placeholders for uploads this document is not showing.
+  //
+  // An upload outlives the mount that started it, but its placeholder node
+  // does not — placeholders are never serialised into the draft body, so a
+  // reopened composer starts with no trace of one that is still running. The
+  // draft still holds the record, which is enough to draw it again, and the
+  // settle then replaces it in place (see deliverFinishedUpload). Without this
+  // the composer looks idle while `gate` quietly blocks the send.
+  //
+  // ONCE per id per mount, tracked here rather than by scanning the document:
+  // a user who deletes the placeholder mid-upload means it, and MUL-5181's
+  // rule that a deleted placeholder stays deleted would be undone by the next
+  // store write re-drawing it.
+  //
+  // Retried while it cannot land, because the imperative handle exists from
+  // the first commit while the Tiptap instance arrives a passive effect later
+  // — the same window deliverFinishedUpload retries through.
+  const rebuiltUploadIdsRef = useRef<Set<string>>(new Set());
+  // Chat pins its document to the draft an in-flight upload started while the
+  // user browses another session, so `uploads` (the SELECTED draft) can name a
+  // different target than the document holds. Drawing then would put one
+  // draft's placeholder into another draft's document. The registry key is
+  // already the signal for exactly this divergence.
+  const editorHoldsThisTarget = !binding || registryKey === binding.registryKey;
+  useEffect(() => {
+    if (!editorHoldsThisTarget) return;
+    const pending = uploads.filter(
+      (u) => u.status === "uploading" && !rebuiltUploadIdsRef.current.has(u.clientUploadId),
+    );
+    if (pending.length === 0) return;
+    let cancelled = false;
+    let tries = 0;
+    const attempt = () => {
+      if (cancelled) return;
+      const missing = pending.filter((u) => {
+        const landed = editorRef.current?.insertUploadPlaceholder({
+          uploadId: u.clientUploadId,
+          filename: u.filename,
+          size: u.size,
+        });
+        if (landed === true) rebuiltUploadIdsRef.current.add(u.clientUploadId);
+        return landed !== true;
+      });
+      if (missing.length === 0) return;
+      if (++tries >= DELIVER_MAX_TRIES) return;
+      setTimeout(attempt, DELIVER_RETRY_MS);
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+    };
+  }, [uploads, editorRef, editorHoldsThisTarget]);
+
   const issueId = ctx.issueId;
   const commentId = ctx.commentId;
   const chatSessionId = ctx.chatSessionId;
 
   const handleUpload = useCallback(
-    (file: File): Promise<UploadResult | null> => {
-      const clientUploadId = createSafeId();
+    (file: File, uploadId?: string): Promise<UploadResult | null> => {
+      // Adopt the editor's id rather than minting a second one: the document
+      // node and this draft record are the same upload, and a settle that
+      // reaches a mount which did not start it can only find the node by id.
+      // The fallback covers a caller with no editor placeholder to match.
+      const clientUploadId = uploadId ?? createSafeId();
+      // An id handed in by the editor means it ALREADY drew the node, so this
+      // upload counts as rebuilt from here on. Registering it now rather than
+      // letting the effect discover the node closes the gap between the two:
+      // in that window the effect would see no node (the user could have
+      // deleted it) and draw a second one, resurrecting a placeholder the
+      // user removed. The window is sub-frame, but the rule reads better as
+      // "whoever drew it registers it" than as a race nobody can hit.
+      if (uploadId) rebuiltUploadIdsRef.current.add(uploadId);
       // Snapshot the target NOW: settle handlers must keep addressing the
       // draft the file landed in, no matter what is selected when they fire.
       const target = binding ? (resolveUploadTargetRef.current?.() ?? binding) : undefined;
@@ -272,18 +380,16 @@ export function useCoordinatedUploads(
         contentType: file.type || undefined,
       };
 
+      const pastedText = pastedTextSource(file);
+
       if (file.size > MAX_FILE_SIZE) {
-        // Never enters the coordinator — surface it as a failed placeholder so
-        // the composer shows the reason instead of silently dropping the file.
+        // Never enters the coordinator, and never enters the draft either —
+        // see the settle handler below for why a failure leaves no placeholder.
         const reason = "File exceeds 100 MB limit";
-        if (target) {
-          target.addUpload(placeholder);
-          target.failUpload(clientUploadId, reason);
-        } else {
-          setLocalUploads((prev) => [
-            ...prev,
-            { clientUploadId, status: "failed", filename: file.name, size: file.size, error: reason },
-          ]);
+        if (pastedText !== undefined) {
+          // A paste has no on-disk copy to re-attach from, so the text goes
+          // back into the composer instead of being lost with the upload.
+          deliverPastedTextBack(target, editorRef, pastedText);
         }
         toast.error(t(($) => $.upload.failed, { filename: file.name, reason }));
         return Promise.resolve(null);
@@ -330,18 +436,33 @@ export function useCoordinatedUploads(
               resolve(toUploadResult(outcome.attachment));
             } else {
               const reason = outcome.error.message;
+              // A failure leaves NOTHING behind. The toast below has already
+              // said it, at the moment it happened, and the file is still on
+              // disk — a chip adds no information and cannot retry (the bytes
+              // were never persisted). Keeping one costs more than it gives:
+              // it survives reload and reopen until dismissed by hand, and
+              // `isMeaningful` counts it, so a single flaky request keeps an
+              // otherwise-empty draft alive for the full 30-day TTL.
+              //
+              // `interrupted` is the opposite case and still gets a chip: it
+              // is discovered a session later, when the user no longer
+              // remembers attaching anything.
               if (target) {
                 if (target.getUploads().some((u) => u.clientUploadId === clientUploadId)) {
-                  target.failUpload(clientUploadId, reason);
+                  target.removeUpload(clientUploadId);
+                  // Paste-as-file has no on-disk copy to re-attach from, so
+                  // its text goes back into the composer.
+                  if (pastedText !== undefined) {
+                    deliverPastedTextBack(target, editorRef, pastedText);
+                  }
                 }
               } else {
                 setLocalUploads((prev) =>
-                  prev.map((u) =>
-                    u.clientUploadId === clientUploadId
-                      ? { clientUploadId, status: "failed", filename: file.name, size: file.size, error: reason }
-                      : u,
-                  ),
+                  prev.filter((u) => u.clientUploadId !== clientUploadId),
                 );
+                if (pastedText !== undefined) {
+                  deliverPastedTextBack(undefined, editorRef, pastedText);
+                }
               }
               toast.error(t(($) => $.upload.failed, { filename: file.name, reason }));
               resolve(null);
@@ -350,7 +471,7 @@ export function useCoordinatedUploads(
         });
       });
     },
-    [binding, issueId, commentId, chatSessionId, t],
+    [binding, editorRef, issueId, commentId, chatSessionId, t],
   );
 
   const removeUpload = useCallback(

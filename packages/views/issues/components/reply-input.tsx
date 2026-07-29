@@ -14,7 +14,6 @@ import { useT } from "../../i18n";
 import { CommentTriggerChips } from "./comment-trigger-chips";
 import { useCommentTriggerPreview } from "../hooks/use-comment-trigger-preview";
 import { useCommentUploads } from "./use-comment-uploads";
-import { ComposerUploadChips } from "./composer-upload-chips";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +54,7 @@ function ReplyInput({
   const sendShortcut = useShortcut("send");
   const placeholderText = placeholder ?? t(($) => $.reply.placeholder);
   const editorRef = useRef<ContentEditorRef>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   // See CommentInput — replying mid-upload posts without the file.
   const uploadGate = useUploadGate(editorRef);
   // If a draft key is provided, hydrate from store on mount (defaultValue is
@@ -139,11 +139,22 @@ function ReplyInput({
     };
   }, []);
   const submittedEntryRef = useRef<unknown>(null);
+  // See CommentInput: bound to the branch that actually wiped the editor, so a
+  // draft the stale-submit guard kept is never disturbed.
+  const editorScrubbedRef = useRef(false);
 
   const { submitting, submit } = useComposerSubmit({
     editorRef,
     uploadGate: gate,
+    containerRef: composerRef,
+    // A thread reply is rarely the last thing the user has to say, so the caret
+    // stays in the box for the next one. Unlike a top-level comment, the posted
+    // reply lands directly above the box that is still focused — nothing needs
+    // to pull the eye elsewhere. `containerRef` keeps this from stealing focus
+    // if the user moved to another composer while the reply was in flight.
+    afterAccepted: () => (editorScrubbedRef.current ? "refocus" : "none"),
     onSubmit: (content) => {
+      editorScrubbedRef.current = false;
       if (draftKey) {
         // Flush pending debounce before snapshotting — see CommentInput.
         const pending = editorRef.current?.flushPendingUpdate?.();
@@ -183,6 +194,7 @@ function ReplyInput({
       setContent("");
       setIsEmpty(true);
       setSuppressedAgentIds(new Set());
+      editorScrubbedRef.current = true;
     },
   });
 
@@ -198,6 +210,7 @@ function ReplyInput({
       />
       <div
         {...dropZoneProps}
+        ref={composerRef}
         className={cn(
           "relative min-w-0 flex-1 flex flex-col",
           !isEmpty && "pb-9",
@@ -235,9 +248,6 @@ function ReplyInput({
             slashCommandMode="command"
           />
         </div>
-        )}
-        {uploads.some((u) => u.status !== "uploaded") && (
-          <ComposerUploadChips uploads={uploads} onRemove={removeUpload} className="mt-1" />
         )}
         {/* Static shell — clones the empty single-line reply box (see
             CommentInput for the pattern). */}

@@ -12,11 +12,11 @@ import {
   useUploadGate,
   useComposerSubmit,
 } from "../../editor";
+import { PASTE_AS_FILE_THRESHOLD } from "../../editor/paste-as-file";
 import {
   useCoordinatedUploads,
   type UploadDraftBinding,
 } from "../../editor/use-coordinated-uploads";
-import { ComposerUploadChips } from "../../issues/components/composer-upload-chips";
 import { SubmitButton } from "@multica/ui/components/common/submit-button";
 import { ChatAddMenu } from "./chat-add-menu";
 import { useChatStore, DRAFT_NEW_SESSION } from "@multica/core/chat";
@@ -151,6 +151,7 @@ export function ChatInput({
   const { t: tEditor } = useT("editor");
   const sendShortcut = useShortcut("send");
   const editorRef = useRef<ContentEditorRef>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   // Two keys with deliberately different concerns:
   //
@@ -283,7 +284,6 @@ export function ChatInput({
     uploads: draftUploads,
     attachments: draftAttachments,
     handleUpload,
-    removeUpload,
     gate,
   } = useCoordinatedUploads(uploadBinding, storeUploads, {}, uploadGate, editorRef, {
     resolveUploadTarget: () => makeUploadBinding(editorDraftKeyRef.current),
@@ -410,10 +410,22 @@ export function ChatInput({
   // `submitting` lock/spinner. The chat-specific work — the loaded-draft guard,
   // attachment-id resolution, and the owner-driven `commitInput` handoff — stays
   // here in `onSubmit`, which receives the already-normalized content.
+  // Set by `commitInput` when it actually scrubbed the visible document; read
+  // back by `afterAccepted` a moment later to decide whether the caret may
+  // return. Reset at the top of every submit so a rejected send cannot leave a
+  // stale `true` behind for the next one.
+  const editorScrubbedRef = useRef(false);
+
   const { submitting, submit } = useComposerSubmit({
     editorRef,
     uploadGate: gate,
+    containerRef: composerRef,
+    // Chat keeps the caret in the box after a send (the next turn is typed in
+    // the same place), except when the commit left the editor alone — see
+    // `editorScrubbedRef`.
+    afterAccepted: () => (editorScrubbedRef.current ? "refocus" : "none"),
     onSubmit: async (content: string): Promise<boolean> => {
+      editorScrubbedRef.current = false;
       // These states disable the SubmitButton, but Mod+Enter bypasses it — so a
       // read-only or busy composer must still refuse the keyboard path.
       if (isRunning || disabled || noAgent) {
@@ -472,14 +484,13 @@ export function ChatInput({
         const untouched = liveDraft === undefined || liveDraft === draftValueAtSend;
         if (options?.clearEditor !== false && untouched) {
           editorRef.current?.clearContent();
-          // Drop focus so the caret doesn't keep blinking under the StatusPill /
-          // streaming reply that's about to take over the user's attention. The
-          // input is also `disabled` once isRunning flips, and a focused-but-
-          // disabled editor reads as a stale cursor. We deliberately don't auto-
-          // refocus on completion — that would interrupt the user if they're
-          // selecting text from the assistant reply; one click to refocus is
-          // a fair price for not stealing focus mid-action.
-          editorRef.current?.blur();
+          // Scrubbed the document the user was looking at, so the caret belongs
+          // back here: chat is a conversation and the next turn is typed in the
+          // same box. `useComposerSubmit` reads this flag to decide, because the
+          // other branches must NOT grab focus — a fire-and-forget send from
+          // another session (`clearEditor: false`) leaves this shared editor
+          // showing a DIFFERENT draft the user may be typing into.
+          editorScrubbedRef.current = true;
           setIsEmpty(true);
         }
         // The sent draft's data is cleared only when untouched — the message
@@ -534,6 +545,7 @@ export function ChatInput({
 
   return (
     <div
+      ref={composerRef}
       className={cn(
         // The composer grows with the draft up to half the surface it sits on
         // — a fixed 160px cap made long drafts unreadable in a five-line
@@ -618,6 +630,7 @@ export function ChatInput({
             }}
             onSubmit={submit}
             onUploadFile={uploadEnabled ? handleUpload : undefined}
+            pasteAsFileThreshold={PASTE_AS_FILE_THRESHOLD}
             onUploadingChange={uploadGate.onUploadingChange}
             attachments={draftAttachments}
             debounceMs={100}
@@ -633,13 +646,6 @@ export function ChatInput({
             showBubbleMenu
           />
         </div>
-        {draftUploads.some((u) => u.status !== "uploaded") && (
-          <ComposerUploadChips
-            uploads={draftUploads}
-            onRemove={removeUpload}
-            className="px-3 pb-1"
-          />
-        )}
         {(uploadEnabled || projectSelectionEnabled || leftAdornment) && (
           <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
             {(uploadEnabled || projectSelectionEnabled) && (

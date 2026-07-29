@@ -14,9 +14,9 @@ import type { NavigationAdapter } from "../../navigation";
 // dashboard options builders runs for real, so the key is the production key.
 const queryKeys = vi.hoisted(() => [] as unknown[][]);
 const dashboardDataRef = vi.hoisted(() => ({ current: false }));
-// Swaps the by-agent fixture for one with enough agents to exercise the
-// top-offenders cap. Kept off by default so the other tests keep their exact
-// 4-of-10 arithmetic.
+// Swaps the per-agent fixtures for ones with enough agents to exercise the
+// top-offenders and leaderboard caps. Kept off by default so the other tests
+// keep their exact 4-of-10 arithmetic.
 const manyAgentsRef = vi.hoisted(() => ({ current: false }));
 
 function todayIso() {
@@ -48,6 +48,49 @@ vi.mock("@tanstack/react-query", async () => {
           };
         }
         const kind = opts.queryKey[2];
+        // Bulk fixture: 12 agents, every per-agent metric strictly descending
+        // so both caps (leaderboard top 10, offenders top 8) are testable by
+        // rank without the ties an equal-valued fixture would create. The
+        // date-bucketed series stay on the small fixture below — the caps are
+        // a property of the per-agent lists only.
+        const bulkRows =
+          !manyAgentsRef.current
+            ? null
+            : kind === "by-agent"
+              ? Array.from({ length: 12 }, (_, i) => ({
+                  agent_id: `bulk-${i}`,
+                  provider: "anthropic",
+                  model: "claude-sonnet-4-6",
+                  input_tokens: (12 - i) * 1_000,
+                  output_tokens: 0,
+                  cache_read_tokens: 0,
+                  cache_write_tokens: 0,
+                  task_count: 12 - i,
+                }))
+              : kind === "agent-runtime"
+                ? Array.from({ length: 12 }, (_, i) => ({
+                    agent_id: `bulk-${i}`,
+                    total_seconds: (12 - i) * 600,
+                    task_count: 12 - i,
+                    failed_count: 12 - i,
+                  }))
+                : kind === "failures-by-agent"
+                  ? Array.from({ length: 12 }, (_, i) => [
+                      {
+                        agent_id: `bulk-${i}`,
+                        failure_reason: "",
+                        task_count: 100,
+                      },
+                      {
+                        agent_id: `bulk-${i}`,
+                        failure_reason: "timeout",
+                        task_count: 12 - i,
+                      },
+                    ]).flat()
+                  : null;
+        if (bulkRows) {
+          return { data: bulkRows, isLoading: false, isSuccess: true };
+        }
         const data =
           kind === "daily"
             ? [
@@ -93,21 +136,7 @@ vi.mock("@tanstack/react-query", async () => {
                       { date: todayIso(), failure_reason: "timeout", task_count: 1 },
                     ]
                   : kind === "failures-by-agent"
-                    ? manyAgentsRef.current
-                      ? Array.from({ length: 12 }, (_, i) => [
-                          {
-                            agent_id: `bulk-${i}`,
-                            failure_reason: "",
-                            task_count: 100,
-                          },
-                          {
-                            agent_id: `bulk-${i}`,
-                            failure_reason: "timeout",
-                            // Descending so rank order is unambiguous.
-                            task_count: 12 - i,
-                          },
-                        ]).flat()
-                      : [
+                    ? [
                         { agent_id: "agent-1", failure_reason: "", task_count: 6 },
                         {
                           agent_id: "agent-1",
@@ -196,6 +225,23 @@ function renderDashboard() {
       <DashboardPage />
     </NavigationProvider>,
   );
+}
+
+// The Top offenders section — the sort control and column headers sit beside
+// the list, not inside it.
+function offenderCard(): HTMLElement {
+  return screen.getByRole("list", { name: "Top offenders" })
+    .parentElement as HTMLElement;
+}
+
+// The filled part of one offender row's bar. `role="img"` is on the fill (it
+// carries the class-split label), and its inline width is the metric the list
+// is currently ranked by.
+function offenderBar(index: number): HTMLElement {
+  const rows = within(
+    screen.getByRole("list", { name: "Top offenders" }),
+  ).getAllByRole("listitem");
+  return within(rows[index] as HTMLElement).getByRole("img");
 }
 
 describe("DashboardPage — viewing timezone drives the query key", () => {
@@ -296,11 +342,14 @@ describe("DashboardPage — failure visibility", () => {
 
     // Auth (3) outranks Timeout (1), and both are named by class rather than
     // by the raw failure_reason enum.
-    const byClass = within(screen.getByRole("list", { name: "By class" }));
+    const byClass = within(screen.getByRole("list", { name: "Failure mix" }));
     expect(byClass.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       "Auth3",
       "Timeout1",
     ]);
+    // The section names its own denominator: the header above it quotes a
+    // rate over all 10 runs, this one splits the 4 failures.
+    expect(screen.getByText("Failure mix · 4")).toBeInTheDocument();
 
     const byAgent = within(screen.getByRole("list", { name: "Top offenders" }));
     const link = byAgent.getByRole("link", { name: /Agent One/ });
@@ -308,8 +357,70 @@ describe("DashboardPage — failure visibility", () => {
     // while its recent runs (and each failure's reason) live in the Overview
     // pane's ActivityTab.
     expect(link).toHaveAttribute("href", "/acme/agents/agent-1?view=overview");
-    // 4 of that agent's 10 terminal runs failed, and Auth is what dominates.
-    expect(byAgent.getByText("4 / 10 · 40%")).toBeInTheDocument();
+    // One labelled column per number instead of the old unlabelled
+    // `4 / 10 · 40%` blob.
+    const row = byAgent.getAllByRole("listitem")[0] as HTMLElement;
+    expect(within(row).getByText("4")).toBeInTheDocument();
+    expect(within(row).getByText("10")).toBeInTheDocument();
+    expect(within(row).getByText("40%")).toBeInTheDocument();
+    // The bar is the only place the class split lives now that the dominant-
+    // class badge is gone, so it has to name that split for screen readers.
+    expect(within(row).getByRole("img")).toHaveAccessibleName("Auth 3 · Timeout 1");
+  });
+
+  it("moves the bar onto whichever metric the list is ranked by", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    // Agent One failed 4 of 10; the anonymous bucket failed 2 of 2. Under
+    // Failures the bucket is half the leader's bar. Under Rate it is 100% —
+    // a bar that stayed on the failure count while the row shouted "100%" is
+    // exactly the mismatch this control exists to remove.
+    expect(offenderBar(1).style.width).toBe("50%");
+
+    await user.click(within(offenderCard()).getByRole("button", { name: "Rate" }));
+
+    expect(offenderBar(1).style.width).toBe("100%");
+  });
+
+  it("says which metric the list is ranked by without relying on colour", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    // The active option used to be a colour swap and nothing else, which is
+    // invisible to a screen reader. The group is named too — "Rate, pressed"
+    // means nothing until you know the group ranks the offender list.
+    const group = screen.getByRole("group", { name: "Rank offenders by" });
+    expect(
+      within(group).getByRole("button", { name: "Failures" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(within(group).getByRole("button", { name: "Rate" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    await user.click(within(group).getByRole("button", { name: "Rate" }));
+
+    expect(within(group).getByRole("button", { name: "Rate" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("keeps a two-run agent from hijacking the rate ranking", async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await user.click(within(offenderCard()).getByRole("button", { name: "Rate" }));
+
+    // 2/2 is a 100% rate and 4/10 is 40%, but two runs is not evidence. The
+    // small-sample row is demoted, not dropped — the list still has to
+    // reconcile with the workspace failure count above it.
+    const rows = within(screen.getByRole("list", { name: "Top offenders" }))
+      .getAllByRole("listitem")
+      .map((li) => li.textContent);
+    expect(rows[0]).toMatch(/Agent One/);
+    expect(rows[1]).toMatch(/Other agents/);
   });
 
   it("reveals the raw failure_reason values behind the class summary", async () => {
@@ -413,6 +524,65 @@ describe("DashboardPage — Errors card placement and density", () => {
 
     expect(
       screen.queryByRole("button", { name: /Show all/ }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage — leaderboard density", () => {
+  beforeEach(() => {
+    queryKeys.length = 0;
+    dashboardDataRef.current = true;
+    manyAgentsRef.current = false;
+    tzRef.current = "UTC";
+    cleanup();
+  });
+
+  it("ranks the top 10 agents and keeps the tail behind a toggle", async () => {
+    manyAgentsRef.current = true;
+    const user = userEvent.setup();
+    renderDashboard();
+
+    const list = () => within(screen.getByRole("list", { name: "Leaderboard" }));
+    // 12 agents have usage. Flattening all of them is what pushed the Errors
+    // card a full screen below the fold (MUL-5388).
+    expect(list().getAllByRole("listitem")).toHaveLength(10);
+    // Ranked by tokens desc, so the two smallest spenders are the ones cut.
+    expect(list().getByText("Bulk Agent 0")).toBeInTheDocument();
+    expect(list().queryByText("Bulk Agent 10")).not.toBeInTheDocument();
+    expect(list().queryByText("Bulk Agent 11")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    expect(list().getAllByRole("listitem")).toHaveLength(12);
+    expect(list().getByText("Bulk Agent 11")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show top 10" }));
+    expect(list().getAllByRole("listitem")).toHaveLength(10);
+  });
+
+  it("keeps the cap honest when the ranking metric changes", async () => {
+    manyAgentsRef.current = true;
+    const user = userEvent.setup();
+    renderDashboard();
+
+    // Scoped to the leaderboard card — the trend chart's metric toggle owns
+    // a "Time" button too.
+    const card = screen.getByRole("list", { name: "Leaderboard" })
+      .parentElement as HTMLElement;
+    // Re-ranking must not quietly reveal the tail: the cap belongs to the
+    // list, not to one metric.
+    await user.click(within(card).getByRole("button", { name: "Time" }));
+
+    const list = within(screen.getByRole("list", { name: "Leaderboard" }));
+    expect(list.getAllByRole("listitem")).toHaveLength(10);
+  });
+
+  it("shows no expand affordance when every agent already fits", () => {
+    renderDashboard();
+
+    const list = within(screen.getByRole("list", { name: "Leaderboard" }));
+    expect(list.getAllByRole("listitem")).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Show all" }),
     ).not.toBeInTheDocument();
   });
 });
