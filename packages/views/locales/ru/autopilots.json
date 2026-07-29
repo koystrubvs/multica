@@ -189,7 +189,10 @@
       "cancel": "Отмена",
       "confirm": "Удалить",
       "deleting": "Удаление..."
-    }
+    },
+    "show_url": "Показать URL",
+    "hide_url": "Скрыть URL",
+    "hidden_url_aria": "URL вебхука скрыт — нажмите, чтобы показать"
   },
   "deliveries": {
     "section_title": "Доставки webhook",

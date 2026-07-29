@@ -32,7 +32,8 @@
     "metric_time": "Время",
     "metric_tasks": "Задачи",
     "metric_errors": "Ошибки",
-    "no_data": "Нет использования в этом окне."
+    "no_data": "Нет использования в этом окне.",
+    "metric_label": "Показатель"
   },
   "weekly": {
     "title_cost": "Стоимость по неделям",
@@ -63,7 +64,18 @@
     "show_reasons": "Показать коды ошибок",
     "hide_reasons": "Скрыть коды ошибок",
     "show_all": "Показать все ({{count}})",
-    "show_less": "Показать топ-{{count}}"
+    "show_less": "Показать топ-{{count}}",
+    "mix_title": "Состав сбоев · {{failed}}",
+    "mix_label": "Состав сбоев",
+    "codes_label": "Коды ошибок",
+    "sort_label": "Сортировать нарушителей по",
+    "sort_failed": "Сбоям",
+    "sort_rate": "Доле",
+    "header_agent": "Агент",
+    "header_failed": "Сбоев",
+    "header_runs": "Запусков",
+    "header_rate": "Доля",
+    "low_sample": "Меньше {{count}} запусков за период — доля неинформативна."
   },
   "leaderboard": {
     "title": "Лидерборд",
@@ -76,7 +88,10 @@
     "header_time": "Время",
     "header_tasks": "Задачи",
     "no_data": "Нет активности агентов в этом окне.",
-    "total_label": "Итого"
+    "total_label": "Итого",
+    "sort_label": "Сортировать агентов по",
+    "show_all": "Показать все",
+    "show_less": "Показать топ-{{count}}"
   },
   "empty": {
     "title": "Пока нет использования",
