@@ -154,6 +154,32 @@ describe("issue surface view store registry", () => {
     expect(projectA.getState().viewMode).toBe("swimlane");
   });
 
+  it("restores filters when the page mounts before the workspace is known", async () => {
+    // Reload order: the surface store is created by a child component whose
+    // mount effect runs before the workspace layout's, so it is built against
+    // an empty registry and a child setter fires while the slug is still null.
+    setCurrentWorkspace("acme", "ws_a");
+    await flush();
+    const before = getIssueSurfaceViewStore("project:reload");
+    before.getState().togglePriorityFilter("high");
+    before.getState().toggleStatusFilter("in_progress");
+    const saved = localStorage.getItem(`${ISSUE_SURFACE_VIEW_STORAGE_KEY}:acme`);
+
+    pruneIssueSurfaceViewStates([]);
+    setCurrentWorkspace(null, null);
+    await flush();
+    localStorage.setItem(`${ISSUE_SURFACE_VIEW_STORAGE_KEY}:acme`, saved as string);
+
+    const after = getIssueSurfaceViewStore("project:reload");
+    after.getState().setViewMode("list");
+
+    setCurrentWorkspace("acme", "ws_a");
+    await flush();
+
+    expect(after.getState().priorityFilters).toEqual(["high"]);
+    expect(after.getState().statusFilters).toEqual(["in_progress"]);
+  });
+
   it("clears one surface without touching sibling surfaces", async () => {
     setCurrentWorkspace("acme", "ws_a");
     await flush();
