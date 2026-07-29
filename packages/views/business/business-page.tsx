@@ -1009,21 +1009,6 @@ export function BusinessPage() {
               </Button>
             </>
           )}
-          {tab === "calendar" && calendarEnabled && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8"
-              disabled={busy !== "" || !businessID}
-              onClick={() => void execute("generate", () => api.businessAction(businessID, "receivables/generate", {
-                from_month: month.slice(0, 7),
-                months: 6,
-              }))}
-            >
-              {t(($) => $.actions.generate_receivables)}
-            </Button>
-          )}
           {tab === "clients" && clientsEnabled && (
             <Button type="button" size="sm" className="h-8 gap-1.5" onClick={() => setCreateClientOpen(true)}>
               <Plus className="size-3.5" />
