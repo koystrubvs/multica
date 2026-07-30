@@ -1146,7 +1146,13 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 	// Money can arrive late for a period that is already over, but it cannot
 	// arrive long before the work: without this bound a payment from years ago
 	// settles a current period, which is how a 2022 receipt once "paid" a 2026
-	// month. The month of slack covers prepayment for the period ahead.
+	// month. Two weeks of slack cover prepayment for the period ahead.
+	//
+	// A month of slack was too generous. Monthly plan lines only start in July,
+	// so every May and June payment had nowhere of its own to land and the
+	// window pulled it onto a July or August line: five wrong settlements worth
+	// 88 950 ₽. Real prepayments cluster at one to ten days early, the wrong
+	// ones at twenty-seven to thirty-one, so two weeks separates them cleanly.
 	//
 	// The slack alone is not enough, because it is blind to when the deal was
 	// struck: money for Innovatis site work on 26 June kept landing on the July
@@ -1164,7 +1170,7 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		  AND r.client_id = $2::uuid
 		  AND r.status IN ('expected', 'invoiced', 'overdue', 'partially_paid')
 		  AND (r.planned_amount_rub - r.paid_amount_rub) > 0
-		  AND $3::date >= r.period_start - INTERVAL '31 days'
+		  AND $3::date >= r.period_start - INTERVAL '14 days'
 		  AND NOT EXISTS (
 		      SELECT 1 FROM business_agreement a
 		      WHERE a.id = r.agreement_id AND a.effective_from > $3::date
