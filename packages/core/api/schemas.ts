@@ -33,6 +33,8 @@ import type {
   IssueTableFacetsResponse,
   IssueTableGroupsResponse,
   IssueTableRowsResponse,
+  IssueCostTotalsGroup,
+  IssueCostTotalsResponse,
   ListIssuesResponse,
   ListGitHubInstallationsResponse,
   ListGitHubRepositoriesResponse,
@@ -764,6 +766,38 @@ export const EMPTY_ISSUE_TABLE_GROUPS_RESPONSE: IssueTableGroupsResponse = {
   total: 0,
   groups: [],
   next_cursor: null,
+};
+
+const IssueCostTotalsGroupSchema = z.object({
+  key: z.string().default(""),
+  issues: z.number().default(0),
+  tokens: z.number().default(0),
+  price_rub: z.number().default(0),
+}).loose();
+
+const EMPTY_ISSUE_COST_TOTALS_GROUP: IssueCostTotalsGroup = {
+  key: "",
+  issues: 0,
+  tokens: 0,
+  price_rub: 0,
+};
+
+export const IssueCostTotalsResponseSchema = z.object({
+  groups: z.array(IssueCostTotalsGroupSchema).default([]),
+  // Inline literal, not EMPTY_ISSUE_COST_TOTALS_GROUP: `.default()` on a loose
+  // object wants a value carrying the catchall index signature, and a typed
+  // interface is not assignable to one — only a fresh object literal is.
+  total: IssueCostTotalsGroupSchema.default({
+    key: "",
+    issues: 0,
+    tokens: 0,
+    price_rub: 0,
+  }),
+}).loose();
+
+export const EMPTY_ISSUE_COST_TOTALS_RESPONSE: IssueCostTotalsResponse = {
+  groups: [],
+  total: EMPTY_ISSUE_COST_TOTALS_GROUP,
 };
 
 const IssueTableRowSchema = z.object({

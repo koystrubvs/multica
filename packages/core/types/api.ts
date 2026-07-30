@@ -366,6 +366,27 @@ export interface IssueTableGroupsResponse {
   next_cursor: string | null;
 }
 
+/** Owner-only money line for kanban columns. Reuses the table query/group
+ *  payload so the totals cover exactly the issues the board is showing. */
+export interface IssueCostTotalsRequest {
+  query: IssueTableQuerySpec;
+  group: Exclude<IssueTableGroupSpec, { kind: "none" }>;
+}
+
+export interface IssueCostTotalsGroup {
+  /** Server group key: a status, `<actorType>:<uuid>`, `__unassigned__`, or a
+   *  property option id. Empty string on the response-wide total. */
+  key: string;
+  issues: number;
+  tokens: number;
+  price_rub: number;
+}
+
+export interface IssueCostTotalsResponse {
+  groups: IssueCostTotalsGroup[];
+  total: IssueCostTotalsGroup;
+}
+
 export interface IssueTableRowsRequest {
   query: IssueTableQuerySpec;
   group: IssueTableGroupSpec;

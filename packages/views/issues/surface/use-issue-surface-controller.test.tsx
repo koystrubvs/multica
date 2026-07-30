@@ -61,6 +61,22 @@ vi.mock("@multica/core/hooks", () => ({
   useWorkspaceId: () => "ws-1",
 }));
 
+// The controller reads the viewer's identity to decide whether to ask for the
+// owner-only board cost totals. Without a registered store the real hook
+// throws, so mock it the way the other surface tests do.
+const mockAuthUser = { id: "user-1", email: "test@test.com", name: "Test User" };
+vi.mock("@multica/core/auth", () => ({
+  useAuthStore: Object.assign(
+    (selector?: any) => {
+      const state = { user: mockAuthUser, isAuthenticated: true };
+      return selector ? selector(state) : state;
+    },
+    { getState: () => ({ user: mockAuthUser, isAuthenticated: true }) },
+  ),
+  registerAuthStore: vi.fn(),
+  createAuthStore: vi.fn(),
+}));
+
 vi.mock("@multica/core/issues/mutations", () => ({
   useUpdateIssue: () => ({ mutate: updateIssueMutate, isPending: false }),
   useBatchUpdateIssues: () => ({

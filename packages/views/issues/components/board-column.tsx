@@ -86,6 +86,64 @@ const BOARD_VIRTUALIZE_THRESHOLD = 30;
 // `EmptyPlaceholder`/`Footer` throws (MUL-4474).
 const EMPTY_VIRTUOSO_COMPONENTS = {};
 
+/** What one column's money line shows. Server-computed; see
+ *  `ListIssueCostTotals` for why the price cannot be summed client-side. */
+export interface BoardColumnCost {
+  tokens: number;
+  price_rub: number;
+}
+
+/**
+ * Server group keys a board column maps onto, in the key space of
+ * `POST /api/issues/table/cost-totals`.
+ *
+ * A property column can map onto several: the board keeps one "No value"
+ * column while the server splits it into `unset:` (property never set) plus an
+ * `unavailable:<raw>` per value whose option was deleted.
+ */
+function boardGroupCostKeys(group: BoardColumnGroup): {
+  exact: string[];
+  prefixes: string[];
+} {
+  if (group.status) return { exact: [group.status], prefixes: [] };
+  if (group.propertyId !== undefined) {
+    if (group.propertyOptionId) {
+      return { exact: [`value:${group.propertyOptionId}`], prefixes: [] };
+    }
+    return { exact: [], prefixes: ["unset:", "unavailable:"] };
+  }
+  if (group.assigneeType && group.assigneeId) {
+    return { exact: [`${group.assigneeType}:${group.assigneeId}`], prefixes: [] };
+  }
+  return { exact: ["__unassigned__"], prefixes: [] };
+}
+
+/** This column's slice of the cost response, or undefined when the viewer is
+ *  not the owner (no totals at all) or nothing in the column is billable. */
+export function boardGroupCost(
+  totals: Map<string, BoardColumnCost> | undefined,
+  group: BoardColumnGroup,
+): BoardColumnCost | undefined {
+  if (!totals || totals.size === 0) return undefined;
+  const { exact, prefixes } = boardGroupCostKeys(group);
+  let tokens = 0;
+  let priceRub = 0;
+  let matched = false;
+  const take = (entry: BoardColumnCost | undefined) => {
+    if (!entry) return;
+    tokens += entry.tokens;
+    priceRub += entry.price_rub;
+    matched = true;
+  };
+  for (const key of exact) take(totals.get(key));
+  if (prefixes.length > 0) {
+    for (const [key, entry] of totals) {
+      if (prefixes.some((prefix) => key.startsWith(prefix))) take(entry);
+    }
+  }
+  return matched ? { tokens, price_rub: priceRub } : undefined;
+}
+
 export interface BoardColumnGroup {
   id: string;
   title: string;
@@ -108,6 +166,7 @@ export const BoardColumn = memo(function BoardColumn({
   childProgressMap,
   projectMap,
   totalCount,
+  cost,
   footer,
   projectId,
   onCreateIssue,
@@ -119,6 +178,8 @@ export const BoardColumn = memo(function BoardColumn({
   childProgressMap?: Map<string, ChildProgress>;
   projectMap?: Map<string, Project>;
   totalCount?: number;
+  /** Owner-only client price for this column; absent for everyone else. */
+  cost?: BoardColumnCost;
   footer?: ReactNode;
   /** When set, the per-column "+" pre-fills the project on the create form. */
   projectId?: string;
@@ -224,8 +285,9 @@ export const BoardColumn = memo(function BoardColumn({
       <div className="mb-2 flex items-center justify-between px-1.5">
         <BoardGroupHeading group={group} count={totalCount ?? issueIds.length} />
 
-        {/* Right: add + menu */}
+        {/* Right: cost + collapse + add + menu */}
         <div className="flex items-center gap-1">
+          <BoardColumnCostLine cost={cost} />
           {/* Column-header popups mount lazily: a board/swimlane renders one
               header per column and almost none of these menus/tooltips are
               ever opened — eagerly mounting them dominated surface mount
@@ -382,6 +444,36 @@ export const BoardColumn = memo(function BoardColumn({
     </div>
   );
 });
+
+/**
+ * The column's client price, tokens behind a tooltip.
+ *
+ * Rounded to whole roubles on purpose: prices are already rounded to a 50 ₽
+ * step per issue, so the kopecks would always be ",00" and only cost header
+ * width. Nothing renders at zero — an empty column would otherwise grow a
+ * meaningless "0 ₽", and a column whose issues are all internal work reads as
+ * "nothing to bill here", which is true.
+ */
+function BoardColumnCostLine({ cost }: { cost?: BoardColumnCost }) {
+  const { t } = useT("issues");
+  if (!cost || cost.price_rub <= 0) return null;
+  return (
+    <DeferredTooltip
+      // `count` drives plural selection, `formatted` carries the grouped
+      // digits: i18next interpolates numbers verbatim, and a raw 19899582
+      // is unreadable.
+      content={t(($) => $.board.cost_tokens, {
+        count: cost.tokens,
+        formatted: cost.tokens.toLocaleString("ru-RU"),
+      })}
+      trigger={
+        <span className="cursor-default rounded px-1 text-[11px] font-medium tabular-nums text-muted-foreground">
+          {cost.price_rub.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽
+        </span>
+      }
+    />
+  );
+}
 
 /**
  * Heading for a collapsed column: same identity as {@link BoardGroupHeading}

@@ -11,6 +11,7 @@ import type {
   IssueTableFacetSpec,
   IssueTableFacetsResponse,
   IssueTableGroupsRequest,
+  IssueCostTotalsRequest,
   IssueTableQuerySpec,
   Project,
 } from "@multica/core/types";
@@ -23,7 +24,12 @@ import type {
   IssueSortParam,
   MyIssuesFilter,
 } from "@multica/core/issues/queries";
-import { issueTableFacetsOptions } from "@multica/core/issues/queries";
+import {
+  issueCostTotalsOptions,
+  issueTableFacetsOptions,
+} from "@multica/core/issues/queries";
+import { useAuthStore } from "@multica/core/auth";
+import { memberListOptions } from "@multica/core/workspace/queries";
 import {
   buildIssueSurfaceQueryPlan,
   type IssueSurfaceQueryPlan,
@@ -111,6 +117,8 @@ export interface IssueSurfaceController {
   tableQuerySpec: IssueTableQuerySpec;
   /** Exact disjunctive counts for the active server-backed filter submenu. */
   tableFacetCounts?: IssueTableFacetsResponse;
+  /** Owner-only per-column client price, keyed by server group key. */
+  costTotals?: Map<string, { tokens: number; price_rub: number }>;
   /** Whether scopedIssues is a complete client window for local count use. */
   facetCountsExact: boolean;
   /** Load one server facet when its filter submenu is opened. */
@@ -505,6 +513,44 @@ export function useIssueSurfaceController({
     serverStatuses,
     swimlaneGrouping,
   ]);
+  // Money line in the board header. Board-only: the grouping keys the response,
+  // and no other surface has a per-column header to put it in.
+  const costTotalsGroup = useMemo<IssueCostTotalsRequest["group"] | null>(() => {
+    if (effectiveViewMode !== "board") return null;
+    if (effectiveGrouping === "status") return { kind: "status" };
+    const propertyId = propertyIdFromViewKey(effectiveGrouping);
+    if (propertyId) {
+      return { kind: "property", property_id: propertyId, include_empty: true };
+    }
+    if (effectiveGrouping === "assignee") return { kind: "assignee" };
+    return null;
+  }, [effectiveGrouping, effectiveViewMode]);
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const { data: workspaceMembers = [] } = useQuery(memberListOptions(wsId));
+  const isWorkspaceOwner = useMemo(() => {
+    if (!currentUserId) return false;
+    return (
+      workspaceMembers.find((member) => member.user_id === currentUserId)
+        ?.role === "owner"
+    );
+  }, [workspaceMembers, currentUserId]);
+  const costTotalsQuery = useQuery(
+    issueCostTotalsOptions(
+      wsId,
+      tableQuerySpec,
+      costTotalsGroup ?? { kind: "status" },
+      isWorkspaceOwner && costTotalsGroup !== null,
+    ),
+  );
+  const costTotals = useMemo(() => {
+    if (!costTotalsQuery.data) return undefined;
+    return new Map(
+      costTotalsQuery.data.groups.map((entry) => [
+        entry.key,
+        { tokens: entry.tokens, price_rub: entry.price_rub },
+      ]),
+    );
+  }, [costTotalsQuery.data]);
   const serverGroupQuery = useMemo<IssueTableQuerySpec>(() => {
     if (effectiveViewMode !== "swimlane") return tableQuerySpec;
     const { statuses: _statuses, ...filters } = tableQuerySpec.filters;
@@ -663,6 +709,7 @@ export function useIssueSurfaceController({
     groupBranches: usesServerGroupSurface
       ? serverGroupBranches
       : undefined,
+    costTotals,
     // Keep TableView mounted for an empty search result so its local search
     // control remains available to refine or clear the query. Include the
     // debounced value as well to avoid a brief empty-screen flash while a

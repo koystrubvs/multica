@@ -9,6 +9,7 @@ import type {
   GroupedIssuesResponse,
   Issue,
   IssueStatus,
+  IssueCostTotalsRequest,
   IssueTableFacetsRequest,
   IssueTableGroupSpec,
   IssueTableGroupsRequest,
@@ -62,6 +63,11 @@ export const issueKeys = {
     wsId: string,
     request: IssueTableFacetsRequest,
   ) => [...issueKeys.tableAll(wsId), "facets", request] as const,
+  costTotals: (
+    wsId: string,
+    query: IssueTableQuerySpec,
+    group: IssueCostTotalsRequest["group"],
+  ) => [...issueKeys.tableAll(wsId), "cost-totals", query, group] as const,
   tableRows: (
     wsId: string,
     query: IssueTableQuerySpec,
@@ -412,6 +418,30 @@ export function issueFlatListOptions(
       return loaded < lastPage.total ? loaded : undefined;
     },
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Per-column client price for the board header.
+ *
+ * `enabled` is the owner check: the endpoint answers 403 to everyone else, so
+ * a non-owner must not even ask. Kept as a plain option instead of a hook so
+ * the caller decides when the role is known.
+ */
+export function issueCostTotalsOptions(
+  wsId: string,
+  query: IssueTableQuerySpec,
+  group: IssueCostTotalsRequest["group"],
+  enabled: boolean,
+) {
+  return queryOptions({
+    queryKey: issueKeys.costTotals(wsId, query, group),
+    queryFn: () => api.listIssueCostTotals({ query, group }),
+    enabled,
+    // Money moves only when an agent finishes work; a stale-by-a-minute line
+    // is fine and keeps board re-renders from re-aggregating usage.
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+    retry: false,
   });
 }
 

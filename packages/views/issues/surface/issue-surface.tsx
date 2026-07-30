@@ -265,6 +265,7 @@ function IssueSurfaceContent({
                 onCreateIssue={openCreateIssue}
                 statusPagination={controller.statusPagination}
                 groupBranches={controller.groupBranches}
+                costTotals={controller.costTotals}
               />
             )}
             {controller.viewMode === "list" && (

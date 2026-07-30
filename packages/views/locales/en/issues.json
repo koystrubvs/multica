@@ -226,6 +226,8 @@
     "show_column": "Show column",
     "collapse_column": "Collapse column",
     "expand_column": "Expand column",
+    "cost_tokens_one": "{{formatted}} token",
+    "cost_tokens_other": "{{formatted}} tokens",
     "add_issue_tooltip": "Add issue",
     "empty_column": "No issues",
     "empty_grouping": "No matching issues",

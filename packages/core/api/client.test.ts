@@ -229,6 +229,36 @@ describe("ApiClient server Table query", () => {
     });
   });
 
+  it("falls back safely when board cost totals are malformed", async () => {
+    // A money line must never render garbage: a bad payload has to collapse to
+    // "no totals" (the column then shows nothing) rather than a wrong price.
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ groups: [{ key: "done", price_rub: "лот" }], total: 7 }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+
+    await expect(
+      client.listIssueCostTotals({
+        query: {
+          scope: { kind: "workspace" as const },
+          filters: {},
+          sort: { field: "position" as const, direction: "asc" as const },
+        },
+        group: { kind: "status" },
+      }),
+    ).resolves.toEqual({
+      groups: [],
+      total: { key: "", issues: 0, tokens: 0, price_rub: 0 },
+    });
+  });
+
   it("preserves future Table status and actor enum values", async () => {
     const responses = [
       {

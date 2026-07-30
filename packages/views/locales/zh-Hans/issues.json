@@ -224,6 +224,7 @@
     "show_column": "显示列",
     "collapse_column": "折叠列",
     "expand_column": "展开列",
+    "cost_tokens_other": "{{formatted}} tokens",
     "add_issue_tooltip": "新建 issue",
     "empty_column": "无 issue",
     "empty_grouping": "没有匹配的 issue",

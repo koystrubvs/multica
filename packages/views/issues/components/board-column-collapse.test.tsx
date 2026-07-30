@@ -88,13 +88,14 @@ const group = {
   createData: { status: "done" as const },
 };
 
-function renderColumn() {
+function renderColumn(props: { cost?: { tokens: number; price_rub: number } } = {}) {
   return render(
     <BoardColumn
       group={group}
       issueIds={[]}
       issueMap={new Map()}
       totalCount={7}
+      cost={props.cost}
     />,
   );
 }
@@ -123,6 +124,28 @@ describe("board column collapse", () => {
     // … but neither the column body nor its header controls are mounted.
     expect(screen.queryByText("board.empty_column")).toBeNull();
     expect(screen.queryByLabelText("board.collapse_column")).toBeNull();
+  });
+
+  it("renders the client price when the viewer gets cost totals", () => {
+    renderColumn({ cost: { tokens: 19_899_582, price_rub: 8500 } });
+
+    // Grouped digits, no kopecks: the price is rounded to a 50 ₽ step per
+    // issue, so decimals would always be ",00".
+    expect(screen.getByText("8 500 ₽")).toBeTruthy();
+  });
+
+  it("renders no price line for a viewer without cost totals", () => {
+    // A member or guest never receives totals — the endpoint answers 403 — so
+    // the column must not grow an empty slot for them.
+    renderColumn();
+
+    expect(screen.queryByText(/₽/)).toBeNull();
+  });
+
+  it("renders no price line when nothing in the column is billable", () => {
+    renderColumn({ cost: { tokens: 4200, price_rub: 0 } });
+
+    expect(screen.queryByText(/₽/)).toBeNull();
   });
 
   it("expands again when the rail is clicked", () => {

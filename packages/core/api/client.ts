@@ -19,6 +19,8 @@ import type {
   IssueTableGroupsResponse,
   IssueTableRowsRequest,
   IssueTableRowsResponse,
+  IssueCostTotalsRequest,
+  IssueCostTotalsResponse,
   Agent,
   CreateAgentRequest,
   AgentTemplate,
@@ -251,6 +253,8 @@ import {
   IssueTableFacetsResponseSchema,
   IssueTableGroupsResponseSchema,
   IssueTableRowsResponseSchema,
+  IssueCostTotalsResponseSchema,
+  EMPTY_ISSUE_COST_TOTALS_RESPONSE,
   ListAutopilotsResponseSchema,
   EMPTY_LIST_AUTOPILOTS_RESPONSE,
   AutopilotRunSchema,
@@ -748,6 +752,21 @@ export class ApiClient {
       IssueTableGroupsResponseSchema,
       EMPTY_ISSUE_TABLE_GROUPS_RESPONSE,
       { endpoint: "POST /api/issues/table/groups" },
+    );
+  }
+
+  /** Owner-only: a member or guest gets 403 from the server, by design — the
+   *  agency's pricing must not reach a client through the board. */
+  async listIssueCostTotals(params: IssueCostTotalsRequest): Promise<IssueCostTotalsResponse> {
+    const raw = await this.fetch<unknown>("/api/issues/table/cost-totals", {
+      method: "POST",
+      body: JSON.stringify(params),
+    });
+    return parseWithFallback(
+      raw,
+      IssueCostTotalsResponseSchema,
+      EMPTY_ISSUE_COST_TOTALS_RESPONSE,
+      { endpoint: "POST /api/issues/table/cost-totals" },
     );
   }
 
