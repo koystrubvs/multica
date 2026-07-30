@@ -446,6 +446,40 @@ export const BoardColumn = memo(function BoardColumn({
 });
 
 /**
+ * Approximate token count: `842`, `1,2К`, `19,9М`, `3,2Б`.
+ *
+ * The tooltip answers "roughly how much work sits in this column", and a
+ * digit-exact 19 899 582 reads slower while adding nothing — the price next to
+ * it is the number that has to be exact. Units come from the locale so only
+ * Russian gets Cyrillic К/М/Б. `maximumFractionDigits: 1` also drops a
+ * trailing zero, so 5 000 renders as `5К`, not `5,0К`.
+ *
+ * Billions matter already: a done column of a busy workspace holds ~3.2e9
+ * tokens, which without this step would read `3205,7М`.
+ */
+export function formatCompactTokens(
+  tokens: number,
+  units: { thousand: string; million: string; billion: string },
+): string {
+  const steps = [
+    { limit: 1, unit: "" },
+    { limit: 1_000, unit: units.thousand },
+    { limit: 1_000_000, unit: units.million },
+    { limit: 1_000_000_000, unit: units.billion },
+  ];
+  let index = 0;
+  while (index + 1 < steps.length && tokens >= steps[index + 1]!.limit) index += 1;
+  // 999 999 scales to 999,999 and rounds to 1000 at one decimal — promote it to
+  // the next unit rather than printing "1 000К".
+  const rounded = Math.round((tokens / steps[index]!.limit) * 10) / 10;
+  if (index + 1 < steps.length && rounded >= 1000) index += 1;
+  const step = steps[index]!;
+  return `${(tokens / step.limit).toLocaleString("ru-RU", {
+    maximumFractionDigits: 1,
+  })}${step.unit}`;
+}
+
+/**
  * The column's client price, tokens behind a tooltip.
  *
  * Rounded to whole roubles on purpose: prices are already rounded to a 50 ₽
@@ -457,15 +491,14 @@ export const BoardColumn = memo(function BoardColumn({
 function BoardColumnCostLine({ cost }: { cost?: BoardColumnCost }) {
   const { t } = useT("issues");
   if (!cost || cost.price_rub <= 0) return null;
+  const tokens = formatCompactTokens(cost.tokens, {
+    thousand: t(($) => $.board.tokens_unit_thousand),
+    million: t(($) => $.board.tokens_unit_million),
+    billion: t(($) => $.board.tokens_unit_billion),
+  });
   return (
     <DeferredTooltip
-      // `count` drives plural selection, `formatted` carries the grouped
-      // digits: i18next interpolates numbers verbatim, and a raw 19899582
-      // is unreadable.
-      content={t(($) => $.board.cost_tokens, {
-        count: cost.tokens,
-        formatted: cost.tokens.toLocaleString("ru-RU"),
-      })}
+      content={t(($) => $.board.cost_tokens, { value: tokens })}
       trigger={
         <span className="cursor-default rounded px-1 text-[11px] font-medium tabular-nums text-muted-foreground">
           {cost.price_rub.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽
