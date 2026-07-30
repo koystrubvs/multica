@@ -540,6 +540,7 @@
     "unassigned": "Не назначен",
     "pin_to_sidebar": "Закрепить в боковой панели",
     "unpin_from_sidebar": "Открепить из боковой панели",
+    "open_in_new_tab": "Открыть в новой вкладке",
     "copy_link": "Скопировать ссылку",
     "copy_workdir_path": "Скопировать путь к локальному workdir",
     "relations": "Связи",
