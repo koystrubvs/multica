@@ -307,6 +307,7 @@ const mockViewState = {
     { key: "labels", width: 220 },
   ],
   listCollapsedStatuses: [] as string[],
+  boardCollapsedColumns: [] as string[],
   setViewMode: vi.fn(),
   setGrouping: vi.fn(),
   toggleStatusFilter: vi.fn(),

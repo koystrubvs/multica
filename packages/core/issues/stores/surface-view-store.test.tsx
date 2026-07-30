@@ -134,6 +134,34 @@ describe("issue surface view store registry", () => {
     ).toContainEqual({ key: "property:estimate", width: 184 });
   });
 
+  it("persists collapsed board columns per surface", async () => {
+    setCurrentWorkspace("acme", "ws_a");
+    await flush();
+    const projectA = getIssueSurfaceViewStore("project:collapse-a");
+    const projectB = getIssueSurfaceViewStore("project:collapse-b");
+
+    projectA.getState().toggleBoardColumnCollapsed("status:done");
+    projectA.getState().toggleBoardColumnCollapsed("assignee:agent:a1");
+
+    expect(projectA.getState().boardCollapsedColumns).toEqual([
+      "status:done",
+      "assignee:agent:a1",
+    ]);
+    expect(projectB.getState().boardCollapsedColumns).toEqual([]);
+
+    const raw = localStorage.getItem(`${ISSUE_SURFACE_VIEW_STORAGE_KEY}:acme`);
+    const parsed = JSON.parse(raw as string);
+    expect(
+      parsed.state.surfaces["project:collapse-a"].state.boardCollapsedColumns,
+    ).toEqual(["status:done", "assignee:agent:a1"]);
+
+    // Toggling the same id again expands it back.
+    projectA.getState().toggleBoardColumnCollapsed("status:done");
+    expect(projectA.getState().boardCollapsedColumns).toEqual([
+      "assignee:agent:a1",
+    ]);
+  });
+
   it("rehydrates existing surface stores when the workspace changes", async () => {
     setCurrentWorkspace("acme", "ws_a");
     await flush();

@@ -46,6 +46,7 @@ import {
 import { sortIssues } from "../utils/sort";
 import { ALL_STATUSES, STATUS_CONFIG } from "@multica/core/issues/config";
 import { DraggableBoardCard, BoardCardContent } from "./board-card";
+import { BOARD_CARD_WIDTH, BOARD_COL_WIDTH } from "./board-column";
 import { StatusIcon } from "./status-icon";
 import { Button } from "@multica/ui/components/ui/button";
 import { StatusHeading } from "./status-heading";
@@ -68,7 +69,10 @@ import type {
   IssueGroupPageState,
 } from "../surface/use-issue-group-branches";
 
-const COLUMN_WIDTH = 280;
+// A swimlane cell is a BoardColumn body (same p-2 + p-1 padding), so it takes
+// the board's column width instead of its own number — otherwise the two
+// kanban surfaces drift apart whenever one of them is retuned.
+const COLUMN_WIDTH = BOARD_COL_WIDTH;
 const COLUMN_GAP = 16;
 
 // A swimlane row (header + one row of card cells) is ~300px+ tall — a
@@ -1514,7 +1518,10 @@ function SwimLaneViewImpl({
 
       <DragOverlay dropAnimation={null}>
         {activeIssue ? (
-          <div className="w-[280px] rotate-2 scale-105 cursor-grabbing opacity-90 shadow-lg shadow-black/10">
+          <div
+            style={{ width: BOARD_CARD_WIDTH }}
+            className="rotate-2 scale-105 cursor-grabbing opacity-90 shadow-lg shadow-black/10"
+          >
             <BoardCardContent
               issue={activeIssue}
               childProgress={childProgressMap.get(activeIssue.id)}

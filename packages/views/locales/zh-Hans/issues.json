@@ -222,6 +222,8 @@
     "hidden_columns_label": "隐藏的列",
     "hide_column": "隐藏列",
     "show_column": "显示列",
+    "collapse_column": "折叠列",
+    "expand_column": "展开列",
     "add_issue_tooltip": "新建 issue",
     "empty_column": "无 issue",
     "empty_grouping": "没有匹配的 issue",

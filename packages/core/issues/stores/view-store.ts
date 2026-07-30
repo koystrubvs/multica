@@ -203,6 +203,10 @@ export interface IssueViewState {
   // Purely a display filter — it never touches the parent/child relationship.
   showSubIssues: boolean;
   listCollapsedStatuses: IssueStatus[];
+  /** Board columns rendered as a narrow rail instead of a full column. Keyed
+   *  by `BoardColumnGroup.id`, so the same list covers every board grouping
+   *  (status / assignee / select property) without a per-grouping map. */
+  boardCollapsedColumns: string[];
   ganttZoom: GanttZoom;
   ganttShowCompleted: boolean;
   /** Active swimlane grouping dimension. */
@@ -245,6 +249,7 @@ export interface IssueViewState {
   toggleCardPropertyId: (propertyId: string) => void;
   toggleShowSubIssues: () => void;
   toggleListCollapsed: (status: IssueStatus) => void;
+  toggleBoardColumnCollapsed: (groupId: string) => void;
   setSwimlaneGrouping: (grouping: SwimlaneGrouping) => void;
   /** Update the lane order for the currently active swimlane grouping. */
   setSwimlaneOrder: (order: string[]) => void;
@@ -289,6 +294,7 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
   cardPropertyIds: [],
   showSubIssues: true,
   listCollapsedStatuses: [],
+  boardCollapsedColumns: [],
   ganttZoom: "week",
   ganttShowCompleted: false,
   swimlaneGrouping: "assignee",
@@ -427,6 +433,12 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
         ? state.listCollapsedStatuses.filter((s) => s !== status)
         : [...state.listCollapsedStatuses, status],
     })),
+  toggleBoardColumnCollapsed: (groupId) =>
+    set((state) => ({
+      boardCollapsedColumns: state.boardCollapsedColumns.includes(groupId)
+        ? state.boardCollapsedColumns.filter((id) => id !== groupId)
+        : [...state.boardCollapsedColumns, groupId],
+    })),
   setSwimlaneGrouping: (grouping) => set({ swimlaneGrouping: grouping }),
   setSwimlaneOrder: (order) =>
     set((state) => ({
@@ -520,6 +532,7 @@ export const viewStorePersistOptions = (name: string) => ({
     cardPropertyIds: state.cardPropertyIds,
     showSubIssues: state.showSubIssues,
     listCollapsedStatuses: state.listCollapsedStatuses,
+    boardCollapsedColumns: state.boardCollapsedColumns,
     ganttZoom: state.ganttZoom,
     ganttShowCompleted: state.ganttShowCompleted,
     swimlaneGrouping: state.swimlaneGrouping,

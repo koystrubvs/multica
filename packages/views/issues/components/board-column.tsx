@@ -2,7 +2,14 @@
 
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { EyeOff, MoreHorizontal, Plus, UserMinus } from "lucide-react";
+import {
+  ChevronsLeftRight,
+  ChevronsRightLeft,
+  EyeOff,
+  MoreHorizontal,
+  Plus,
+  UserMinus,
+} from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type {
@@ -19,8 +26,12 @@ import {
   DropdownMenuItem,
 } from "@multica/ui/components/ui/dropdown-menu";
 import { STATUS_CONFIG } from "@multica/core/issues/config";
-import { useViewStoreApi } from "@multica/core/issues/stores/view-store-context";
+import {
+  useViewStore,
+  useViewStoreApi,
+} from "@multica/core/issues/stores/view-store-context";
 import { StatusHeading } from "./status-heading";
+import { StatusIcon } from "./status-icon";
 import { DraggableBoardCard } from "./board-card";
 import type { ChildProgress } from "./list-row";
 import { useT } from "../../i18n";
@@ -36,8 +47,13 @@ import type { IssueCreateDefaults } from "../surface/types";
 // cannot be faithfully replicated in JavaScript (ICU/V8). Showing an
 // inaccurate indicator is worse than showing none.
 
-export const BOARD_COL_WIDTH = 280;
-export const BOARD_CARD_WIDTH = BOARD_COL_WIDTH - 16 - 8; // col(280) - col p-2(16) - droppable p-1(8)
+export const BOARD_COL_WIDTH = 360;
+export const BOARD_CARD_WIDTH = BOARD_COL_WIDTH - 16 - 8; // col - col p-2(16) - droppable p-1(8)
+
+// Collapsed rail: wide enough for the 28px round expand hit target plus the
+// column's p-2, and narrow enough that a few collapsed columns cost about as
+// much horizontal room as one open one.
+export const BOARD_COL_COLLAPSED_WIDTH = 44;
 
 // Board cards are ~90-140px tall, so ~10 fill a column viewport — unlike the
 // generic VIRTUOSO_SEED_COUNT (30, sized for 36px list rows). The seed mounts
@@ -114,6 +130,13 @@ export const BoardColumn = memo(function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({ id: group.id });
   const viewStoreApi = useViewStoreApi();
   const { t } = useT("issues");
+  const collapsed = useViewStore((s) =>
+    s.boardCollapsedColumns.includes(group.id),
+  );
+  const toggleCollapsed = useCallback(
+    () => viewStoreApi.getState().toggleBoardColumnCollapsed(group.id),
+    [viewStoreApi, group.id],
+  );
 
   // Resolve IDs to Issue objects, preserving parent-provided order
   const resolvedIssues = useMemo(
@@ -172,6 +195,30 @@ export const BoardColumn = memo(function BoardColumn({
     </div>
   );
 
+  // Collapsed: the whole rail is the expand control. The droppable ref stays on
+  // it (cards can still be dropped into a collapsed column), but nothing from
+  // the list mounts — no Virtuoso, no seed, no per-card popups.
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        ref={setNodeRef}
+        onClick={toggleCollapsed}
+        title={t(($) => $.board.expand_column)}
+        aria-label={t(($) => $.board.expand_column)}
+        style={{ width: BOARD_COL_COLLAPSED_WIDTH }}
+        className={`flex shrink-0 flex-col items-center gap-2 rounded-xl p-2 transition-colors ${
+          isOver ? "bg-accent/60" : cfg?.columnBg ?? "bg-muted/40"
+        } hover:bg-accent/40`}
+      >
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground">
+          <ChevronsLeftRight className="size-3.5" />
+        </span>
+        <BoardRailHeading group={group} count={totalCount ?? issueIds.length} />
+      </button>
+    );
+  }
+
   return (
     <div style={{ width: BOARD_COL_WIDTH }} className={`flex shrink-0 flex-col rounded-xl ${cfg?.columnBg ?? "bg-muted/40"} p-2`}>
       <div className="mb-2 flex items-center justify-between px-1.5">
@@ -183,6 +230,24 @@ export const BoardColumn = memo(function BoardColumn({
               header per column and almost none of these menus/tooltips are
               ever opened — eagerly mounting them dominated surface mount
               cost (DeferredPopup / DeferredTooltip). */}
+          <DeferredTooltip
+            content={t(($) => $.board.collapse_column)}
+            trigger={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-full text-muted-foreground"
+                // No `aria-expanded`: the ghost variant pins
+                // `aria-expanded:bg-muted` (so a button stays lit while its
+                // popover is open), which would leave a permanent filled
+                // circle behind this icon.
+                aria-label={t(($) => $.board.collapse_column)}
+                onClick={toggleCollapsed}
+              >
+                <ChevronsRightLeft className="size-3.5" />
+              </Button>
+            }
+          />
           {status && (
             <DeferredPopup
               ariaHasPopup="menu"
@@ -317,6 +382,59 @@ export const BoardColumn = memo(function BoardColumn({
     </div>
   );
 });
+
+/**
+ * Heading for a collapsed column: same identity as {@link BoardGroupHeading}
+ * (icon + count + name) stacked down the rail, with the name rotated so a full
+ * status/assignee/option label stays readable at 44px wide.
+ */
+function BoardRailHeading({
+  group,
+  count,
+}: {
+  group: BoardColumnGroup;
+  count: number;
+}) {
+  const { t } = useT("issues");
+  const status = group.status;
+  const title = status ? t(($) => $.status[status]) : group.title;
+
+  return (
+    <>
+      {status ? (
+        <StatusIcon status={status} className="h-3.5 w-3.5 shrink-0" />
+      ) : group.propertyId !== undefined ? (
+        <span
+          className="size-2.5 shrink-0 rounded-full bg-muted-foreground/30"
+          style={group.propertyOptionColor ? { backgroundColor: group.propertyOptionColor } : undefined}
+        />
+      ) : group.assigneeType && group.assigneeId ? (
+        <ActorAvatar
+          actorType={group.assigneeType}
+          actorId={group.assigneeId}
+          size="sm"
+          showStatusDot={group.assigneeType === "agent"}
+        />
+      ) : (
+        <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground">
+          <UserMinus className="size-3.5" />
+        </span>
+      )}
+      <span className="shrink-0 rounded-full bg-background px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+        {count}
+      </span>
+      {/* Rotated with writing-mode (not `rotate-90`, which would keep the
+          element's horizontal box and overflow the rail). Clips with an
+          ellipsis at the bottom when the label is longer than the column. */}
+      {/* `text-start` because the rail is a <button>, whose UA `text-align:
+          center` would otherwise center the label along the rail's vertical
+          axis instead of anchoring it under the count. */}
+      <span className="min-h-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-start text-xs font-semibold [writing-mode:vertical-rl]">
+        {title}
+      </span>
+    </>
+  );
+}
 
 function BoardGroupHeading({
   group,

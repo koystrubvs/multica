@@ -126,6 +126,8 @@ const mockViewState: Record<string, unknown> = {
   swimlaneGrouping: "assignee",
   swimlaneOrders: { parent: [], project: [], assignee: [] },
   collapsedSwimlanes: { parent: [], project: [], assignee: [] },
+  boardCollapsedColumns: [],
+  toggleBoardColumnCollapsed: vi.fn(),
   setSwimlaneGrouping: vi.fn(),
   setSwimlaneOrder: vi.fn(),
   toggleSwimlaneCollapsed: vi.fn(),

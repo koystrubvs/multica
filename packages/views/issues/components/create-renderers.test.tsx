@@ -10,6 +10,7 @@ const hideStatus = vi.hoisted(() => vi.fn());
 const showStatus = vi.hoisted(() => vi.fn());
 const select = vi.hoisted(() => vi.fn());
 const deselect = vi.hoisted(() => vi.fn());
+const toggleBoardColumnCollapsed = vi.hoisted(() => vi.fn());
 
 function emptyStatusPagination(): IssueStatusPagination {
   return Object.fromEntries(
@@ -46,11 +47,12 @@ vi.mock("@multica/core/issues/stores/view-store-context", () => ({
       sortBy: "position",
       listCollapsedStatuses: [],
       toggleListCollapsed: vi.fn(),
+      boardCollapsedColumns: [],
     };
     return selector ? selector(state) : state;
   },
   useViewStoreApi: () => ({
-    getState: () => ({ hideStatus, showStatus }),
+    getState: () => ({ hideStatus, showStatus, toggleBoardColumnCollapsed }),
   }),
 }));
 
@@ -121,6 +123,7 @@ beforeEach(() => {
   showStatus.mockClear();
   select.mockClear();
   deselect.mockClear();
+  toggleBoardColumnCollapsed.mockClear();
 });
 
 describe("issue renderer create entrypoints", () => {
