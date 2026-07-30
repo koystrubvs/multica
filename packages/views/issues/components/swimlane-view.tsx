@@ -619,6 +619,7 @@ function SwimLaneViewImpl({
   projectId,
   onCreateIssue,
   groupBranches,
+  costByIssue,
 }: {
   issues: Issue[];
   /**
@@ -648,6 +649,9 @@ function SwimLaneViewImpl({
   projectId?: string;
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
   groupBranches?: IssueGroupBranches;
+  /** Owner-only client price per issue, for the cards. Absent for every other
+   *  role — see `issueCostTotalsOptions`. */
+  costByIssue?: Map<string, { tokens: number; price_rub: number }>;
 }) {
   const { t } = useT("issues");
   const paths = useWorkspacePaths();
@@ -1390,6 +1394,7 @@ function SwimLaneViewImpl({
         projectId={projectId}
         onCreateIssue={onCreateIssue}
         groupPagination={groupBranches?.pagination}
+        costByIssue={costByIssue}
       />
     </div>
   );
@@ -1524,6 +1529,7 @@ function SwimLaneViewImpl({
           >
             <BoardCardContent
               issue={activeIssue}
+              cost={costByIssue?.get(activeIssue.id)}
               childProgress={childProgressMap.get(activeIssue.id)}
               project={
                 activeIssue.project_id
@@ -1567,6 +1573,7 @@ function DraggableSwimLane({
   projectId,
   onCreateIssue,
   groupPagination,
+  costByIssue,
 }: {
   lane: LaneGroup;
   grouping: SwimlaneGrouping;
@@ -1582,6 +1589,7 @@ function DraggableSwimLane({
   projectId?: string;
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
   groupPagination?: Record<string, IssueGroupPageState>;
+  costByIssue?: Map<string, { tokens: number; price_rub: number }>;
 }) {
   const { t } = useT("issues");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -1684,6 +1692,7 @@ function DraggableSwimLane({
                 lane={lane}
                 projectId={projectId}
                 onCreateIssue={onCreateIssue}
+                costByIssue={costByIssue}
                 readOnly={lane.isOrphan}
                 page={
                   lane.serverCellKeys?.[status]
@@ -1709,6 +1718,7 @@ function SwimLaneCell({
   lane,
   projectId,
   onCreateIssue,
+  costByIssue,
   readOnly = false,
   page,
 }: {
@@ -1721,6 +1731,7 @@ function SwimLaneCell({
   lane: LaneGroup;
   projectId?: string;
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
+  costByIssue?: Map<string, { tokens: number; price_rub: number }>;
   /**
    * Display-only cell — the create affordance is suppressed and drag-end
    * upstream refuses to honour drops that would re-anchor a card to this
@@ -1771,6 +1782,7 @@ function SwimLaneCell({
             <DraggableBoardCard
               key={issue.id}
               issue={issue}
+              cost={costByIssue?.get(issue.id)}
               childProgress={childProgressMap.get(issue.id)}
               project={
                 issue.project_id ? projectMap?.get(issue.project_id) : undefined

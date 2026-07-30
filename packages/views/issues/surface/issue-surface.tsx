@@ -312,6 +312,7 @@ function IssueSurfaceContent({
                 projectId={controller.projectId}
                 onCreateIssue={openCreateIssue}
                 groupBranches={controller.groupBranches}
+                costByIssue={controller.costByIssue}
               />
             )}
           </div>

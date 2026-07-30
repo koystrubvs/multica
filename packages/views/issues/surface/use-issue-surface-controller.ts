@@ -515,9 +515,18 @@ export function useIssueSurfaceController({
     serverStatuses,
     swimlaneGrouping,
   ]);
-  // Money line in the board header. Board-only: the grouping keys the response,
-  // and no other surface has a per-column header to put it in.
+  const serverGroupQuery = useMemo<IssueTableQuerySpec>(() => {
+    if (effectiveViewMode !== "swimlane") return tableQuerySpec;
+    const { statuses: _statuses, ...filters } = tableQuerySpec.filters;
+    return { ...tableQuerySpec, filters };
+  }, [effectiveViewMode, tableQuerySpec]);
+  const costQuerySpec =
+    effectiveViewMode === "swimlane" ? serverGroupQuery : tableQuerySpec;
+  // Prices for the board header, and for the cards on both kanban surfaces.
+  // Swimlane has no per-column header, so it only needs the per-issue half of
+  // the response and any valid grouping will do.
   const costTotalsGroup = useMemo<IssueCostTotalsRequest["group"] | null>(() => {
+    if (effectiveViewMode === "swimlane") return { kind: "status" };
     if (effectiveViewMode !== "board") return null;
     if (effectiveGrouping === "status") return { kind: "status" };
     const propertyId = propertyIdFromViewKey(effectiveGrouping);
@@ -539,7 +548,10 @@ export function useIssueSurfaceController({
   const costTotalsQuery = useQuery(
     issueCostTotalsOptions(
       wsId,
-      tableQuerySpec,
+      // Swimlane turns statuses into its second dimension and drops them from
+      // the membership query; reusing the board spec here would leave cards in
+      // a filtered-out status without a price.
+      costQuerySpec,
       costTotalsGroup ?? { kind: "status" },
       isWorkspaceOwner && costTotalsGroup !== null,
     ),
@@ -562,11 +574,6 @@ export function useIssueSurfaceController({
       ]),
     );
   }, [costTotalsQuery.data]);
-  const serverGroupQuery = useMemo<IssueTableQuerySpec>(() => {
-    if (effectiveViewMode !== "swimlane") return tableQuerySpec;
-    const { statuses: _statuses, ...filters } = tableQuerySpec.filters;
-    return { ...tableQuerySpec, filters };
-  }, [effectiveViewMode, tableQuerySpec]);
   const serverGroupBranches = useIssueGroupBranches({
     wsId,
     query: serverGroupQuery,
