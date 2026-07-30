@@ -62,11 +62,14 @@ export const BoardCardContent = memo(function BoardCardContent({
   editable = false,
   childProgress,
   project,
+  cost,
 }: {
   issue: Issue;
   editable?: boolean;
   childProgress?: ChildProgress;
   project?: Project;
+  /** Owner-only client price of this issue; absent for every other role. */
+  cost?: { tokens: number; price_rub: number };
 }) {
   const { t } = useT("issues");
   const timeAgo = useTimeAgo();
@@ -184,7 +187,18 @@ export const BoardCardContent = memo(function BoardCardContent({
           {priorityIconNode}
           <p className="text-xs text-muted-foreground truncate">{issue.identifier}</p>
         </div>
-        <IssueAgentActivityIndicator issueId={issue.id} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Opposite the identifier, exact: one issue's price is a figure to
+              reconcile against the invoice, unlike the collapsed rail. No
+              tooltip — a board mounts hundreds of these, and per-card popups
+              are what the column already goes out of its way to avoid. */}
+          {cost && cost.price_rub > 0 && (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {cost.price_rub.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽
+            </span>
+          )}
+          <IssueAgentActivityIndicator issueId={issue.id} />
+        </div>
       </div>
 
       {/* Row 2: Title */}
@@ -321,11 +335,13 @@ export const DraggableBoardCard = memo(function DraggableBoardCard({
   issue,
   childProgress,
   project,
+  cost,
   disableSorting,
 }: {
   issue: Issue;
   childProgress?: ChildProgress;
   project?: Project;
+  cost?: { tokens: number; price_rub: number };
   disableSorting?: boolean;
 }) {
   const p = useWorkspacePaths();
@@ -366,6 +382,7 @@ export const DraggableBoardCard = memo(function DraggableBoardCard({
             editable
             childProgress={childProgress}
             project={project}
+            cost={cost}
           />
         </AppLink>
       </div>

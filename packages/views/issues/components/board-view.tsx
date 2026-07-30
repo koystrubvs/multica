@@ -182,6 +182,7 @@ function BoardViewImpl({
   statusPagination,
   groupBranches,
   costTotals,
+  costByIssue,
 }: {
   issues: Issue[];
   assigneeGroups?: IssueAssigneeGroup[];
@@ -205,6 +206,8 @@ function BoardViewImpl({
   /** Owner-only per-column client price, keyed by server group key. Absent for
    *  every other role — see `issueCostTotalsOptions`. */
   costTotals?: Map<string, BoardColumnCost>;
+  /** Owner-only client price per issue, for the cards. */
+  costByIssue?: Map<string, BoardColumnCost>;
 }) {
   const { t } = useT("issues");
   const storeGrouping = useViewStore((s) => s.grouping);
@@ -650,6 +653,7 @@ function BoardViewImpl({
                   onCreateIssue={onCreateIssue}
                   sortLabel={sortLabel}
                   cost={boardGroupCost(costTotals, group)}
+                  costByIssue={costByIssue}
                 />
               ) : (
                 <PaginatedBoardColumn
@@ -665,6 +669,7 @@ function BoardViewImpl({
                   onCreateIssue={onCreateIssue}
                   sortLabel={sortLabel}
                   cost={boardGroupCost(costTotals, group)}
+                  costByIssue={costByIssue}
                 />
               )
             ) : (
@@ -681,6 +686,7 @@ function BoardViewImpl({
                   onCreateIssue={onCreateIssue}
                   sortLabel={sortLabel}
                   cost={boardGroupCost(costTotals, group)}
+                  costByIssue={costByIssue}
                 />
               ) : assigneeGroupQueryKey && assigneeGroupFilter ? (
                 <PaginatedAssigneeBoardColumn
@@ -697,6 +703,7 @@ function BoardViewImpl({
                   onCreateIssue={onCreateIssue}
                   sortLabel={sortLabel}
                   cost={boardGroupCost(costTotals, group)}
+                  costByIssue={costByIssue}
                 />
               ) : (
                 <BoardColumn
@@ -711,6 +718,7 @@ function BoardViewImpl({
                   totalCount={group.totalCount}
                   sortLabel={sortLabel}
                   cost={boardGroupCost(costTotals, group)}
+                  costByIssue={costByIssue}
                 />
               )
             ),
@@ -748,6 +756,7 @@ function BoardViewImpl({
           <div style={{ width: BOARD_CARD_WIDTH }} className="rotate-1 cursor-grabbing opacity-90 shadow-lg shadow-black/10">
             <BoardCardContent
               issue={activeIssue}
+              cost={costByIssue?.get(activeIssue.id)}
               childProgress={childProgressMap.get(activeIssue.id)}
               project={
                 activeIssue.project_id
@@ -775,6 +784,7 @@ const PaginatedAssigneeBoardColumn = memo(function PaginatedAssigneeBoardColumn(
   onCreateIssue,
   sortLabel,
   cost,
+  costByIssue,
 }: {
   group: BoardColumnGroup;
   issueIds: string[];
@@ -788,6 +798,7 @@ const PaginatedAssigneeBoardColumn = memo(function PaginatedAssigneeBoardColumn(
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
   sortLabel?: string | null;
   cost?: BoardColumnCost;
+  costByIssue?: Map<string, BoardColumnCost>;
 }) {
   const { loadMore, hasMore, isLoading, total } = useLoadMoreByAssigneeGroup(
     {
@@ -811,6 +822,7 @@ const PaginatedAssigneeBoardColumn = memo(function PaginatedAssigneeBoardColumn(
       onCreateIssue={onCreateIssue}
       sortLabel={sortLabel}
       cost={cost}
+      costByIssue={costByIssue}
       footer={
         <ListLoadMoreFooter
           hasMore={hasMore}
@@ -834,6 +846,7 @@ const ServerPaginatedBoardColumn = memo(function ServerPaginatedBoardColumn({
   onCreateIssue,
   sortLabel,
   cost,
+  costByIssue,
 }: {
   group: BoardColumnGroup;
   issueIds: string[];
@@ -845,6 +858,7 @@ const ServerPaginatedBoardColumn = memo(function ServerPaginatedBoardColumn({
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
   sortLabel?: string | null;
   cost?: BoardColumnCost;
+  costByIssue?: Map<string, BoardColumnCost>;
 }) {
   const footer = (
     <ListLoadMoreFooter
@@ -868,6 +882,7 @@ const ServerPaginatedBoardColumn = memo(function ServerPaginatedBoardColumn({
       onCreateIssue={onCreateIssue}
       sortLabel={sortLabel}
       cost={cost}
+      costByIssue={costByIssue}
       footer={footer}
     />
   );
@@ -885,6 +900,7 @@ const PaginatedBoardColumn = memo(function PaginatedBoardColumn({
   onCreateIssue,
   sortLabel,
   cost,
+  costByIssue,
 }: {
   group: BoardColumnGroup & { status: IssueStatus };
   issueIds: string[];
@@ -897,6 +913,7 @@ const PaginatedBoardColumn = memo(function PaginatedBoardColumn({
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
   sortLabel?: string | null;
   cost?: BoardColumnCost;
+  costByIssue?: Map<string, BoardColumnCost>;
 }) {
   const { loadMore, hasMore, isLoading, total } = useLoadMoreByStatus(
     group.status,
@@ -915,6 +932,7 @@ const PaginatedBoardColumn = memo(function PaginatedBoardColumn({
       onCreateIssue={onCreateIssue}
       sortLabel={sortLabel}
       cost={cost}
+      costByIssue={costByIssue}
       footer={
         <ListLoadMoreFooter
           hasMore={hasMore}

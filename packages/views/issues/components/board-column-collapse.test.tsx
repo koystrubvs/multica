@@ -66,6 +66,20 @@ vi.mock("../../i18n", () => ({
   }),
 }));
 
+// The card itself needs query/navigation providers and is verified separately;
+// here it stands in for the seam that can silently break — whether the column
+// hands each card the price of ITS issue.
+vi.mock("./board-card", () => ({
+  DraggableBoardCard: ({
+    issue,
+    cost,
+  }: {
+    issue: { identifier: string };
+    cost?: { price_rub: number };
+  }) => <div>{`${issue.identifier}=${cost ? cost.price_rub : "none"}`}</div>,
+  BoardCardContent: () => null,
+}));
+
 vi.mock("@dnd-kit/core", () => ({
   DndContext: ({ children }: { children: React.ReactNode }) => children,
   DragOverlay: () => null,
@@ -154,6 +168,29 @@ describe("board column collapse", () => {
     renderColumn({ cost: { tokens: 4200, price_rub: 0 } });
 
     expect(screen.queryByText(/₽/)).toBeNull();
+  });
+
+  it("gives each card the price of its own issue", () => {
+    const issues = new Map([
+      ["i-1", { id: "i-1", identifier: "KOY-1", status: "done" }],
+      ["i-2", { id: "i-2", identifier: "KOY-2", status: "done" }],
+    ]) as never;
+
+    render(
+      <BoardColumn
+        group={group}
+        issueIds={["i-1", "i-2"]}
+        issueMap={issues}
+        totalCount={2}
+        costByIssue={
+          new Map([["i-1", { tokens: 1000, price_rub: 700 }]])
+        }
+      />,
+    );
+
+    expect(screen.getByText("KOY-1=700")).toBeTruthy();
+    // An issue with no usage stays priceless rather than showing 0 ₽.
+    expect(screen.getByText("KOY-2=none")).toBeTruthy();
   });
 
   it("abbreviates the token count by scale", () => {

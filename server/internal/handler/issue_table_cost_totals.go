@@ -45,8 +45,21 @@ type issueCostTotalsGroupJSON struct {
 	PriceRub float64 `json:"price_rub"`
 }
 
+// One issue's own price, for the card that shows it. Emitted from the same
+// pass that folds the group totals — the per-issue price has to be computed
+// anyway, so the board gets both from one request instead of asking
+// /issues/{id}/billing/cost once per visible card.
+type issueCostTotalsIssueJSON struct {
+	ID       string  `json:"id"`
+	Tokens   int64   `json:"tokens"`
+	PriceRub float64 `json:"price_rub"`
+}
+
 type issueCostTotalsJSON struct {
 	Groups []issueCostTotalsGroupJSON `json:"groups"`
+	// Only issues that cost something: unbilled and untouched issues would
+	// otherwise pad an owner-only payload with zeroes.
+	Issues []issueCostTotalsIssueJSON `json:"issues"`
 	Total  issueCostTotalsGroupJSON   `json:"total"`
 }
 
@@ -171,6 +184,7 @@ func (h *Handler) ListIssueCostTotals(w http.ResponseWriter, r *http.Request) {
 
 	totals := make(map[string]*issueCostTotalsGroupJSON)
 	groupOrder := make([]string, 0)
+	perIssue := make([]issueCostTotalsIssueJSON, 0, len(order))
 	var overall issueCostTotalsGroupJSON
 	for _, issueID := range order {
 		acc := issues[issueID]
@@ -194,9 +208,18 @@ func (h *Handler) ListIssueCostTotals(w http.ResponseWriter, r *http.Request) {
 		overall.Issues++
 		overall.Tokens += tokens
 		overall.PriceRub += price
+
+		perIssue = append(perIssue, issueCostTotalsIssueJSON{
+			ID:       issueID,
+			Tokens:   tokens,
+			PriceRub: price,
+		})
 	}
 
-	out := issueCostTotalsJSON{Groups: make([]issueCostTotalsGroupJSON, 0, len(groupOrder))}
+	out := issueCostTotalsJSON{
+		Groups: make([]issueCostTotalsGroupJSON, 0, len(groupOrder)),
+		Issues: perIssue,
+	}
 	for _, key := range groupOrder {
 		bucket := totals[key]
 		bucket.PriceRub = math.Round(bucket.PriceRub*100) / 100

@@ -255,6 +255,7 @@ describe("ApiClient server Table query", () => {
       }),
     ).resolves.toEqual({
       groups: [],
+      issues: [],
       total: { key: "", issues: 0, tokens: 0, price_rub: 0 },
     });
   });

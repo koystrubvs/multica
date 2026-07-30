@@ -382,8 +382,17 @@ export interface IssueCostTotalsGroup {
   price_rub: number;
 }
 
+/** One issue's own price, for the card that shows it. Only issues that cost
+ *  something are listed. */
+export interface IssueCostTotalsIssue {
+  id: string;
+  tokens: number;
+  price_rub: number;
+}
+
 export interface IssueCostTotalsResponse {
   groups: IssueCostTotalsGroup[];
+  issues: IssueCostTotalsIssue[];
   total: IssueCostTotalsGroup;
 }
 

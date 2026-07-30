@@ -782,8 +782,15 @@ const EMPTY_ISSUE_COST_TOTALS_GROUP: IssueCostTotalsGroup = {
   price_rub: 0,
 };
 
+const IssueCostTotalsIssueSchema = z.object({
+  id: z.string(),
+  tokens: z.number().default(0),
+  price_rub: z.number().default(0),
+}).loose();
+
 export const IssueCostTotalsResponseSchema = z.object({
   groups: z.array(IssueCostTotalsGroupSchema).default([]),
+  issues: z.array(IssueCostTotalsIssueSchema).default([]),
   // Inline literal, not EMPTY_ISSUE_COST_TOTALS_GROUP: `.default()` on a loose
   // object wants a value carrying the catchall index signature, and a typed
   // interface is not assignable to one — only a fresh object literal is.
@@ -797,6 +804,7 @@ export const IssueCostTotalsResponseSchema = z.object({
 
 export const EMPTY_ISSUE_COST_TOTALS_RESPONSE: IssueCostTotalsResponse = {
   groups: [],
+  issues: [],
   total: EMPTY_ISSUE_COST_TOTALS_GROUP,
 };
 

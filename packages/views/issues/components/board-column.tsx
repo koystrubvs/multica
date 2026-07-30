@@ -167,6 +167,7 @@ export const BoardColumn = memo(function BoardColumn({
   projectMap,
   totalCount,
   cost,
+  costByIssue,
   footer,
   projectId,
   onCreateIssue,
@@ -180,6 +181,8 @@ export const BoardColumn = memo(function BoardColumn({
   totalCount?: number;
   /** Owner-only client price for this column; absent for everyone else. */
   cost?: BoardColumnCost;
+  /** Owner-only client price per issue, for the cards in this column. */
+  costByIssue?: Map<string, BoardColumnCost>;
   footer?: ReactNode;
   /** When set, the per-column "+" pre-fills the project on the create form. */
   projectId?: string;
@@ -247,6 +250,7 @@ export const BoardColumn = memo(function BoardColumn({
     <div className={index === 0 ? undefined : "pt-2"}>
       <DraggableBoardCard
         issue={issue}
+        cost={costByIssue?.get(issue.id)}
         childProgress={childProgressMap?.get(issue.id)}
         project={
           issue.project_id ? projectMap?.get(issue.project_id) : undefined

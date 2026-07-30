@@ -266,6 +266,7 @@ function IssueSurfaceContent({
                 statusPagination={controller.statusPagination}
                 groupBranches={controller.groupBranches}
                 costTotals={controller.costTotals}
+                costByIssue={controller.costByIssue}
               />
             )}
             {controller.viewMode === "list" && (

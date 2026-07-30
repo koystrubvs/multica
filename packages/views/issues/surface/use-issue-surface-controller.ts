@@ -119,6 +119,8 @@ export interface IssueSurfaceController {
   tableFacetCounts?: IssueTableFacetsResponse;
   /** Owner-only per-column client price, keyed by server group key. */
   costTotals?: Map<string, { tokens: number; price_rub: number }>;
+  /** Owner-only client price per issue, for the card that shows it. */
+  costByIssue?: Map<string, { tokens: number; price_rub: number }>;
   /** Whether scopedIssues is a complete client window for local count use. */
   facetCountsExact: boolean;
   /** Load one server facet when its filter submenu is opened. */
@@ -551,6 +553,15 @@ export function useIssueSurfaceController({
       ]),
     );
   }, [costTotalsQuery.data]);
+  const costByIssue = useMemo(() => {
+    if (!costTotalsQuery.data) return undefined;
+    return new Map(
+      costTotalsQuery.data.issues.map((entry) => [
+        entry.id,
+        { tokens: entry.tokens, price_rub: entry.price_rub },
+      ]),
+    );
+  }, [costTotalsQuery.data]);
   const serverGroupQuery = useMemo<IssueTableQuerySpec>(() => {
     if (effectiveViewMode !== "swimlane") return tableQuerySpec;
     const { statuses: _statuses, ...filters } = tableQuerySpec.filters;
@@ -710,6 +721,7 @@ export function useIssueSurfaceController({
       ? serverGroupBranches
       : undefined,
     costTotals,
+    costByIssue,
     // Keep TableView mounted for an empty search result so its local search
     // control remains available to refine or clear the query. Include the
     // debounced value as well to avoid a brief empty-screen flash while a
