@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { BoardColumn, formatCompactTokens } from "./board-column";
+import { BoardColumn, formatCompactAmount } from "./board-column";
 
 const toggleBoardColumnCollapsed = vi.hoisted(() => vi.fn());
 const collapsedColumns = vi.hoisted(() => ({ ids: [] as string[] }));
@@ -134,6 +134,14 @@ describe("board column collapse", () => {
     expect(screen.getByText("8 500 ₽")).toBeTruthy();
   });
 
+  it("keeps an abbreviated price on the collapsed rail", () => {
+    collapsedColumns.ids = ["status:done"];
+    renderColumn({ cost: { tokens: 19_899_582, price_rub: 1_210_730 } });
+
+    // Units resolve through the mocked t(), hence the key paths as suffixes.
+    expect(screen.getByText(/1,2board\.tokens_unit_million ₽/)).toBeTruthy();
+  });
+
   it("renders no price line for a viewer without cost totals", () => {
     // A member or guest never receives totals — the endpoint answers 403 — so
     // the column must not grow an empty slot for them.
@@ -152,17 +160,17 @@ describe("board column collapse", () => {
     const units = { thousand: "К", million: "М", billion: "Б" };
 
     // Under a thousand stays exact — there is nothing to shorten.
-    expect(formatCompactTokens(842, units)).toBe("842");
-    expect(formatCompactTokens(1234, units)).toBe("1,2К");
+    expect(formatCompactAmount(842, units)).toBe("842");
+    expect(formatCompactAmount(1234, units)).toBe("1,2К");
     // A trailing zero is dropped: "5К", not "5,0К".
-    expect(formatCompactTokens(5000, units)).toBe("5К");
-    expect(formatCompactTokens(19_899_582, units)).toBe("19,9М");
+    expect(formatCompactAmount(5000, units)).toBe("5К");
+    expect(formatCompactAmount(19_899_582, units)).toBe("19,9М");
     // A busy done column really does reach this scale; without the billion
     // step it would read "3205,7М".
-    expect(formatCompactTokens(3_205_724_882, units)).toBe("3,2Б");
+    expect(formatCompactAmount(3_205_724_882, units)).toBe("3,2Б");
     // Boundaries land on the larger unit, not on 1000 of the smaller one.
-    expect(formatCompactTokens(1_000_000, units)).toBe("1М");
-    expect(formatCompactTokens(999_999, units)).toBe("1М");
+    expect(formatCompactAmount(1_000_000, units)).toBe("1М");
+    expect(formatCompactAmount(999_999, units)).toBe("1М");
   });
 
   it("expands again when the rail is clicked", () => {

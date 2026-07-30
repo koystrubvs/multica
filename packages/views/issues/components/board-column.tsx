@@ -275,7 +275,11 @@ export const BoardColumn = memo(function BoardColumn({
         <span className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground">
           <ChevronsLeftRight className="size-3.5" />
         </span>
-        <BoardRailHeading group={group} count={totalCount ?? issueIds.length} />
+        <BoardRailHeading
+          group={group}
+          count={totalCount ?? issueIds.length}
+          cost={cost}
+        />
       </button>
     );
   }
@@ -446,18 +450,19 @@ export const BoardColumn = memo(function BoardColumn({
 });
 
 /**
- * Approximate token count: `842`, `1,2К`, `19,9М`, `3,2Б`.
+ * Approximate number by scale: `842`, `1,2К`, `19,9М`, `3,2Б`.
  *
- * The tooltip answers "roughly how much work sits in this column", and a
- * digit-exact 19 899 582 reads slower while adding nothing — the price next to
- * it is the number that has to be exact. Units come from the locale so only
- * Russian gets Cyrillic К/М/Б. `maximumFractionDigits: 1` also drops a
- * trailing zero, so 5 000 renders as `5К`, not `5,0К`.
+ * Used for the token count in the header tooltip (where a digit-exact
+ * 19 899 582 reads slower and adds nothing) and for the price on the collapsed
+ * rail (where 44px simply has no room for `1 210 730 ₽`). The expanded header
+ * keeps the exact price — that is the number that has to be precise.
  *
- * Billions matter already: a done column of a busy workspace holds ~3.2e9
- * tokens, which without this step would read `3205,7М`.
+ * Units come from the locale so only Russian gets Cyrillic К/М/Б.
+ * `maximumFractionDigits: 1` also drops a trailing zero, so 5 000 renders as
+ * `5К`, not `5,0К`. Billions are not hypothetical: a done column of a busy
+ * workspace holds ~3.2e9 tokens, which without that step reads `3205,7М`.
  */
-export function formatCompactTokens(
+export function formatCompactAmount(
   tokens: number,
   units: { thousand: string; million: string; billion: string },
 ): string {
@@ -491,7 +496,7 @@ export function formatCompactTokens(
 function BoardColumnCostLine({ cost }: { cost?: BoardColumnCost }) {
   const { t } = useT("issues");
   if (!cost || cost.price_rub <= 0) return null;
-  const tokens = formatCompactTokens(cost.tokens, {
+  const tokens = formatCompactAmount(cost.tokens, {
     thousand: t(($) => $.board.tokens_unit_thousand),
     million: t(($) => $.board.tokens_unit_million),
     billion: t(($) => $.board.tokens_unit_billion),
@@ -516,13 +521,25 @@ function BoardColumnCostLine({ cost }: { cost?: BoardColumnCost }) {
 function BoardRailHeading({
   group,
   count,
+  cost,
 }: {
   group: BoardColumnGroup;
   count: number;
+  cost?: BoardColumnCost;
 }) {
   const { t } = useT("issues");
   const status = group.status;
   const title = status ? t(($) => $.status[status]) : group.title;
+  // Abbreviated, unlike the expanded header: 44px has no room for
+  // "1 210 730 ₽", and a rail is a glance, not a figure to reconcile.
+  const price =
+    cost && cost.price_rub > 0
+      ? formatCompactAmount(cost.price_rub, {
+          thousand: t(($) => $.board.tokens_unit_thousand),
+          million: t(($) => $.board.tokens_unit_million),
+          billion: t(($) => $.board.tokens_unit_billion),
+        })
+      : null;
 
   return (
     <>
@@ -554,9 +571,18 @@ function BoardRailHeading({
       {/* `text-start` because the rail is a <button>, whose UA `text-align:
           center` would otherwise center the label along the rail's vertical
           axis instead of anchoring it under the count. */}
-      <span className="min-h-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-start text-xs font-semibold [writing-mode:vertical-rl]">
+      {/* No `flex-1`: growing to fill the rail would push the price below it to
+          the very bottom, far from the name it belongs to. Shrinking is still
+          allowed, so on a short rail the NAME truncates and the price stays. */}
+      <span className="min-h-0 overflow-hidden text-ellipsis whitespace-nowrap text-start text-xs font-semibold [writing-mode:vertical-rl]">
         {title}
       </span>
+      {price && (
+        // Rotated like the title: "8,5К ₽" does not fit across a 44px rail.
+        <span className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground [writing-mode:vertical-rl]">
+          {price} ₽
+        </span>
+      )}
     </>
   );
 }
