@@ -1147,6 +1147,13 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 	// arrive long before the work: without this bound a payment from years ago
 	// settles a current period, which is how a 2022 receipt once "paid" a 2026
 	// month. The month of slack covers prepayment for the period ahead.
+	//
+	// The slack alone is not enough, because it is blind to when the deal was
+	// struck: money for Innovatis site work on 26 June kept landing on the July
+	// line of an SEO agreement signed on 27 July — five days early by the period
+	// bound, a month before the agreement existed. Skipping those leaves the
+	// payment for a human instead of settling the wrong line, and receivables
+	// with no agreement keep their old eligibility.
 	rows, err := tx.Query(ctx, `
 		SELECT r.id::text,
 		       round((r.planned_amount_rub - r.paid_amount_rub) * 100)::bigint,
@@ -1158,6 +1165,10 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 		  AND r.status IN ('expected', 'invoiced', 'overdue', 'partially_paid')
 		  AND (r.planned_amount_rub - r.paid_amount_rub) > 0
 		  AND $3::date >= r.period_start - INTERVAL '31 days'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM business_agreement a
+		      WHERE a.id = r.agreement_id AND a.effective_from > $3::date
+		  )
 	`, businessID, clientID, bookedOn.Format("2006-01-02"))
 	if err != nil {
 		return err
