@@ -124,7 +124,7 @@ func (h *Handler) CreateSitepingGuest(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "project not found in this workspace")
 			return
 		}
-		if _, perr := h.Queries.CreateGuestProject(r.Context(), db.CreateGuestProjectParams{
+		if _, perr := h.Queries.CreateMemberProject(r.Context(), db.CreateMemberProjectParams{
 			WorkspaceID: requester.WorkspaceID,
 			UserID:      user.ID,
 			ProjectID:   projUUID,

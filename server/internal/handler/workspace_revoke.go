@@ -151,6 +151,31 @@ func (h *Handler) revokeAndRemoveMember(ctx context.Context, workspaceID, userID
 		return empty, err
 	}
 
+	// Project bindings are FK-free like everything above; drop this person's
+	// grants so a re-invited user does not silently reclaim old project
+	// access. Scoped to this workspace — the same user may be a member
+	// elsewhere.
+	if err := qtx.DeleteMemberProjectsByUser(ctx, db.DeleteMemberProjectsByUserParams{
+		UserID:      userID,
+		WorkspaceID: workspaceID,
+	}); err != nil {
+		return empty, err
+	}
+
+	// Issues assigned to the departing member would otherwise keep pointing at
+	// a user row that no longer has a membership — a dangling assignee the UI
+	// renders as "Unknown" and no filter can find. Nothing did this before, for
+	// any removal path. The assignee is cleared rather than guessed at: who
+	// picks the work up is a decision for a human, and the unassigned state is
+	// visible on every board.
+	result.UnassignedIssues, err = qtx.ReassignAllIssuesOfMember(ctx, db.ReassignAllIssuesOfMemberParams{
+		WorkspaceID: workspaceID,
+		FromUserID:  userID,
+	})
+	if err != nil {
+		return empty, err
+	}
+
 	// Member row deletion lives inside the same tx so a successful revoke is
 	// never followed by a failed member-delete (which would leave the user
 	// still a member with a dead runtime), and a failed revoke never leaves
@@ -176,6 +201,9 @@ type revocationResult struct {
 	CancelledTasks     []db.AgentTaskQueue
 	OfflineRuntimeIDs  []db.ForceOfflineRuntimesByIDsRow
 	RevokedTokenHashes []string
+	// UnassignedIssues counts the issues whose assignee was cleared because
+	// the person they were assigned to left the workspace.
+	UnassignedIssues int64
 }
 
 func (r revocationResult) isEmpty() bool {

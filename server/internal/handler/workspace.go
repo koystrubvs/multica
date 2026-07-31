@@ -13,6 +13,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
+	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
 )
@@ -451,8 +452,14 @@ type MemberWithUserResponse struct {
 	Name        string  `json:"name"`
 	Email       string  `json:"email"`
 	AvatarURL   *string `json:"avatar_url"`
-	// GuestProjectIDs lists the projects a guest (P10) member is scoped to.
-	// Populated only for role=guest; empty/omitted for every other role.
+	// AccessScope is "workspace" (sees every project) or "projects" (sees only
+	// what ProjectIDs grants). Guests are scoped by their bindings regardless.
+	AccessScope string `json:"access_scope"`
+	// ProjectIDs lists the projects this person is bound to, for any role.
+	ProjectIDs []string `json:"project_ids,omitempty"`
+	// GuestProjectIDs is the same list under the name the SitePing bridge and
+	// older clients read. Kept because this is an API boundary — installed
+	// desktop builds and the out-of-repo bridge both parse it.
 	GuestProjectIDs []string `json:"guest_project_ids,omitempty"`
 }
 
@@ -469,6 +476,18 @@ func (h *Handler) ListMembersWithUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// One read for the whole workspace instead of a query per member: the
+	// members screen renders every row's bindings at once.
+	bindings := map[string][]string{}
+	if rows, berr := h.Queries.ListMemberProjectsByWorkspace(r.Context(), wsUUID); berr == nil {
+		for _, row := range rows {
+			uid := uuidToString(row.UserID)
+			bindings[uid] = append(bindings[uid], uuidToString(row.ProjectID))
+		}
+	} else {
+		slog.Warn("list member projects failed", append(logger.RequestAttrs(r), "error", berr)...)
+	}
+
 	resp := make([]MemberWithUserResponse, len(members))
 	for i, m := range members {
 		resp[i] = MemberWithUserResponse{
@@ -480,13 +499,11 @@ func (h *Handler) ListMembersWithUser(w http.ResponseWriter, r *http.Request) {
 			Name:        m.UserName,
 			Email:       m.UserEmail,
 			AvatarURL:   h.resolveAvatarURLPtr(textToPtr(m.UserAvatarUrl)),
+			AccessScope: m.AccessScope,
 		}
-		if m.Role == "guest" {
-			if pids, perr := h.Queries.ListGuestProjectsByUser(r.Context(), db.ListGuestProjectsByUserParams{UserID: m.UserID, WorkspaceID: wsUUID}); perr == nil && len(pids) > 0 {
-				ids := make([]string, len(pids))
-				for j, p := range pids {
-					ids[j] = uuidToString(p)
-				}
+		if ids := bindings[uuidToString(m.UserID)]; len(ids) > 0 {
+			resp[i].ProjectIDs = ids
+			if m.Role == "guest" {
 				resp[i].GuestProjectIDs = ids
 			}
 		}
@@ -495,9 +512,23 @@ func (h *Handler) ListMembersWithUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// GuestProjectRequest is the body for binding/unbinding a guest to a project.
+// GuestProjectRequest is the body for binding/unbinding a member to a project.
+// The name is kept because the SitePing bridge posts to /guest-project with
+// this shape; the mechanism itself is no longer guest-specific.
 type GuestProjectRequest struct {
 	ProjectID string `json:"project_id"`
+	// Unbind only. What to do with issues in this project that are assigned to
+	// the person losing access:
+	//
+	//	""         — undecided: refuse with 409 and report the count, so the
+	//	             operator has to choose rather than silently orphan work
+	//	"unassign" — clear the assignee
+	//	"reassign" — hand them to ReassignTo (a member user id)
+	//
+	// Nothing did this before, for any scenario: removing a member left issues
+	// pointing at a user row that no longer existed.
+	OnAssignedIssues string `json:"on_assigned_issues"`
+	ReassignTo       string `json:"reassign_to"`
 }
 
 // SetGuestProject binds a guest member to a project (P10 Variant A). Owner/admin
@@ -534,10 +565,12 @@ func (h *Handler) SetGuestProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "project not found in this workspace")
 		return
 	}
-	if _, err := h.Queries.CreateGuestProject(r.Context(), db.CreateGuestProjectParams{
+	actor, _ := util.ParseUUID(requestUserID(r))
+	if _, err := h.Queries.CreateMemberProject(r.Context(), db.CreateMemberProjectParams{
 		WorkspaceID: wsUUID,
 		UserID:      member.UserID,
 		ProjectID:   projUUID,
+		CreatedBy:   actor,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to bind project")
 		return
@@ -562,19 +595,93 @@ func (h *Handler) UnsetGuestProject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
+	if !ok {
+		return
+	}
 	member, err := h.Queries.GetMember(r.Context(), memberUUID)
 	if err != nil || uuidToString(member.WorkspaceID) != workspaceID {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
-	if err := h.Queries.DeleteGuestProject(r.Context(), db.DeleteGuestProjectParams{
+
+	// Work assigned to this person in this project would otherwise be left
+	// with an assignee who can no longer see it. Make the caller decide.
+	assigned, err := h.Queries.CountIssuesAssignedToMemberInProject(r.Context(), db.CountIssuesAssignedToMemberInProjectParams{
+		WorkspaceID: wsUUID,
+		ProjectID:   projUUID,
+		AssigneeID:  member.UserID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to count assigned issues")
+		return
+	}
+
+	var newAssignee pgtype.UUID
+	switch {
+	case assigned == 0:
+		// Nothing to hand over.
+	case req.OnAssignedIssues == "unassign":
+		// newAssignee stays invalid -> assignee cleared.
+	case req.OnAssignedIssues == "reassign":
+		target, parsed := parseUUIDOrBadRequest(w, req.ReassignTo, "reassign_to")
+		if !parsed {
+			return
+		}
+		targetMember, terr := h.Queries.GetMemberByUserAndWorkspace(r.Context(), db.GetMemberByUserAndWorkspaceParams{
+			UserID:      target,
+			WorkspaceID: wsUUID,
+		})
+		if terr != nil {
+			writeError(w, http.StatusBadRequest, "reassign_to is not a member of this workspace")
+			return
+		}
+		newAssignee = targetMember.UserID
+	default:
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":           "issues are assigned to this member in this project",
+			"assigned_issues": assigned,
+			"choices":         []string{"unassign", "reassign"},
+		})
+		return
+	}
+
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to unbind project")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.Queries.WithTx(tx)
+
+	var reassigned int64
+	if assigned > 0 {
+		reassigned, err = qtx.ReassignIssuesInProject(r.Context(), db.ReassignIssuesInProjectParams{
+			WorkspaceID:   wsUUID,
+			ProjectID:     projUUID,
+			FromUserID:    member.UserID,
+			NewAssigneeID: newAssignee,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to reassign issues")
+			return
+		}
+	}
+	if err := qtx.DeleteMemberProject(r.Context(), db.DeleteMemberProjectParams{
 		UserID:    member.UserID,
 		ProjectID: projUUID,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to unbind project")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "unbound"})
+	// One transaction on purpose: between the reassignment and the unbind the
+	// issue would sit with an assignee who has already lost the project.
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to unbind project")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "unbound", "reassigned_issues": reassigned})
 }
 
 type CreateMemberRequest struct {
@@ -588,6 +695,7 @@ func (h *Handler) memberWithUserResponse(member db.Member, user db.User) MemberW
 		WorkspaceID: uuidToString(member.WorkspaceID),
 		UserID:      uuidToString(member.UserID),
 		Role:        member.Role,
+		AccessScope: member.AccessScope,
 		CreatedAt:   timestampToString(member.CreatedAt),
 		Name:        user.Name,
 		Email:       user.Email,
@@ -689,6 +797,9 @@ func (h *Handler) CreateMember(w http.ResponseWriter, r *http.Request) {
 
 type UpdateMemberRequest struct {
 	Role string `json:"role"`
+	// AccessScope may be sent on its own (without role) to switch a person
+	// between "sees the whole workspace" and "sees only granted projects".
+	AccessScope *string `json:"access_scope"`
 }
 
 func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
@@ -714,6 +825,40 @@ func (h *Handler) UpdateMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	// access_scope can be changed on its own; role stays required otherwise.
+	if req.AccessScope != nil {
+		scope := strings.TrimSpace(*req.AccessScope)
+		if scope != "workspace" && scope != "projects" {
+			writeError(w, http.StatusBadRequest, `access_scope must be "workspace" or "projects"`)
+			return
+		}
+		if requester.Role != "owner" && requester.Role != "admin" {
+			writeError(w, http.StatusForbidden, "insufficient permissions")
+			return
+		}
+		updated, err := h.Queries.UpdateMemberAccessScope(r.Context(), db.UpdateMemberAccessScopeParams{
+			ID:          target.ID,
+			AccessScope: scope,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update member access scope")
+			return
+		}
+		h.MembershipCache.Invalidate(r.Context(), uuidToString(target.UserID), workspaceID)
+		target = updated
+		if strings.TrimSpace(req.Role) == "" {
+			user, uerr := h.Queries.GetUser(r.Context(), updated.UserID)
+			if uerr != nil {
+				writeError(w, http.StatusInternalServerError, "failed to load member")
+				return
+			}
+			resp := h.memberWithUserResponse(updated, user)
+			h.publish(protocol.EventMemberUpdated, uuidToString(requester.WorkspaceID), "member", requestUserID(r), map[string]any{"member": resp})
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+	}
+
 	if strings.TrimSpace(req.Role) == "" {
 		writeError(w, http.StatusBadRequest, "role is required")
 		return

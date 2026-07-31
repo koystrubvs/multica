@@ -3125,7 +3125,7 @@ func (h *Handler) guestProjectAllowed(r *http.Request, workspaceID string, proje
 	if !projectID.Valid {
 		return false, true
 	}
-	ok, err := h.Queries.GuestHasProjectAccess(r.Context(), db.GuestHasProjectAccessParams{
+	ok, err := h.Queries.MemberHasProjectAccess(r.Context(), db.MemberHasProjectAccessParams{
 		UserID:    parseUUID(actorID),
 		ProjectID: projectID,
 	})

@@ -1043,7 +1043,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Route("/members/{memberId}", func(r chi.Router) {
 						r.Patch("/", h.UpdateMember)
 						r.Delete("/", h.DeleteMember)
-						// P10 Variant A: bind/unbind a guest member to a project.
+						// Bind/unbind a member to a project. The mechanism is
+						// no longer guest-specific (migration 311 merged
+						// guest_project into member_project), so the pair is
+						// served under /projects; /guest-project stays because
+						// the out-of-repo SitePing bridge posts to it.
+						r.Put("/projects", h.SetGuestProject)
+						r.Delete("/projects", h.UnsetGuestProject)
 						r.Put("/guest-project", h.SetGuestProject)
 						r.Delete("/guest-project", h.UnsetGuestProject)
 					})
