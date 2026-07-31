@@ -939,7 +939,7 @@ const IssueTableFacetValueSchema = z.object({
 }).loose();
 
 const IssueTableFacetSchema = z.object({
-  kind: z.enum(["status", "priority", "assignee", "creator", "project", "label", "property"]),
+  kind: z.enum(["status", "priority", "assignee", "creator", "project", "label", "property", "working_agents"]),
   property_id: z.string().optional(),
   values: z.array(IssueTableFacetValueSchema).default([]),
 }).loose();

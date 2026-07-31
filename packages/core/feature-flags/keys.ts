@@ -1,5 +1,4 @@
 export const COMPOSIO_MCP_APPS_FLAG = "composio_mcp_apps";
-export const RESOURCE_LABELS_FLAG = "settings_resource_labels";
 export const BUSINESS_CONTROL_PLANE_FLAG = "business_control_plane";
 export const BUSINESS_DASHBOARD_FLAG = "business_dashboard";
 export const BUSINESS_CLIENTS_UI_FLAG = "business_clients_ui";

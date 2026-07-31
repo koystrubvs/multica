@@ -19,7 +19,6 @@ export { StaticProvider } from "./static-provider";
 export { ChainProvider } from "./chain-provider";
 export {
   COMPOSIO_MCP_APPS_FLAG,
-  RESOURCE_LABELS_FLAG,
   BUSINESS_CONTROL_PLANE_FLAG,
   BUSINESS_DASHBOARD_FLAG,
   BUSINESS_CLIENTS_UI_FLAG,
