@@ -127,8 +127,8 @@ function MemberRow({
     <div className="flex items-center gap-3 px-4 py-3">
       <ActorAvatar actorType="member" actorId={member.user_id} size="lg" />
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate">{member.name}</div>
-        <div className="text-xs text-muted-foreground truncate">{member.email}</div>
+        <div className="text-body font-medium truncate">{member.name}</div>
+        <div className="text-caption text-muted-foreground truncate">{member.email}</div>
         {isGuest && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {boundProjects.map((p) => (
@@ -215,14 +215,14 @@ function MemberRow({
                           <Icon className="h-3.5 w-3.5" />
                           <div className="flex flex-col">
                             <span>{config.label}</span>
-                            <span className="text-xs text-muted-foreground font-normal">
+                            <span className="text-caption text-muted-foreground font-normal">
                               {wouldDemoteLastOwner
                                 ? t(($) => $.members.cannot_demote_last_owner)
                                 : config.description}
                             </span>
                           </div>
                           {member.role === role && (
-                            <span className="ml-auto text-xs text-muted-foreground">{"✓"}</span>
+                            <span className="ml-auto text-caption text-muted-foreground">{"✓"}</span>
                           )}
                         </DropdownMenuItem>
                       );
@@ -270,8 +270,8 @@ function InvitationRow({
         <Mail className="h-4 w-4 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate">{invitation.invitee_email}</div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <div className="text-body font-medium truncate">{invitation.invitee_email}</div>
+        <div className="flex items-center gap-1 text-caption text-muted-foreground">
           <Clock className="h-3 w-3" />
           <span>{t(($) => $.members.pending_status)}</span>
         </div>
@@ -448,7 +448,7 @@ export function MembersTab() {
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2">
                 <Plus className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-medium">{t(($) => $.members.invite_title)}</h3>
+                <h3 className="text-body font-medium">{t(($) => $.members.invite_title)}</h3>
               </div>
               <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
                 <Input
@@ -513,7 +513,7 @@ export function MembersTab() {
             ))}
           </SettingsCard>
         ) : (
-          <p className="text-sm text-muted-foreground">{t(($) => $.members.no_members)}</p>
+          <p className="text-body text-muted-foreground">{t(($) => $.members.no_members)}</p>
         )}
       </SettingsSection>
 

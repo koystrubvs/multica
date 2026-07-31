@@ -61,7 +61,7 @@ export function VisibilityPicker({
         <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <div className="text-left">
           <div className="font-medium">{t(($) => $.visibility.workspace.label)}</div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-caption text-muted-foreground">
             {t(($) => $.visibility.workspace.description)}
           </div>
         </div>
@@ -73,7 +73,7 @@ export function VisibilityPicker({
         <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <div className="text-left">
           <div className="font-medium">{t(($) => $.visibility.private.label)}</div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-caption text-muted-foreground">
             {t(($) => $.visibility.private.description)}
           </div>
         </div>
