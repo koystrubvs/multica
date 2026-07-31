@@ -601,23 +601,6 @@ export const CommentSchema = z.object({
   quick_action_id: z.string().nullable().optional(),
 }).loose();
 
-export const EMPTY_COMMENT: Comment = {
-  id: "",
-  issue_id: "",
-  author_type: "member",
-  author_id: "",
-  content: "",
-  type: "comment",
-  parent_id: null,
-  reactions: [],
-  attachments: [],
-  created_at: "",
-  updated_at: "",
-  resolved_at: null,
-  resolved_by_type: null,
-  resolved_by_id: null,
-};
-
 export const CommentsListSchema = z.array(CommentSchema);
 
 // Degraded placeholder for a comment response that failed schema validation.
