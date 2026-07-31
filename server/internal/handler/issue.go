@@ -3231,10 +3231,44 @@ func (h *Handler) isAgentAssigneeReady(ctx context.Context, issue db.Issue) bool
 	return true
 }
 
+// canDeleteIssue decides who may destroy an issue.
+//
+// Deletion used to be ungated: any member could delete any issue, and
+// BatchDeleteIssues let them do it to the whole workspace in one request —
+// every client's work, unrecoverably, since there is no soft delete. With
+// employees in the workspace that is the largest destructive surface there is.
+//
+// Owner and admin may delete anything. A plain member may delete only what
+// they created, which keeps the everyday case (I filed a junk issue, let me
+// remove it) working. Agents resolve to their runtime owner through
+// X-User-ID, so agent-initiated cleanup keeps working exactly as before.
+//
+// Gating only the batch endpoint would have been theatre: the same member
+// could loop the single-issue route.
+func (h *Handler) canDeleteIssue(r *http.Request, issue db.Issue) bool {
+	workspaceID := uuidToString(issue.WorkspaceID)
+	userID := requestUserID(r)
+	member, err := h.getWorkspaceMember(r.Context(), userID, workspaceID)
+	if err != nil {
+		return false
+	}
+	if member.Role == "owner" || member.Role == "admin" {
+		return true
+	}
+	if member.Role == "guest" {
+		return false
+	}
+	return issue.CreatorID.Valid && uuidToString(issue.CreatorID) == userID
+}
+
 func (h *Handler) DeleteIssue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	issue, ok := h.loadIssueForUser(w, r, id)
 	if !ok {
+		return
+	}
+	if !h.canDeleteIssue(r, issue) {
+		writeError(w, http.StatusForbidden, "only the issue's author or a workspace owner/admin can delete it")
 		return
 	}
 
@@ -3602,6 +3636,7 @@ func (h *Handler) BatchDeleteIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deleted := 0
+	refused := 0
 	for _, issueID := range req.IssueIDs {
 		issueUUID, err := util.ParseUUID(issueID)
 		if err != nil {
@@ -3612,6 +3647,13 @@ func (h *Handler) BatchDeleteIssues(w http.ResponseWriter, r *http.Request) {
 			WorkspaceID: wsUUID,
 		})
 		if err != nil {
+			continue
+		}
+		// Skipped rather than 403 for the whole request, matching how this
+		// endpoint already treats ids it cannot resolve. The response reports
+		// how many were actually deleted, so a partial result is visible.
+		if !h.canDeleteIssue(r, issue) {
+			refused++
 			continue
 		}
 
@@ -3637,6 +3679,6 @@ func (h *Handler) BatchDeleteIssues(w http.ResponseWriter, r *http.Request) {
 		deleted++
 	}
 
-	slog.Info("batch delete issues", append(logger.RequestAttrs(r), "count", deleted)...)
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": deleted})
+	slog.Info("batch delete issues", append(logger.RequestAttrs(r), "count", deleted, "refused", refused)...)
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": deleted, "refused": refused})
 }
