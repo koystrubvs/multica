@@ -78,6 +78,28 @@ func (h *Handler) workspaceToResponse(w db.Workspace) WorkspaceResponse {
 	}
 }
 
+// workspaceBroadcastPayload is the workspace shaped for the realtime room.
+//
+// The room holds every member, so the payload cannot be shaped per viewer —
+// and it carried the full context, which is the billing playbook that
+// redactWorkspaceForNonStaff withholds over HTTP. The key is DROPPED rather
+// than nulled: clients merge this payload over their cached workspace, so an
+// absent key leaves a staff client's cached context intact while a null would
+// wipe it.
+func workspaceBroadcastPayload(resp WorkspaceResponse) map[string]any {
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		// Fail closed: better a bare id than an accidental full payload.
+		return map[string]any{"id": resp.ID}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{"id": resp.ID}
+	}
+	delete(out, "context")
+	return out
+}
+
 // redactWorkspaceForNonStaff blanks the workspace context for anyone who is
 // not owner/admin.
 //
@@ -383,7 +405,9 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("workspace updated", append(logger.RequestAttrs(r), "workspace_id", id)...)
 	userID := requestUserID(r)
-	h.publish(protocol.EventWorkspaceUpdated, uuidToString(ws.ID), "member", userID, map[string]any{"workspace": h.workspaceToResponse(ws)})
+	h.publish(protocol.EventWorkspaceUpdated, uuidToString(ws.ID), "member", userID, map[string]any{
+		"workspace": workspaceBroadcastPayload(h.workspaceToResponse(ws)),
+	})
 	if req.Name != nil {
 		if members, err := h.Queries.ListMembers(r.Context(), ws.ID); err == nil {
 			userIDs := make([]string, 0, len(members))

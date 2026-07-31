@@ -447,9 +447,16 @@ export function applyWorkspaceUpdatedToCache(
       qc.invalidateQueries({ queryKey: issueKeys.all(next.id) });
     }
     if (cached && list) {
+      // Merge, don't replace. The broadcast omits `context` — it is the
+      // billing playbook and the realtime room holds every member, so the
+      // server drops the key rather than shaping the payload per viewer.
+      // Replacing outright would wipe a staff client's cached context on
+      // any unrelated workspace edit.
       qc.setQueryData<Workspace[]>(
         workspaceKeys.list(),
-        list.map((workspace) => (workspace.id === next.id ? next : workspace)),
+        list.map((workspace) =>
+          workspace.id === next.id ? { ...workspace, ...next } : workspace,
+        ),
       );
       return;
     }
