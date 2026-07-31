@@ -88,7 +88,15 @@ func validateIssueEnum(w http.ResponseWriter, field, value string, allowed []str
 	return false
 }
 
-func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
+// hiddenProps is the set of owner-only property ids to strip from the value
+// bag — nil when the reader may see everything. It is a required parameter
+// rather than post-processing so that a new call site cannot forget it: every
+// converter feeds a response or a broadcast, and both carry the bag.
+//
+// Resolve it once per request with hiddenPropertyIDsForViewer (per-viewer
+// reads) or hiddenPropertyIDs (broadcasts, which fan out to the whole
+// workspace and cannot be shaped per viewer), never inside a loop.
+func issueToResponse(i db.Issue, issuePrefix string, hiddenProps map[string]bool) IssueResponse {
 	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
@@ -112,12 +120,12 @@ func issueToResponse(i db.Issue, issuePrefix string) IssueResponse {
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
 		Metadata:      parseIssueMetadata(i.Metadata),
-		Properties:    parseIssueProperties(i.Properties),
+		Properties:    withoutHiddenProperties(parseIssueProperties(i.Properties), hiddenProps),
 	}
 }
 
 // issueListRowToResponse converts a list-query row (no description) to an IssueResponse.
-func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueResponse {
+func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string, hiddenProps map[string]bool) IssueResponse {
 	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
@@ -141,7 +149,7 @@ func issueListRowToResponse(i db.ListIssuesRow, issuePrefix string) IssueRespons
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
 		Metadata:      parseIssueMetadata(i.Metadata),
-		Properties:    parseIssueProperties(i.Properties),
+		Properties:    withoutHiddenProperties(parseIssueProperties(i.Properties), hiddenProps),
 	}
 }
 
@@ -178,7 +186,7 @@ func (h *Handler) labelsByIssue(ctx context.Context, wsUUID pgtype.UUID, issueID
 	return out
 }
 
-func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueResponse {
+func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string, hiddenProps map[string]bool) IssueResponse {
 	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
 	return IssueResponse{
 		ID:            uuidToString(i.ID),
@@ -202,7 +210,7 @@ func openIssueRowToResponse(i db.ListOpenIssuesRow, issuePrefix string) IssueRes
 		CreatedAt:     timestampToString(i.CreatedAt),
 		UpdatedAt:     timestampToString(i.UpdatedAt),
 		Metadata:      parseIssueMetadata(i.Metadata),
-		Properties:    parseIssueProperties(i.Properties),
+		Properties:    withoutHiddenProperties(parseIssueProperties(i.Properties), hiddenProps),
 	}
 }
 
@@ -723,10 +731,11 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prefix := h.getIssuePrefix(ctx, wsUUID)
+	hiddenProps := h.hiddenPropertyIDsForViewer(r, wsUUID)
 	resp := make([]SearchIssueResponse, len(results))
 	for i, sr := range results {
 		sir := SearchIssueResponse{
-			IssueResponse: issueToResponse(sr.issue, prefix),
+			IssueResponse: issueToResponse(sr.issue, prefix, hiddenProps),
 			MatchSource:   sr.matchSource,
 		}
 		// Always populate comment snippet when a matching comment exists
@@ -845,7 +854,7 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	propertiesFilter, ok := parsePropertiesFilterParam(w, r.URL.Query().Get("properties"))
+	propertiesFilter, ok := parsePropertiesFilterParam(w, r.URL.Query().Get("properties"), h.hiddenPropertyIDsForViewer(r, wsUUID))
 	if !ok {
 		return
 	}
@@ -889,9 +898,10 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 			ids[i] = issue.ID
 		}
 		labelsMap := h.labelsByIssue(ctx, wsUUID, ids)
+		hiddenProps := h.hiddenPropertyIDsForViewer(r, wsUUID)
 		resp := make([]IssueResponse, len(issues))
 		for i, issue := range issues {
-			resp[i] = openIssueRowToResponse(issue, prefix)
+			resp[i] = openIssueRowToResponse(issue, prefix, hiddenProps)
 			labels := labelsMap[resp[i].ID]
 			if labels == nil {
 				labels = []LabelResponse{}
@@ -1256,9 +1266,10 @@ LIMIT %s OFFSET %s`, whereSql, orderBy, limitRef, offsetRef)
 		ids[i] = issue.ID
 	}
 	labelsMap := h.labelsByIssue(ctx, wsUUID, ids)
+	hiddenProps := h.hiddenPropertyIDsForViewer(r, wsUUID)
 	resp := make([]IssueResponse, len(issues))
 	for i, issue := range issues {
-		resp[i] = issueListRowToResponse(issue, prefix)
+		resp[i] = issueListRowToResponse(issue, prefix, hiddenProps)
 		labels := labelsMap[resp[i].ID]
 		if labels == nil {
 			labels = []LabelResponse{}
@@ -1534,7 +1545,7 @@ func (h *Handler) ListGroupedIssues(w http.ResponseWriter, r *http.Request) {
 	} else if filter != nil {
 		where = append(where, fmt.Sprintf("i.metadata @> %s::jsonb", addArg(string(filter))))
 	}
-	if filter, ok := parsePropertiesFilterParam(w, r.URL.Query().Get("properties")); !ok {
+	if filter, ok := parsePropertiesFilterParam(w, r.URL.Query().Get("properties"), h.hiddenPropertyIDsForViewer(r, wsUUID)); !ok {
 		return
 	} else if filter != nil {
 		where = append(where, propertiesFilterPredicate(filter, addArg))
@@ -1831,6 +1842,7 @@ ORDER BY
 	}
 	labelsMap := h.labelsByIssue(ctx, wsUUID, ids)
 	prefix := h.getIssuePrefix(ctx, wsUUID)
+	hiddenProps := h.hiddenPropertyIDsForViewer(r, wsUUID)
 
 	groups := []IssueAssigneeGroupResponse{}
 	groupIndex := map[string]int{}
@@ -1849,7 +1861,7 @@ ORDER BY
 			})
 		}
 
-		issue := issueListRowToResponse(row.ListIssuesRow, prefix)
+		issue := issueListRowToResponse(row.ListIssuesRow, prefix, hiddenProps)
 		labels := labelsMap[issue.ID]
 		if labels == nil {
 			labels = []LabelResponse{}
@@ -1868,7 +1880,7 @@ func (h *Handler) GetIssue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
-	resp := issueToResponse(issue, prefix)
+	resp := issueToResponse(issue, prefix, h.hiddenPropertyIDsForViewer(r, issue.WorkspaceID))
 	detailLabels := h.labelsByIssue(r.Context(), issue.WorkspaceID, []pgtype.UUID{issue.ID})[uuidToString(issue.ID)]
 	if detailLabels == nil {
 		detailLabels = []LabelResponse{}
@@ -1917,9 +1929,10 @@ func (h *Handler) ListChildIssues(w http.ResponseWriter, r *http.Request) {
 		ids[i] = child.ID
 	}
 	labelsMap := h.labelsByIssue(r.Context(), issue.WorkspaceID, ids)
+	hiddenProps := h.hiddenPropertyIDsForViewer(r, issue.WorkspaceID)
 	resp := make([]IssueResponse, len(children))
 	for i, child := range children {
-		resp[i] = issueToResponse(child, prefix)
+		resp[i] = issueToResponse(child, prefix, hiddenProps)
 		labels := labelsMap[resp[i].ID]
 		if labels == nil {
 			labels = []LabelResponse{}
@@ -1996,9 +2009,10 @@ func (h *Handler) ListChildrenByParents(w http.ResponseWriter, r *http.Request) 
 		ids[i] = child.ID
 	}
 	labelsMap := h.labelsByIssue(r.Context(), wsUUID, ids)
+	hiddenProps := h.hiddenPropertyIDsForViewer(r, wsUUID)
 	resp := make([]IssueResponse, len(children))
 	for i, child := range children {
-		resp[i] = issueToResponse(child, prefix)
+		resp[i] = issueToResponse(child, prefix, hiddenProps)
 		labels := labelsMap[resp[i].ID]
 		if labels == nil {
 			labels = []LabelResponse{}
@@ -2625,7 +2639,8 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		AnalyticsAgentID: analyticsAgentID,
 		Platform:         func() string { p, _, _ := middleware.ClientMetadataFromContext(r.Context()); return p }(),
 		BroadcastPayload: func(issue db.Issue, atts []db.Attachment, labels []db.IssueLabel) map[string]any {
-			payload := issueToResponse(issue, prefix)
+			// Fans out to the whole workspace room: strip for everyone.
+			payload := issueToResponse(issue, prefix, h.hiddenPropertyIDs(r.Context(), issue.WorkspaceID))
 			payload.Attachments = buildAttachmentResponses(atts)
 			// Carry the authoritative label snapshot so every online client
 			// renders the new issue already labeled. Non-nil (even empty)
@@ -2639,7 +2654,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 
 	if errors.Is(err, service.ErrActiveDuplicate) {
 		dup := *res.DuplicateIssue
-		existing := issueToResponse(dup, h.getIssuePrefix(r.Context(), dup.WorkspaceID))
+		existing := issueToResponse(dup, h.getIssuePrefix(r.Context(), dup.WorkspaceID), h.hiddenPropertyIDsForViewer(r, dup.WorkspaceID))
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"code":  "active_duplicate_issue",
 			"error": duplicateIssueMessage(existing),
@@ -2668,7 +2683,7 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 	issue := res.Issue
 	slog.Info("issue created", append(logger.RequestAttrs(r), "issue_id", uuidToString(issue.ID), "title", issue.Title, "status", issue.Status, "workspace_id", workspaceID)...)
 
-	resp := issueToResponse(issue, prefix)
+	resp := issueToResponse(issue, prefix, h.hiddenPropertyIDsForViewer(r, issue.WorkspaceID))
 	resp.Attachments = buildAttachmentResponses(res.Attachments)
 	// Echo the authoritative labels attached in the create transaction. Always
 	// non-nil (empty slice when none) so a newer client can tell the backend
@@ -2903,7 +2918,11 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
-	resp := issueToResponse(issue, prefix)
+	// This object is both the HTTP response and the issue:updated broadcast
+	// payload, which fans out to the whole workspace — so hidden properties
+	// are stripped for everyone, staff included. Nothing is lost: property
+	// values are written through their own endpoint and read back per viewer.
+	resp := issueToResponse(issue, prefix, h.hiddenPropertyIDs(r.Context(), issue.WorkspaceID))
 	slog.Info("issue updated", append(logger.RequestAttrs(r), "issue_id", id, "workspace_id", workspaceID)...)
 
 	assigneeChanged := (req.AssigneeType != nil || req.AssigneeID != nil) &&
@@ -3491,7 +3510,8 @@ func (h *Handler) BatchUpdateIssues(w http.ResponseWriter, r *http.Request) {
 		}
 
 		prefix := h.getIssuePrefix(r.Context(), issue.WorkspaceID)
-		resp := issueToResponse(issue, prefix)
+		// Broadcast payload as well — see UpdateIssue.
+		resp := issueToResponse(issue, prefix, h.hiddenPropertyIDs(r.Context(), issue.WorkspaceID))
 		actorType, actorID := h.resolveActor(r, userID, workspaceID)
 
 		assigneeChanged := (req.Updates.AssigneeType != nil || req.Updates.AssigneeID != nil) &&

@@ -1734,7 +1734,9 @@ func (h *Handler) advanceIssueToDone(ctx context.Context, issue db.Issue, worksp
 	h.notifyParentOfChildDone(ctx, issue, updated)
 
 	prefix := h.getIssuePrefix(ctx, issue.WorkspaceID)
-	resp := issueToResponse(updated, prefix)
+	// Broadcast payload: fans out to the whole workspace, so hidden
+	// properties come out for everyone.
+	resp := issueToResponse(updated, prefix, h.hiddenPropertyIDs(ctx, issue.WorkspaceID))
 	h.publish(protocol.EventIssueUpdated, workspaceID, "system", "", map[string]any{
 		"issue":          resp,
 		"status_changed": true,

@@ -568,7 +568,7 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 			writeError(w, http.StatusBadRequest, "invalid filters.properties")
 			return issueTableSQL{}, false
 		}
-		compiled, ok := parsePropertiesFilterParam(w, string(raw))
+		compiled, ok := parsePropertiesFilterParam(w, string(raw), h.hiddenPropertyIDsForViewer(r, workspaceUUID))
 		if !ok {
 			return issueTableSQL{}, false
 		}

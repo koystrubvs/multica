@@ -348,6 +348,7 @@ type BusinessAgreement struct {
 	CreatedBy      pgtype.UUID        `json:"created_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	CapMode        string             `json:"cap_mode"`
 }
 
 type BusinessAuditEvent struct {
@@ -430,16 +431,18 @@ type BusinessBankTransaction struct {
 }
 
 type BusinessClient struct {
-	ID                    pgtype.UUID        `json:"id"`
-	BusinessID            pgtype.UUID        `json:"business_id"`
-	CanonicalName         string             `json:"canonical_name"`
-	Status                string             `json:"status"`
-	ManagerUserID         pgtype.UUID        `json:"manager_user_id"`
-	PrimaryPaymentChannel string             `json:"primary_payment_channel"`
-	Notes                 pgtype.Text        `json:"notes"`
-	ArchivedAt            pgtype.Timestamptz `json:"archived_at"`
-	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ID                       pgtype.UUID        `json:"id"`
+	BusinessID               pgtype.UUID        `json:"business_id"`
+	CanonicalName            string             `json:"canonical_name"`
+	Status                   string             `json:"status"`
+	ManagerUserID            pgtype.UUID        `json:"manager_user_id"`
+	PrimaryPaymentChannel    string             `json:"primary_payment_channel"`
+	Notes                    pgtype.Text        `json:"notes"`
+	ArchivedAt               pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	TransitCommissionPercent pgtype.Numeric     `json:"transit_commission_percent"`
+	TransitTaxPercent        pgtype.Numeric     `json:"transit_tax_percent"`
 }
 
 type BusinessClientAlias struct {
@@ -1315,6 +1318,7 @@ type IssueProperty struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	Icon        string             `json:"icon"`
+	Visibility  string             `json:"visibility"`
 }
 
 type IssuePullRequest struct {

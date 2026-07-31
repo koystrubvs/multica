@@ -182,6 +182,15 @@ END, ''))`,
 			writeIssueTableUnsupportedGroup(w, "property_archived", "The grouped property is archived.")
 			return resolvedIssueTableGroup{}, false
 		}
+		// An owner-only property is "not found" for everyone else: grouping by
+		// it would spell out the hidden classification in the column headers.
+		// Reusing the existing not-found reason means the client already has UI
+		// for this state.
+		if property.Visibility == propertyVisibilityOwner &&
+			!h.canAccessHiddenProperties(r, util.UUIDToString(workspaceID)) {
+			writeIssueTableUnsupportedGroup(w, "property_not_found", "The grouped property no longer exists.")
+			return resolvedIssueTableGroup{}, false
+		}
 		propertyID := util.UUIDToString(property.ID)
 		quotedKey := "'" + propertyID + "'"
 		resolved := resolvedIssueTableGroup{

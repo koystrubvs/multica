@@ -217,6 +217,13 @@ func (h *Handler) issueTableFacetQuery(w http.ResponseWriter, r *http.Request, r
 			writeIssueTableUnsupportedGroup(w, "property_archived", "The faceted property is archived.")
 			return response, false
 		}
+		// Same as grouping: a facet over an owner-only property would publish
+		// the hidden classification as counts per option.
+		if property.Visibility == propertyVisibilityOwner &&
+			!h.canAccessHiddenProperties(r, util.UUIDToString(compiled.workspaceID)) {
+			writeIssueTableUnsupportedGroup(w, "property_not_found", "The faceted property no longer exists.")
+			return response, false
+		}
 		propertyKey := "'" + util.UUIDToString(property.ID) + "'"
 		switch property.Type {
 		case "select":

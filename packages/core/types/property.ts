@@ -56,6 +56,12 @@ export interface IssueProperty {
   archived: boolean;
   archived_at?: string | null;
   usage_count?: number;
+  /**
+   * "workspace" (anyone who can see the issue) or "owner" (billing staff and
+   * agents only). Optional: backends predating per-property visibility omit
+   * it, and a definition that reaches this client at all is one it may see.
+   */
+  visibility?: string;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +84,8 @@ export interface UpdatePropertyRequest {
   icon?: string;
   config?: IssuePropertyConfig;
   archived?: boolean;
+  /** "workspace" | "owner"; owner-only definitions are hidden from members. */
+  visibility?: string;
 }
 
 export interface ListPropertiesResponse {

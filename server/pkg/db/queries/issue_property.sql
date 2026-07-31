@@ -42,6 +42,7 @@ UPDATE issue_property SET
     description = COALESCE(sqlc.narg('description'), description),
     icon = COALESCE(sqlc.narg('icon'), icon),
     config = COALESCE(sqlc.narg('config'), config),
+    visibility = COALESCE(sqlc.narg('visibility'), visibility),
     archived_at = CASE WHEN sqlc.arg('archived_set')::bool THEN sqlc.narg('archived_at') ELSE archived_at END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2

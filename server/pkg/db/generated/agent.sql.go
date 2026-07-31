@@ -3749,7 +3749,7 @@ func (q *Queries) ListAllAgents(ctx context.Context, workspaceID pgtype.UUID) ([
 }
 
 const listAllAgentsAnyKind = `-- name: ListAllAgentsAnyKind :many
-SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier FROM agent
+SELECT id, workspace_id, name, avatar_url, runtime_mode, runtime_config, visibility, status, max_concurrent_tasks, owner_id, created_at, updated_at, description, runtime_id, instructions, archived_at, archived_by, custom_env, custom_args, mcp_config, model, thinking_level, isolated, composio_toolkit_allowlist, permission_mode, kind, system_key, disabled_runtime_skills, service_tier FROM agent
 WHERE workspace_id = $1
 ORDER BY created_at ASC
 `
@@ -3796,6 +3796,7 @@ func (q *Queries) ListAllAgentsAnyKind(ctx context.Context, workspaceID pgtype.U
 			&i.McpConfig,
 			&i.Model,
 			&i.ThinkingLevel,
+			&i.Isolated,
 			&i.ComposioToolkitAllowlist,
 			&i.PermissionMode,
 			&i.Kind,

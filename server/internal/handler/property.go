@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,8 +104,12 @@ type PropertyResponse struct {
 	Archived    bool           `json:"archived"`
 	ArchivedAt  *string        `json:"archived_at"`
 	UsageCount  int64          `json:"usage_count"`
-	CreatedAt   string         `json:"created_at"`
-	UpdatedAt   string         `json:"updated_at"`
+	// Visibility is "workspace" (everyone who can see the issue) or "owner"
+	// (billing staff and agents only). Only ever serialized to a caller who
+	// may already see the definition.
+	Visibility string `json:"visibility"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 func parsePropertyConfig(raw []byte) PropertyConfig {
@@ -130,6 +135,7 @@ func propertyToResponse(p db.IssueProperty, usageCount int64) PropertyResponse {
 		Position:    p.Position,
 		Archived:    p.ArchivedAt.Valid,
 		UsageCount:  usageCount,
+		Visibility:  p.Visibility,
 		CreatedAt:   timestampToString(p.CreatedAt),
 		UpdatedAt:   timestampToString(p.UpdatedAt),
 	}
@@ -151,6 +157,7 @@ func propertyListRowToResponse(row db.ListIssuePropertiesRow) PropertyResponse {
 		Config:      row.Config,
 		Position:    row.Position,
 		ArchivedAt:  row.ArchivedAt,
+		Visibility:  row.Visibility,
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
 	}, row.UsageCount)
@@ -170,7 +177,18 @@ type UpdatePropertyRequest struct {
 	Icon        *string         `json:"icon"`
 	Config      *PropertyConfig `json:"config"`
 	Archived    *bool           `json:"archived"`
+	Visibility  *string         `json:"visibility"`
 }
+
+// billingClassifierPropertyName is the definition the invoice pipeline matches
+// BY NAME: issueMarkedInternalSQL (business_internal.go) compares
+// lower(ip.name) against it to decide whether a task is internal, which the
+// sweep and period confirmation both act on.
+//
+// Renaming or archiving it therefore silently changes what clients get
+// invoiced — every internal task would start billing. Until the predicate
+// keys off the definition id instead of its name, the rename is refused.
+const billingClassifierPropertyName = "биллинг"
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -453,6 +471,81 @@ func parseIssueProperties(raw []byte) map[string]any {
 // its runtime owner's credentials, and without this check an admin's agent
 // could mass-create definitions (MUL-4463 decision: agents propose via
 // comments, humans confirm).
+// withoutHiddenProperties drops owner-only keys from an issue's value bag.
+// Returns the bag unchanged when there is nothing to hide, so the common path
+// allocates nothing.
+func withoutHiddenProperties(bag map[string]any, hidden map[string]bool) map[string]any {
+	if len(hidden) == 0 || len(bag) == 0 {
+		return bag
+	}
+	out := make(map[string]any, len(bag))
+	for k, v := range bag {
+		if hidden[k] {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// propertyVisibilityOwner marks a definition only billing staff and agents may
+// see or write. Everything else is "workspace" — visible to anyone who can see
+// the issue, which is what every pre-existing definition gets by default.
+const propertyVisibilityOwner = "owner"
+
+// canAccessHiddenProperties reports whether the caller may read and write
+// properties with visibility='owner'.
+//
+// AGENTS MUST PASS. The workspace context instructs every agent to fill
+// «Биллинг» when it closes a task; a role-only gate would block them silently
+// and every internal task would start landing in a client invoice. Note that a
+// role check alone would have let agents through by accident — resolveActor
+// reports "agent" for a task token while X-User-ID carries the runtime owner —
+// so the intent is stated here rather than left to that coincidence.
+func (h *Handler) canAccessHiddenProperties(r *http.Request, workspaceID string) bool {
+	if actorType, _ := h.resolveActor(r, requestUserID(r), workspaceID); actorType == "agent" {
+		return true
+	}
+	return h.callerIsBillingStaff(r, workspaceID)
+}
+
+// hiddenPropertyIDs returns the ids of owner-only definitions in the
+// workspace, or nil when there are none. Independent of the caller: use it for
+// broadcasts, which fan out to everyone.
+//
+// The catalog caps at 20 active definitions, so this is a small query; callers
+// in a loop must resolve it once and reuse the set.
+func (h *Handler) hiddenPropertyIDs(ctx context.Context, workspaceID pgtype.UUID) map[string]bool {
+	rows, err := h.Queries.ListIssueProperties(ctx, db.ListIssuePropertiesParams{
+		WorkspaceID:     workspaceID,
+		IncludeArchived: true,
+	})
+	if err != nil {
+		// Fail closed: an unreadable catalog must not publish hidden values.
+		slog.Warn("hiddenPropertyIDs: catalog unreadable, hiding nothing is not an option", "error", err)
+		return map[string]bool{}
+	}
+	var hidden map[string]bool
+	for _, row := range rows {
+		if row.Visibility == propertyVisibilityOwner {
+			if hidden == nil {
+				hidden = make(map[string]bool, 2)
+			}
+			hidden[uuidToString(row.ID)] = true
+		}
+	}
+	return hidden
+}
+
+// hiddenPropertyIDsForViewer is hiddenPropertyIDs scoped to one caller: nil
+// (nothing to hide) when the caller may see owner-only properties.
+func (h *Handler) hiddenPropertyIDsForViewer(r *http.Request, workspaceID pgtype.UUID) map[string]bool {
+	if h.canAccessHiddenProperties(r, uuidToString(workspaceID)) {
+		return nil
+	}
+	return h.hiddenPropertyIDs(r.Context(), workspaceID)
+}
+
 func (h *Handler) requirePropertyAdmin(w http.ResponseWriter, r *http.Request) (workspaceID, userID string, ok bool) {
 	workspaceID = h.resolveWorkspaceID(r)
 	userID, ok = requireUserID(w, r)
@@ -485,9 +578,16 @@ func (h *Handler) ListProperties(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list properties")
 		return
 	}
-	resp := make([]PropertyResponse, len(rows))
-	for i, row := range rows {
-		resp[i] = propertyListRowToResponse(row)
+	// Owner-only definitions are dropped from the catalog for everyone else.
+	// The catalog is what the UI iterates to render filters, columns and the
+	// issue sidebar, so this is what actually removes the property from view.
+	visible := h.canAccessHiddenProperties(r, workspaceID)
+	resp := make([]PropertyResponse, 0, len(rows))
+	for _, row := range rows {
+		if !visible && row.Visibility == propertyVisibilityOwner {
+			continue
+		}
+		resp = append(resp, propertyListRowToResponse(row))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"properties": resp, "total": len(resp)})
 }
@@ -510,6 +610,11 @@ func (h *Handler) GetProperty(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Warn("GetIssueProperty failed", append(logger.RequestAttrs(r), "error", err)...)
 		writeError(w, http.StatusInternalServerError, "failed to get property")
+		return
+	}
+	// 404, not 403: an employee must not learn that a hidden definition exists.
+	if property.Visibility == propertyVisibilityOwner && !h.canAccessHiddenProperties(r, workspaceID) {
+		writeError(w, http.StatusNotFound, "property not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, propertyToResponse(property, 0))
@@ -633,13 +738,27 @@ func (h *Handler) UpdateProperty(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
+		isBillingClassifier := strings.EqualFold(strings.TrimSpace(existing.Name), billingClassifierPropertyName)
+
 		params := db.UpdateIssuePropertyParams{ID: idUUID, WorkspaceID: wsUUID}
 		if req.Name != nil {
 			name, err := validatePropertyName(*req.Name)
 			if err != nil {
 				return fail(http.StatusBadRequest, err.Error())
 			}
+			if isBillingClassifier && !strings.EqualFold(strings.TrimSpace(name), billingClassifierPropertyName) {
+				return fail(http.StatusBadRequest,
+					"this property drives client invoicing and is matched by name; renaming it would start billing internal work")
+			}
 			params.Name = pgtype.Text{String: name, Valid: true}
+		}
+		if req.Visibility != nil {
+			switch *req.Visibility {
+			case "workspace", propertyVisibilityOwner:
+				params.Visibility = pgtype.Text{String: *req.Visibility, Valid: true}
+			default:
+				return fail(http.StatusBadRequest, `visibility must be "workspace" or "owner"`)
+			}
 		}
 		if req.Description != nil {
 			if utf8.RuneCountInString(*req.Description) > maxPropertyDescriptionLen {
@@ -675,6 +794,10 @@ func (h *Handler) UpdateProperty(w http.ResponseWriter, r *http.Request) {
 			params.Config = configJSON
 		}
 		if req.Archived != nil {
+			if *req.Archived && isBillingClassifier {
+				return fail(http.StatusBadRequest,
+					"this property drives client invoicing; archiving it would stop tasks from being marked internal")
+			}
 			params.ArchivedSet = true
 			if *req.Archived {
 				params.ArchivedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
@@ -763,6 +886,15 @@ func (h *Handler) SetIssueProperty(w http.ResponseWriter, r *http.Request) {
 			}
 			return err
 		}
+		// Hiding a definition from the catalog does not protect it: the UUID is
+		// stable and sits in every historical payload. Without this gate an
+		// employee could still PUT «Биллинг» and decide whether their own work
+		// gets invoiced — the sweep skips issues marked internal, and period
+		// confirmation voids charges already collected on them.
+		if def.Visibility == propertyVisibilityOwner &&
+			!h.canAccessHiddenProperties(r, uuidToString(issue.WorkspaceID)) {
+			return fail(http.StatusNotFound, "property not found")
+		}
 		if def.ArchivedAt.Valid {
 			return fail(http.StatusBadRequest, fmt.Sprintf("property %q is archived and cannot receive new values", def.Name))
 		}
@@ -797,11 +929,16 @@ func (h *Handler) SetIssueProperty(w http.ResponseWriter, r *http.Request) {
 	workspaceID := uuidToString(updated.WorkspaceID)
 	actorType, actorID := h.resolveActor(r, userID, workspaceID)
 	properties := parseIssueProperties(updated.Properties)
+	// The broadcast goes to the whole workspace room, so it cannot be shaped
+	// per viewer: hidden keys are stripped for everyone. Staff clients refetch
+	// the issue and get the full bag over the authenticated read.
 	h.publish(protocol.EventIssuePropertiesChanged, workspaceID, actorType, actorID, map[string]any{
 		"issue_id":   uuidToString(updated.ID),
-		"properties": properties,
+		"properties": withoutHiddenProperties(properties, h.hiddenPropertyIDs(r.Context(), updated.WorkspaceID)),
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"properties": properties})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"properties": withoutHiddenProperties(properties, h.hiddenPropertyIDsForViewer(r, updated.WorkspaceID)),
+	})
 }
 
 func (h *Handler) DeleteIssueProperty(w http.ResponseWriter, r *http.Request) {
@@ -823,13 +960,21 @@ func (h *Handler) DeleteIssueProperty(w http.ResponseWriter, r *http.Request) {
 	// Deleting a value is allowed even for archived definitions — cleanup
 	// must never be blocked. Unknown property ids only need to belong to the
 	// workspace; `properties - key` is a no-op when the key is absent.
-	if _, err := h.Queries.GetIssueProperty(r.Context(), db.GetIssuePropertyParams{ID: propertyID, WorkspaceID: issue.WorkspaceID}); err != nil {
+	def, err := h.Queries.GetIssueProperty(r.Context(), db.GetIssuePropertyParams{ID: propertyID, WorkspaceID: issue.WorkspaceID})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "property not found")
 			return
 		}
 		slog.Warn("GetIssueProperty in DeleteIssueProperty failed", append(logger.RequestAttrs(r), "error", err)...)
 		writeError(w, http.StatusInternalServerError, "failed to unset property")
+		return
+	}
+	// Clearing a hidden property is the same act as setting it: removing the
+	// «внутренняя» mark puts the task back into the client's invoice.
+	if def.Visibility == propertyVisibilityOwner &&
+		!h.canAccessHiddenProperties(r, uuidToString(issue.WorkspaceID)) {
+		writeError(w, http.StatusNotFound, "property not found")
 		return
 	}
 
@@ -847,11 +992,16 @@ func (h *Handler) DeleteIssueProperty(w http.ResponseWriter, r *http.Request) {
 	workspaceID := uuidToString(updated.WorkspaceID)
 	actorType, actorID := h.resolveActor(r, userID, workspaceID)
 	properties := parseIssueProperties(updated.Properties)
+	// The broadcast goes to the whole workspace room, so it cannot be shaped
+	// per viewer: hidden keys are stripped for everyone. Staff clients refetch
+	// the issue and get the full bag over the authenticated read.
 	h.publish(protocol.EventIssuePropertiesChanged, workspaceID, actorType, actorID, map[string]any{
 		"issue_id":   uuidToString(updated.ID),
-		"properties": properties,
+		"properties": withoutHiddenProperties(properties, h.hiddenPropertyIDs(r.Context(), updated.WorkspaceID)),
 	})
-	writeJSON(w, http.StatusOK, map[string]any{"properties": properties})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"properties": withoutHiddenProperties(properties, h.hiddenPropertyIDsForViewer(r, updated.WorkspaceID)),
+	})
 }
 
 // withPropertyLock runs fn inside a transaction holding the advisory lock
@@ -898,7 +1048,13 @@ const (
 // forms that can't match are simply never satisfied.
 //
 // Returns (nil, true) when the parameter is empty.
-func parsePropertiesFilterParam(w http.ResponseWriter, raw string) ([][]json.RawMessage, bool) {
+// hidden carries the owner-only definition ids the caller may not use; pass
+// nil when the caller may see everything. Filtering by a hidden definition is
+// an inference channel — "show me issues where «Биллинг» = внутренняя" answers
+// the question the catalog gate withholds — so those groups are dropped
+// silently rather than rejected: an error code would confirm the definition
+// exists.
+func parsePropertiesFilterParam(w http.ResponseWriter, raw string, hidden map[string]bool) ([][]json.RawMessage, bool) {
 	if raw == "" {
 		return nil, true
 	}
@@ -917,6 +1073,9 @@ func parsePropertiesFilterParam(w http.ResponseWriter, raw string) ([][]json.Raw
 		if _, err := uuid.Parse(definitionID); err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("properties filter key %q is not a definition id", definitionID))
 			return nil, false
+		}
+		if hidden[definitionID] {
+			continue
 		}
 		if len(values) == 0 {
 			continue
@@ -1014,8 +1173,13 @@ func (h *Handler) propertySortExpr(r *http.Request, workspaceID string, sortValu
 	}
 	// Archived definitions degrade to position order like unknown ones —
 	// their values are hidden from the UI, so sorting by them would order
-	// the list by invisible data.
+	// the list by invisible data. An owner-only definition degrades the same
+	// way for everyone else: ordering by a hidden property leaks it by
+	// arrangement, which is exactly the data the gate withholds.
 	if def.ArchivedAt.Valid {
+		return "", true, nil
+	}
+	if def.Visibility == propertyVisibilityOwner && !h.canAccessHiddenProperties(r, workspaceID) {
 		return "", true, nil
 	}
 	// uuidToString re-serializes the parsed UUID: hex and dashes only, safe
