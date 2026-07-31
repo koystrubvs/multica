@@ -64,8 +64,7 @@ func (h *Handler) ListContractorBillingConfigs(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	if _, err := h.getWorkspaceMember(r.Context(), requestUserID(r), wsID); err != nil {
-		writeError(w, http.StatusForbidden, "workspace membership required")
+	if !h.requireBillingStaff(w, r, wsID) {
 		return
 	}
 	rows, err := h.Queries.ListClientBillingContractorConfigs(r.Context(), wsUUID)
@@ -170,8 +169,7 @@ func (h *Handler) ListInvoiceableContractorGroups(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	if _, err := h.getWorkspaceMember(r.Context(), requestUserID(r), wsID); err != nil {
-		writeError(w, http.StatusForbidden, "workspace membership required")
+	if !h.requireBillingStaff(w, r, wsID) {
 		return
 	}
 	rows, err := h.Queries.ListInvoiceableClosedPeriodsInWorkspace(r.Context(), wsUUID)

@@ -19,6 +19,8 @@ import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
 import { Textarea } from "@multica/ui/components/ui/textarea";
 import { api } from "@multica/core/api";
+import { useWorkspaceId } from "@multica/core/hooks";
+import { useCurrentMember } from "@multica/core/permissions";
 import { issueKeys, issueBillingCostOptions } from "@multica/core/issues/queries";
 import type { ClientBillingChargeStatus } from "@multica/core/types";
 import { PropRow } from "../../common/prop-row";
@@ -57,7 +59,17 @@ export function IssueBillingSection({ issueId }: { issueId: string }) {
   const [disputeFormOpen, setDisputeFormOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const qc = useQueryClient();
-  const { data: cost } = useQuery(issueBillingCostOptions(issueId));
+  const wsId = useWorkspaceId();
+  const { role } = useCurrentMember(wsId);
+  // Money is owner/admin. An employee keeps the Token usage section above this
+  // one — token counts are a different endpoint and stay open to members. The
+  // query is skipped rather than merely hidden: the backend answers 403 and
+  // there is nothing here to render.
+  const isBillingStaff = role === "owner" || role === "admin";
+  const { data: cost } = useQuery({
+    ...issueBillingCostOptions(issueId),
+    enabled: isBillingStaff,
+  });
 
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: issueKeys.billingCost(issueId) });
@@ -91,6 +103,7 @@ export function IssueBillingSection({ issueId }: { issueId: string }) {
     onError: () => toast.error(t(($) => $.detail.billing_action_failed_toast)),
   });
 
+  if (!isBillingStaff) return null;
   // Nothing to show: billing off AND the issue never burned a token.
   if (!cost || (!cost.billing_enabled && cost.total_tokens === 0)) return null;
 

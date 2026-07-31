@@ -3988,19 +3988,26 @@ func (h *Handler) GetIssueUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	out := map[string]any{
 		"total_input_tokens":       row.TotalInputTokens,
 		"total_output_tokens":      row.TotalOutputTokens,
 		"total_cache_read_tokens":  row.TotalCacheReadTokens,
 		"total_cache_write_tokens": row.TotalCacheWriteTokens,
+		"task_count":               row.TaskCount,
+	}
+	// Token counts are open to every member — the issue sidebar shows them.
+	// The USD cost is money and follows the billing role: publishing it to an
+	// employee alongside a single invoice they legitimately saw would hand
+	// them the agency markup. See callerIsBillingStaff.
+	if h.callerIsBillingStaff(r, uuidToString(issue.WorkspaceID)) {
 		// Cost split — see the note on DashboardUsageDailyResponse.
-		"cost_usd_ticks":              row.TotalCostUsdTicks,
-		"uncosted_input_tokens":       row.UncostedInputTokens,
-		"uncosted_output_tokens":      row.UncostedOutputTokens,
-		"uncosted_cache_read_tokens":  row.UncostedCacheReadTokens,
-		"uncosted_cache_write_tokens": row.UncostedCacheWriteTokens,
-		"task_count":                  row.TaskCount,
-	})
+		out["cost_usd_ticks"] = row.TotalCostUsdTicks
+		out["uncosted_input_tokens"] = row.UncostedInputTokens
+		out["uncosted_output_tokens"] = row.UncostedOutputTokens
+		out["uncosted_cache_read_tokens"] = row.UncostedCacheReadTokens
+		out["uncosted_cache_write_tokens"] = row.UncostedCacheWriteTokens
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 const (

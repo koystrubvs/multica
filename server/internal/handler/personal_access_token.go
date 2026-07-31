@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/multica-ai/multica/server/internal/auth"
+	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -26,6 +28,42 @@ const PATRenewThreshold = 7 * 24 * time.Hour
 // (90 days) so renewed tokens converge on the same lifetime as freshly minted
 // ones — no second-class renewed tokens.
 const PATRenewExtension = 90 * 24 * time.Hour
+
+// maxNonStaffPATDays caps the lifetime of a personal access token minted by
+// someone who is neither owner nor admin in any of their workspaces. Renewal
+// (PATRenewExtension) keeps an actively used token alive, so the cap costs a
+// working employee nothing and bounds a forgotten one.
+const maxNonStaffPATDays = 90
+
+// userIsStaffAnywhere reports whether the user is owner or admin in at least
+// one of their workspaces.
+//
+// PATs are user-scoped, not workspace-scoped, so there is no single role to
+// read here — the token would work in every workspace the user belongs to.
+// The cap therefore keys off "is this person staff anywhere", which in
+// practice separates the operators (whose tokens run daemons and agents) from
+// employees. On any error the answer is false: a shorter token is the safe
+// failure.
+func (h *Handler) userIsStaffAnywhere(ctx context.Context, userID string) bool {
+	userUUID, err := util.ParseUUID(userID)
+	if err != nil {
+		return false
+	}
+	workspaces, err := h.Queries.ListWorkspaces(ctx, userUUID)
+	if err != nil {
+		return false
+	}
+	for _, ws := range workspaces {
+		member, err := h.getWorkspaceMember(ctx, userID, uuidToString(ws.ID))
+		if err != nil {
+			continue
+		}
+		if member.Role == "owner" || member.Role == "admin" {
+			return true
+		}
+	}
+	return false
+}
 
 type PersonalAccessTokenResponse struct {
 	ID         string  `json:"id"`
@@ -79,10 +117,22 @@ func (h *Handler) CreatePersonalAccessToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var expiresAt pgtype.Timestamptz
+	days := 0
 	if req.ExpiresInDays != nil && *req.ExpiresInDays > 0 {
+		days = *req.ExpiresInDays
+	}
+	// Employees get a bounded token. An unbounded PAT outlives employment:
+	// the member row can be deleted while the token keeps working, because
+	// PATs are scoped to the USER, not to a workspace. Owners and admins keep
+	// unbounded tokens — the server daemon and the billing agent authenticate
+	// with one, and expiring those silently takes the agent fleet down.
+	if !h.userIsStaffAnywhere(r.Context(), userID) && (days == 0 || days > maxNonStaffPATDays) {
+		days = maxNonStaffPATDays
+	}
+	var expiresAt pgtype.Timestamptz
+	if days > 0 {
 		expiresAt = pgtype.Timestamptz{
-			Time:  time.Now().Add(time.Duration(*req.ExpiresInDays) * 24 * time.Hour),
+			Time:  time.Now().Add(time.Duration(days) * 24 * time.Hour),
 			Valid: true,
 		}
 	}

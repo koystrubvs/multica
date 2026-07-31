@@ -572,12 +572,15 @@ export function useIssueSurfaceController({
   }, [effectiveGrouping, effectiveViewMode]);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const { data: workspaceMembers = [] } = useQuery(memberListOptions(wsId));
-  const isWorkspaceOwner = useMemo(() => {
+  // Money on the board follows the billing role: owner and admin. The server
+  // enforces the same pair on /api/issues/table/cost-totals — this only avoids
+  // firing a request that would 403.
+  const isBillingStaff = useMemo(() => {
     if (!currentUserId) return false;
-    return (
-      workspaceMembers.find((member) => member.user_id === currentUserId)
-        ?.role === "owner"
-    );
+    const role = workspaceMembers.find(
+      (member) => member.user_id === currentUserId,
+    )?.role;
+    return role === "owner" || role === "admin";
   }, [workspaceMembers, currentUserId]);
   const costTotalsQuery = useQuery(
     issueCostTotalsOptions(
@@ -587,7 +590,7 @@ export function useIssueSurfaceController({
       // a filtered-out status without a price.
       costQuerySpec,
       costTotalsGroup ?? { kind: "status" },
-      isWorkspaceOwner && costTotalsGroup !== null,
+      isBillingStaff && costTotalsGroup !== null,
     ),
   );
   const costTotals = useMemo(() => {

@@ -1483,7 +1483,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// Dashboard — workspace-wide token + run-time rollups for the
 			// "/{slug}/dashboard" page. Optional ?project_id filter scopes
 			// the rollup to a single project.
+			//
+			// Owner/admin only: these rollups carry cost_usd_ticks and cover
+			// the WHOLE workspace, including projects an employee is not on,
+			// so they are both a money surface and a visibility hole. The
+			// Usage page is hidden from ordinary members accordingly.
 			r.Route("/api/dashboard", func(r chi.Router) {
+				r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
 				r.Get("/usage/daily", h.GetDashboardUsageDaily)
 				r.Get("/usage/by-agent", h.GetDashboardUsageByAgent)
 				r.Get("/agent-runtime", h.GetDashboardAgentRunTime)
@@ -1501,9 +1507,11 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/", h.ListAgentRuntimes)
 				r.Route("/{runtimeId}", func(r chi.Router) {
 					r.Patch("/", h.UpdateAgentRuntime)
-					r.Get("/usage", h.GetRuntimeUsage)
-					r.Get("/usage/by-agent", h.GetRuntimeUsageByAgent)
-					r.Get("/usage/by-hour", h.GetRuntimeUsageByHour)
+					// Same reasoning as /api/dashboard: runtime rollups are
+					// workspace-wide and carry USD cost.
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Get("/usage", h.GetRuntimeUsage)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Get("/usage/by-agent", h.GetRuntimeUsageByAgent)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Get("/usage/by-hour", h.GetRuntimeUsageByHour)
 					r.Get("/activity", h.GetRuntimeTaskActivity)
 					r.Post("/update", h.InitiateUpdate)
 					r.Get("/update/{updateId}", h.GetUpdate)

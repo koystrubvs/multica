@@ -157,20 +157,60 @@ func (h *Handler) latestFxRubPerUsd(ctx context.Context) float64 {
 // demand and at period close.
 
 // requireBillingEditor gates billing mutations (config writes, charge
-// confirm/void/adjust) to real workspace staff: any member except guests.
+// confirm/void/adjust) to owner and admin.
+//
+// It used to admit "any member except guests", which was written before the
+// agency had employees in the workspace: ordinary members could edit the
+// markup, close periods and issue real invoices in Elba. Money now follows the
+// role — see callerIsBillingStaff.
+//
 // Returns the acting user's UUID, or ok=false after writing the error.
 func (h *Handler) requireBillingEditor(w http.ResponseWriter, r *http.Request, workspaceID string) (pgtype.UUID, bool) {
-	userID := requestUserID(r)
-	member, err := h.getWorkspaceMember(r.Context(), userID, workspaceID)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "billing requires workspace membership")
-		return pgtype.UUID{}, false
-	}
-	if member.Role == "guest" {
-		writeError(w, http.StatusForbidden, "guests cannot manage billing")
+	member, ok := h.requireBillingStaffMember(w, r, workspaceID)
+	if !ok {
 		return pgtype.UUID{}, false
 	}
 	return member.UserID, true
+}
+
+// callerIsBillingStaff reports whether the requester may see money: rouble
+// prices, the agency markup, charges, invoices, and raw USD compute cost.
+// Owner and admin qualify; ordinary members and guests do not.
+//
+// Money is gated on the ROLE, while project visibility is gated separately on
+// the member's project scope — two independent axes on purpose. An admin
+// restricted to a few projects still sees agency-wide money, so `admin` is
+// handed out deliberately, not as a seniority badge.
+//
+// The role is resolved from requestUserID, i.e. the server-set X-User-ID
+// header. For a task token that is the runtime OWNER, so an agent dispatched
+// by an ordinary member would pass this check — the RequireHumanActor
+// middleware on the billing routes is what stops that, not this function.
+func (h *Handler) callerIsBillingStaff(r *http.Request, workspaceID string) bool {
+	member, err := h.getWorkspaceMember(r.Context(), requestUserID(r), workspaceID)
+	return err == nil && (member.Role == "owner" || member.Role == "admin")
+}
+
+// requireBillingStaffMember is callerIsBillingStaff plus the 403, returning the
+// resolved member for handlers that need the actor id.
+func (h *Handler) requireBillingStaffMember(w http.ResponseWriter, r *http.Request, workspaceID string) (db.Member, bool) {
+	member, err := h.getWorkspaceMember(r.Context(), requestUserID(r), workspaceID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "billing requires workspace membership")
+		return db.Member{}, false
+	}
+	if member.Role != "owner" && member.Role != "admin" {
+		writeError(w, http.StatusForbidden, "billing requires owner or admin role")
+		return db.Member{}, false
+	}
+	return member, true
+}
+
+// requireBillingStaff is the void-returning form for handlers that only need
+// the gate.
+func (h *Handler) requireBillingStaff(w http.ResponseWriter, r *http.Request, workspaceID string) bool {
+	_, ok := h.requireBillingStaffMember(w, r, workspaceID)
+	return ok
 }
 
 // --- JSON shaping ---
@@ -264,14 +304,25 @@ func (h *Handler) billingConfigJSON(ctx context.Context, cfg db.GetClientBilling
 }
 
 // loadProjectForBilling resolves {id} -> project within the caller's
-// workspace, mirroring GetProject's access model.
+// workspace and gates the caller to billing staff (owner/admin).
+//
+// The gate lives here rather than in each handler because every one of this
+// function's callers is a money endpoint — project billing config, periods,
+// sweeps, disputes, contractor wiring. Reads were previously ungated, so any
+// member could read the agency markup and the Elba contractor of any project.
+// A 403 (not 404) is correct: the member can legitimately see the project,
+// they just may not see its money.
 func (h *Handler) loadProjectForBilling(w http.ResponseWriter, r *http.Request) (db.Project, bool) {
 	idUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "id"), "project id")
 	if !ok {
 		return db.Project{}, false
 	}
-	wsUUID, ok := parseUUIDOrBadRequest(w, h.resolveWorkspaceID(r), "workspace id")
+	workspaceID := h.resolveWorkspaceID(r)
+	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace id")
 	if !ok {
+		return db.Project{}, false
+	}
+	if !h.requireBillingStaff(w, r, workspaceID) {
 		return db.Project{}, false
 	}
 	project, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
@@ -504,8 +555,7 @@ func (h *Handler) GetWorkspaceBillingConfig(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if _, err := h.getWorkspaceMember(r.Context(), requestUserID(r), wsID); err != nil {
-		writeError(w, http.StatusForbidden, "workspace membership required")
+	if !h.requireBillingStaff(w, r, wsID) {
 		return
 	}
 	out := clientBillingWorkspaceConfigJSON{
@@ -644,9 +694,13 @@ func (h *Handler) ListProjectBillingCharges(w http.ResponseWriter, r *http.Reque
 // --- Issue billing charge ---
 
 // GetIssueBillingCharge returns the issue's price snapshot (404 when none).
+// Billing staff only — the snapshot is the client's price.
 func (h *Handler) GetIssueBillingCharge(w http.ResponseWriter, r *http.Request) {
 	issue, ok := h.loadIssueForUser(w, r, chi.URLParam(r, "id"))
 	if !ok {
+		return
+	}
+	if !h.requireBillingStaff(w, r, uuidToString(issue.WorkspaceID)) {
 		return
 	}
 	charge, err := h.Queries.GetClientBillingChargeByIssue(r.Context(), issue.ID)

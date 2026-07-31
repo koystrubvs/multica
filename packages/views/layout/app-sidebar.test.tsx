@@ -1,10 +1,15 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@multica/core/api";
 import { AppSidebar } from "./app-sidebar";
 
-const { appForeground, chatSessions, chatStore, detail, deletePin, featureFlags, inboxItems, navigation, pins, summary, workspaces } = vi.hoisted(() => ({
+const { appForeground, chatSessions, chatStore, detail, deletePin, featureFlags, inboxItems, members, navigation, pins, summary, workspaces } = vi.hoisted(() => ({
   appForeground: { current: true },
+  // useAuthStore is mocked to user-1, so this row is "me". Owner by default:
+  // the pre-existing suite asserts the full workspace nav.
+  members: {
+    current: [{ user_id: "user-1", role: "owner" }] as { user_id: string; role: string }[],
+  },
   chatSessions: { current: [] as { id?: string; unread_count?: number }[] },
   chatStore: { current: { activeSessionId: null as string | null, isOpen: false } },
   detail: { current: { isPending: false, isError: false, data: null as unknown, error: null as unknown } },
@@ -182,6 +187,9 @@ vi.mock("@multica/core/workspace/queries", () => ({
   myInvitationListOptions: () => ({ queryKey: ["invitations"] }),
   workspaceKeys: { myInvitations: () => ["invitations"] },
   workspaceListOptions: () => ({ queryKey: ["workspaces"] }),
+  // The nav hides the money destinations (Business, Usage) for anyone who is
+  // not owner/admin, and resolves that through useCurrentMember.
+  memberListOptions: () => ({ queryKey: ["members"] }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
@@ -192,6 +200,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
     if (queryKey[0] === "inbox" && queryKey[1] === "unread-summary") return { data: summary.current };
     if (queryKey[0] === "inbox") return { data: inboxItems.current };
     if (queryKey[0] === "workspaces") return { data: workspaces.current };
+    if (queryKey[0] === "members") return { data: members.current };
     if (queryKey[0] === "chat" && queryKey[2] === "sessions") return { data: chatSessions.current };
     return { data: [] };
   },
@@ -416,6 +425,11 @@ describe("business navigation", () => {
       business_dashboard: true,
     };
     navigation.current = { pathname: "/acme/issues" };
+    members.current = [{ user_id: "user-1", role: "owner" }];
+  });
+
+  afterEach(() => {
+    members.current = [{ user_id: "user-1", role: "owner" }];
   });
 
   it("shows Business immediately after Projects when the feature is enabled", () => {
@@ -439,5 +453,28 @@ describe("business navigation", () => {
     expect(
       container.querySelector('button[data-href="/acme/business"]'),
     ).toBeNull();
+  });
+
+  // Money destinations follow the billing role. An employee must not be
+  // offered Business (clients, invoices, receivables) or Usage (workspace-wide
+  // token + USD rollups over every project, including ones they are not on).
+  // The server refuses both regardless; this keeps the nav honest.
+  it.each(["member", "guest"])("hides Business and Usage from a %s", (role) => {
+    members.current = [{ user_id: "user-1", role }];
+    const { container } = render(<AppSidebar />);
+
+    expect(container.querySelector('button[data-href="/acme/business"]')).toBeNull();
+    expect(container.querySelector('button[data-href="/acme/usage"]')).toBeNull();
+    // The operational nav is untouched.
+    expect(container.querySelector('button[data-href="/acme/issues"]')).not.toBeNull();
+    expect(container.querySelector('button[data-href="/acme/projects"]')).not.toBeNull();
+  });
+
+  it.each(["owner", "admin"])("shows Business and Usage to an %s", (role) => {
+    members.current = [{ user_id: "user-1", role }];
+    const { container } = render(<AppSidebar />);
+
+    expect(container.querySelector('button[data-href="/acme/business"]')).not.toBeNull();
+    expect(container.querySelector('button[data-href="/acme/usage"]')).not.toBeNull();
   });
 });

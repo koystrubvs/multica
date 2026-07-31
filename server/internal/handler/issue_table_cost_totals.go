@@ -84,7 +84,9 @@ func (h *Handler) ListIssueCostTotals(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "database is unavailable")
 		return
 	}
-	if _, ok := h.requireWorkspaceRole(w, r, h.resolveWorkspaceID(r), "workspace not found", "owner"); !ok {
+	// Money follows the billing role: owner and admin. An ordinary member must
+	// not learn the agency markup from a board column sum.
+	if _, ok := h.requireWorkspaceRole(w, r, h.resolveWorkspaceID(r), "workspace not found", "owner", "admin"); !ok {
 		return
 	}
 	var request issueCostTotalsRequest

@@ -56,6 +56,7 @@ import {
   DropdownMenuTrigger,
 } from "@multica/ui/components/ui/dropdown-menu";
 import { useAuthStore } from "@multica/core/auth";
+import { useCurrentMember } from "@multica/core/permissions";
 import { useCurrentWorkspace, useWorkspacePaths, paths } from "@multica/core/paths";
 import { workspaceListOptions, myInvitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
@@ -370,6 +371,8 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   );
 
   const wsId = workspace?.id;
+  const { role: currentRole } = useCurrentMember(wsId ?? "");
+  const isBillingStaff = currentRole === "owner" || currentRole === "admin";
   const { data: inboxItems = EMPTY_INBOX } = useQuery({
     queryKey: wsId ? inboxKeys.list(wsId) : ["inbox", "disabled"],
     queryFn: () => api.listInbox(),
@@ -746,6 +749,14 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
               <SidebarMenu className="gap-0.5">
                 {workspaceNav.map((item) => {
                   if (item.key === "business" && !businessEnabled) return null;
+                  // Business is the money module; Usage is the workspace-wide
+                  // token + USD rollup and covers every project, including
+                  // ones an employee is not on. Both are owner/admin, and the
+                  // backend refuses them for anyone else — this only keeps the
+                  // sidebar from advertising a destination that 403s.
+                  if ((item.key === "business" || item.key === "usage") && !isBillingStaff) {
+                    return null;
+                  }
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
                   const isActive = !isActivePinnedRoute && isNavActive(pathname, href);

@@ -78,6 +78,25 @@ func (h *Handler) workspaceToResponse(w db.Workspace) WorkspaceResponse {
 	}
 }
 
+// redactWorkspaceForNonStaff blanks the workspace context for anyone who is
+// not owner/admin.
+//
+// The context is a free-form playbook every agent is fed, and in this
+// deployment it is the BILLING playbook: which property marks a task
+// internal, what counts as client work, how to report money. Hiding the
+// billing property from employees is pointless while the instruction naming
+// it is readable by every member.
+//
+// Agents are unaffected — they receive the context server-side when a task is
+// built, not through this response.
+func (h *Handler) redactWorkspaceForNonStaff(r *http.Request, resp WorkspaceResponse) WorkspaceResponse {
+	if h.callerIsBillingStaff(r, resp.ID) {
+		return resp
+	}
+	resp.Context = nil
+	return resp
+}
+
 type MemberResponse struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
@@ -110,7 +129,7 @@ func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]WorkspaceResponse, len(workspaces))
 	for i, ws := range workspaces {
-		resp[i] = h.workspaceToResponse(ws)
+		resp[i] = h.redactWorkspaceForNonStaff(r, h.workspaceToResponse(ws))
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -128,7 +147,7 @@ func (h *Handler) GetWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, h.workspaceToResponse(ws))
+	writeJSON(w, http.StatusOK, h.redactWorkspaceForNonStaff(r, h.workspaceToResponse(ws)))
 }
 
 type CreateWorkspaceRequest struct {

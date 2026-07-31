@@ -9,6 +9,7 @@ import { copyText } from "@multica/ui/lib/clipboard";
 import { toast } from "sonner";
 import type { ProjectStatus, ProjectPriority } from "@multica/core/types";
 import { useAuthStore } from "@multica/core/auth";
+import { useCurrentMember } from "@multica/core/permissions";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import { useUpdateProject, useDeleteProject } from "@multica/core/projects/mutations";
 import { pinListOptions } from "@multica/core/pins";
@@ -120,6 +121,8 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const wsPaths = useWorkspacePaths();
   const router = useNavigation();
   const userId = useAuthStore((s) => s.user?.id);
+  const { role: currentRole } = useCurrentMember(wsId);
+  const isBillingStaff = currentRole === "owner" || currentRole === "admin";
   const { data: project, isLoading } = useQuery(projectDetailOptions(wsId, projectId));
   const recordRecentContext = useRecentContextStore((s) => s.recordVisit);
   useEffect(() => {
@@ -721,8 +724,10 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       <ProjectResourcesSection projectId={projectId} />
       <SitepingIntegrationSection projectId={projectId} />
 
-      {/* Agency billing config (fork) */}
-      <ProjectBillingSection projectId={projectId} />
+      {/* Agency billing config (fork) — owner/admin only. Every endpoint it
+          talks to is gated on the billing role server-side; mounting it for an
+          employee would render a section of failed requests. */}
+      {isBillingStaff && <ProjectBillingSection projectId={projectId} />}
     </div>
   );
 

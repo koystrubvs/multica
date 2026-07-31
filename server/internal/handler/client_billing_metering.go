@@ -200,6 +200,13 @@ func (h *Handler) GetIssueBillingCost(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Billing staff only. This payload is the money: rouble estimate, markup,
+	// FX, the charge ledger. Employees keep their per-issue TOKEN counts —
+	// those come from GET /api/issues/{id}/usage, which is a different
+	// endpoint and stays open to members.
+	if !h.requireBillingStaff(w, r, uuidToString(issue.WorkspaceID)) {
+		return
+	}
 	out := issueBillingCostJSON{Usage: []billingUsageLine{}, Charges: []issueBillingChargeSlimJSON{}}
 
 	var cfg db.GetClientBillingConfigRow
