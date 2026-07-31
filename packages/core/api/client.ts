@@ -2301,6 +2301,52 @@ export class ApiClient {
     });
   }
 
+  /** Bind a member of any role to a project (migration 311 generalized this
+   *  from the guest-only path). */
+  async setMemberProject(workspaceId: string, memberId: string, projectId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}/projects`, {
+      method: "PUT",
+      body: JSON.stringify({ project_id: projectId }),
+    });
+  }
+
+  /**
+   * Revoke a member's access to a project.
+   *
+   * With issues assigned to that person in that project and no `decision`,
+   * the server answers 409 carrying `assigned_issues` — the caller is expected
+   * to ask who takes the work over and retry with a decision, rather than
+   * silently orphaning it.
+   */
+  async unsetMemberProject(
+    workspaceId: string,
+    memberId: string,
+    projectId: string,
+    decision?: { onAssignedIssues: "unassign" | "reassign"; reassignTo?: string },
+  ): Promise<{ reassigned_issues?: number }> {
+    return this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}/projects`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        project_id: projectId,
+        ...(decision
+          ? { on_assigned_issues: decision.onAssignedIssues, reassign_to: decision.reassignTo ?? "" }
+          : {}),
+      }),
+    });
+  }
+
+  /** "workspace" (sees everything) or "projects" (sees only granted projects). */
+  async setMemberAccessScope(
+    workspaceId: string,
+    memberId: string,
+    accessScope: "workspace" | "projects",
+  ): Promise<MemberWithUser> {
+    return this.fetch(`/api/workspaces/${workspaceId}/members/${memberId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ access_scope: accessScope }),
+    });
+  }
+
   async leaveWorkspace(workspaceId: string): Promise<void> {
     await this.fetch(`/api/workspaces/${workspaceId}/leave`, {
       method: "POST",

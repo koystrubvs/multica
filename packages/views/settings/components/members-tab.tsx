@@ -42,7 +42,8 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { useCurrentWorkspace } from "@multica/core/paths";
 import { memberListOptions, invitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { projectListOptions } from "@multica/core/projects/queries";
-import { api } from "@multica/core/api";
+import { issueKeys } from "@multica/core/issues/queries";
+import { api, ApiError } from "@multica/core/api";
 import { useT } from "../../i18n";
 import { SettingsCard, SettingsSection, SettingsTab } from "./settings-layout";
 
@@ -93,6 +94,7 @@ function MemberRow({
   projects,
   onBindProject,
   onUnbindProject,
+  onAccessScopeChange,
 }: {
   member: MemberWithUser;
   canManage: boolean;
@@ -107,6 +109,7 @@ function MemberRow({
   projects: { id: string; title: string }[];
   onBindProject: (projectId: string) => void;
   onUnbindProject: (projectId: string) => void;
+  onAccessScopeChange: (scope: "workspace" | "projects") => void;
 }) {
   const { t } = useT("settings");
   const roleConfig = useRoleLabels();
@@ -115,13 +118,18 @@ function MemberRow({
   // MemberRole type omits "guest" (it is a runtime-only role, see roleConfig);
   // cast to compare, mirroring how roleConfig is indexed by member.role above.
   const isGuest = (member.role as string) === "guest";
-  const boundIds = new Set(member.guest_project_ids ?? []);
+  // Bindings are shown for anyone whose visibility is actually limited: guests
+  // always, and staff switched to access_scope="projects". An owner is never
+  // scoped — the workspace has to stay visible to someone.
+  const isScoped = isGuest || member.access_scope === "projects";
+  const canScopeAccess = canManage && !isGuest && member.role !== "owner";
+  const boundIds = new Set(member.project_ids ?? member.guest_project_ids ?? []);
   const boundProjects = projects.filter((p) => boundIds.has(p.id));
   const availableProjects = projects.filter((p) => !boundIds.has(p.id));
   const canEditRole = canManage && !isSelf && (member.role !== "owner" || canManageOwners);
   const canRemove = canManage && !isSelf && (member.role !== "owner" || canManageOwners);
   const isLastOwner = member.role === "owner" && ownerCount <= 1;
-  const showMenu = canEditRole || canRemove;
+  const showMenu = canEditRole || canRemove || canScopeAccess;
 
   return (
     <div className="flex items-center gap-3 px-4 py-3">
@@ -129,7 +137,7 @@ function MemberRow({
       <div className="min-w-0 flex-1">
         <div className="text-body font-medium truncate">{member.name}</div>
         <div className="text-caption text-muted-foreground truncate">{member.email}</div>
-        {isGuest && (
+        {isScoped && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {boundProjects.map((p) => (
               <Badge key={p.id} variant="outline" className="gap-1 text-xs font-normal">
@@ -231,7 +239,29 @@ function MemberRow({
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             )}
-            {canEditRole && canRemove && <DropdownMenuSeparator />}
+            {canScopeAccess && (
+              <>
+                {canEditRole && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  onClick={() => onAccessScopeChange(isScoped ? "workspace" : "projects")}
+                >
+                  <FolderGit2 className="h-3.5 w-3.5" />
+                  <div className="flex flex-col">
+                    <span>
+                      {isScoped
+                        ? t(($) => $.members.access_open_workspace)
+                        : t(($) => $.members.access_limit_projects)}
+                    </span>
+                    <span className="text-caption text-muted-foreground font-normal">
+                      {isScoped
+                        ? t(($) => $.members.access_open_workspace_hint)
+                        : t(($) => $.members.access_limit_projects_hint)}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </>
+            )}
+            {(canEditRole || canScopeAccess) && canRemove && <DropdownMenuSeparator />}
             {canRemove && (
               <DropdownMenuItem variant="destructive" onClick={onRemove}>
                 <UserMinus className="h-3.5 w-3.5" />
@@ -309,6 +339,14 @@ export function MembersTab() {
   const [inviteRole, setInviteRole] = useState<MemberRole>("member");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [memberActionId, setMemberActionId] = useState<string | null>(null);
+  // Set when a revoke came back 409: the work in that project has to be
+  // handed to someone (or explicitly left unassigned) before access goes.
+  const [handoff, setHandoff] = useState<{
+    memberId: string;
+    projectId: string;
+    assignedIssues: number;
+  } | null>(null);
+  const [handoffTo, setHandoffTo] = useState<string>("");
   const [invitationActionId, setInvitationActionId] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
@@ -392,7 +430,7 @@ export function MembersTab() {
     if (!workspace) return;
     setMemberActionId(memberId);
     try {
-      await api.setGuestProject(workspace.id, memberId, projectId);
+      await api.setMemberProject(workspace.id, memberId, projectId);
       qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
       toast.success(t(($) => $.members.toast_guest_project_bound));
     } catch (e) {
@@ -402,15 +440,76 @@ export function MembersTab() {
     }
   };
 
+  const unbind = async (
+    memberId: string,
+    projectId: string,
+    decision?: { onAssignedIssues: "unassign" | "reassign"; reassignTo?: string },
+  ) => {
+    if (!workspace) return;
+    setMemberActionId(memberId);
+    try {
+      await api.unsetMemberProject(workspace.id, memberId, projectId, decision);
+      qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+      qc.invalidateQueries({ queryKey: issueKeys.all(wsId) });
+      toast.success(t(($) => $.members.toast_guest_project_unbound));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_guest_project_failed));
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  // Revoking a project the person has open work in is refused with 409 until
+  // someone says where that work goes. Asking is the whole point: silently
+  // leaving it assigned to someone who can no longer see it is how issues get
+  // lost.
   const handleUnbindProject = async (memberId: string, projectId: string) => {
     if (!workspace) return;
     setMemberActionId(memberId);
     try {
-      await api.unsetGuestProject(workspace.id, memberId, projectId);
+      await api.unsetMemberProject(workspace.id, memberId, projectId);
       qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
       toast.success(t(($) => $.members.toast_guest_project_unbound));
     } catch (e) {
+      const assigned =
+        e instanceof ApiError && e.status === 409
+          ? Number((e.body as { assigned_issues?: number } | undefined)?.assigned_issues ?? 0)
+          : 0;
+      if (assigned > 0) {
+        setHandoff({ memberId, projectId, assignedIssues: assigned });
+        return;
+      }
       toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_guest_project_failed));
+    } finally {
+      setMemberActionId(null);
+    }
+  };
+
+  // "" is a real choice here — leave the work unassigned — so it heads the
+  // list rather than being an empty placeholder.
+  const handoffItems = [
+    { value: "", label: t(($) => $.members.handoff_unassigned) },
+    ...members
+      .filter((m) => m.id !== handoff?.memberId && (m.role as string) !== "guest")
+      .map((m) => ({ value: m.user_id, label: m.name })),
+  ];
+
+  const handleAccessScopeChange = async (
+    memberId: string,
+    scope: "workspace" | "projects",
+  ) => {
+    if (!workspace) return;
+    setMemberActionId(memberId);
+    try {
+      await api.setMemberAccessScope(workspace.id, memberId, scope);
+      qc.invalidateQueries({ queryKey: workspaceKeys.members(wsId) });
+      toast.success(
+        scope === "projects"
+          ? t(($) => $.members.toast_access_limited)
+          : t(($) => $.members.toast_access_opened),
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t(($) => $.members.toast_access_failed));
     } finally {
       setMemberActionId(null);
     }
@@ -508,6 +607,7 @@ export function MembersTab() {
                   projects={projects}
                   onBindProject={(projectId) => handleBindProject(m.id, projectId)}
                   onUnbindProject={(projectId) => handleUnbindProject(m.id, projectId)}
+                  onAccessScopeChange={(scope) => handleAccessScopeChange(m.id, scope)}
                 />
               </div>
             ))}
@@ -547,6 +647,60 @@ export function MembersTab() {
               onClick={async () => {
                 await confirmAction?.onConfirm();
                 setConfirmAction(null);
+              }}
+            >
+              {t(($) => $.members.confirm_action)}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revoking a project the person still has open work in. The server
+          refused until someone decides where that work goes; "leave
+          unassigned" is a real answer, but it has to be chosen. */}
+      <AlertDialog
+        open={!!handoff}
+        onOpenChange={(v) => {
+          if (!v) {
+            setHandoff(null);
+            setHandoffTo("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t(($) => $.members.handoff_title)}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(($) => $.members.handoff_description, { count: handoff?.assignedIssues ?? 0 })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Select
+            items={handoffItems}
+            value={handoffTo}
+            onValueChange={(v) => setHandoffTo(v ?? "")}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={t(($) => $.members.handoff_unassigned)} />
+            </SelectTrigger>
+            <SelectContent>
+              {handoffItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t(($) => $.members.confirm_cancel)}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!handoff) return;
+                await unbind(handoff.memberId, handoff.projectId,
+                  handoffTo
+                    ? { onAssignedIssues: "reassign", reassignTo: handoffTo }
+                    : { onAssignedIssues: "unassign" });
+                setHandoff(null);
+                setHandoffTo("");
               }}
             >
               {t(($) => $.members.confirm_action)}

@@ -62,6 +62,7 @@ import { useT } from "../i18n";
 import { PageHeader } from "../layout/page-header";
 import { BusinessBillingTab } from "./business-billing-tab";
 import { BusinessCapMeter, hasCapMeter } from "./business-cap-meter";
+import { WorkerAccessCell } from "./worker-access-cell";
 import { BusinessClientCard } from "./business-client-card";
 import { BusinessClientCreateSheet } from "./business-client-create";
 import { BusinessCostsTab } from "./business-costs-tab";
@@ -465,6 +466,10 @@ function toggleValue(list: string[], value: string): string[] {
 
 export function BusinessPage() {
   const { t, i18n } = useT("business");
+  // The access column reuses the settings namespace: the same labels
+  // already exist for the members tab, and duplicating them here would
+  // mean maintaining one string in two namespaces across five locales.
+  const { t: tSettings } = useT("settings");
   const tt = t as unknown as TT;
   const locale = i18n?.language || "ru";
   const isMobile = useIsMobile();
@@ -1350,6 +1355,7 @@ export function BusinessPage() {
                     <TableHead className="h-8 text-xs font-medium text-muted-foreground">{tt("columns.status", { defaultValue: "status" })}</TableHead>
                     <TableHead className="h-8 text-xs font-medium text-muted-foreground">{tt("columns.engagement_format", { defaultValue: "format" })}</TableHead>
                     <TableHead className="h-8 text-xs font-medium text-muted-foreground">{t(($) => $.team.default_rate)}</TableHead>
+                    <TableHead className="h-8 text-xs font-medium text-muted-foreground">{tSettings(($) => $.members.access_column)}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1370,10 +1376,16 @@ export function BusinessPage() {
                             <Button type="submit" size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy !== ""}>{t(($) => $.actions.save)}</Button>
                           </form>
                         </TableCell>
+                        {/* Project access lives on the workspace member, not
+                            here — this cell is a window onto it so a person can
+                            be managed from one screen. See WorkerAccessCell. */}
+                        <TableCell className="py-1 text-xs">
+                          <WorkerAccessCell userID={row.user_id ? String(row.user_id) : null} />
+                        </TableCell>
                       </TableRow>
                     );
                   })}
-                  {(data.workers ?? []).length === 0 && <TableRow><TableCell colSpan={4} className="p-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>}
+                  {(data.workers ?? []).length === 0 && <TableRow><TableCell colSpan={5} className="p-6 text-center text-xs text-muted-foreground">{t(($) => $.empty)}</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </div>

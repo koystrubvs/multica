@@ -72,7 +72,15 @@ export interface MemberWithUser {
   name: string;
   email: string;
   avatar_url: string | null;
-  /** Projects a guest (P10) member is scoped to. Present only for role=guest. */
+  /**
+   * "workspace" — sees every project; "projects" — sees only what
+   * `project_ids` grants. Optional: absent on backends predating the column,
+   * where everyone saw everything.
+   */
+  access_scope?: string;
+  /** Projects this person is bound to, for any role. */
+  project_ids?: string[];
+  /** The same list under the older name. Present only for role=guest. */
   guest_project_ids?: string[];
 }
 
