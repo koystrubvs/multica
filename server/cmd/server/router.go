@@ -1242,12 +1242,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/quick-actions/{quickActionId}/render", h.RenderQuickAction)
 					r.Get("/task-runs", h.ListTasksByIssue)
 					r.Get("/usage", h.GetIssueUsage)
-					r.Get("/billing/charge", h.GetIssueBillingCharge)
-					r.Get("/billing/cost", h.GetIssueBillingCost)
-					r.Post("/billing/dispute", h.OpenIssueBillingDispute)
-					r.Post("/billing/charges/{chargeId}/confirm", h.ConfirmIssueBillingCharge)
-					r.Post("/billing/charges/{chargeId}/void", h.VoidIssueBillingCharge)
-					r.Post("/billing/charges/{chargeId}/adjust", h.AdjustIssueBillingCharge)
+					// Human-only: this is where the client price and the
+					// agency markup live. No built-in skill or CLI command
+					// reads these, so nothing legitimate loses access; the
+					// billing agent reaches them with its owner PAT.
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireHumanActor)
+
+						r.Get("/billing/charge", h.GetIssueBillingCharge)
+						r.Get("/billing/cost", h.GetIssueBillingCost)
+						r.Post("/billing/dispute", h.OpenIssueBillingDispute)
+						r.Post("/billing/charges/{chargeId}/confirm", h.ConfirmIssueBillingCharge)
+						r.Post("/billing/charges/{chargeId}/void", h.VoidIssueBillingCharge)
+						r.Post("/billing/charges/{chargeId}/adjust", h.AdjustIssueBillingCharge)
+					})
 					r.Post("/reactions", h.AddIssueReaction)
 					r.Delete("/reactions", h.RemoveIssueReaction)
 					r.Get("/attachments", h.ListAttachments)
@@ -1301,16 +1309,30 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Projects
 			// Agency billing: workspace defaults + Elba picker proxies (fork)
-			r.Get("/api/billing/workspace-config", h.GetWorkspaceBillingConfig)
-			r.Put("/api/billing/workspace-config", h.PutWorkspaceBillingConfig)
-			r.Get("/api/billing/elba/organizations", h.GetElbaOrganizations)
-			r.Get("/api/billing/elba/contractors", h.GetElbaContractors)
-			r.Get("/api/billing/elba/bank-accounts", h.GetElbaBankAccounts)
-			// Contractor-level billing: settings + consolidated invoicing (202)
-			r.Get("/api/billing/contractors", h.ListContractorBillingConfigs)
-			r.Put("/api/billing/contractors", h.UpsertContractorBillingConfig)
-			r.Get("/api/billing/contractors/invoiceable", h.ListInvoiceableContractorGroups)
-			r.Post("/api/billing/contractors/{contractorId}/invoice", h.InvoiceContractorPeriod)
+			//
+			// RequireHumanActor, same reasoning as /api/businesses/*: the
+			// billing role is resolved from X-User-ID, and for a task token
+			// that is the RUNTIME OWNER. Without this gate "owner/admin only"
+			// would read "the owner, or any agent an employee can dispatch" —
+			// the exploit is not a member calling the endpoint (the role check
+			// catches that) but a member asking an agent to read the markup
+			// and paste it into a comment. Human PATs are unaffected, which is
+			// how the billing agent keeps working: it carries an owner PAT,
+			// not a task token.
+			r.Group(func(r chi.Router) {
+				r.Use(handler.RequireHumanActor)
+
+				r.Get("/api/billing/workspace-config", h.GetWorkspaceBillingConfig)
+				r.Put("/api/billing/workspace-config", h.PutWorkspaceBillingConfig)
+				r.Get("/api/billing/elba/organizations", h.GetElbaOrganizations)
+				r.Get("/api/billing/elba/contractors", h.GetElbaContractors)
+				r.Get("/api/billing/elba/bank-accounts", h.GetElbaBankAccounts)
+				// Contractor-level billing: settings + consolidated invoicing (202)
+				r.Get("/api/billing/contractors", h.ListContractorBillingConfigs)
+				r.Put("/api/billing/contractors", h.UpsertContractorBillingConfig)
+				r.Get("/api/billing/contractors/invoiceable", h.ListInvoiceableContractorGroups)
+				r.Post("/api/billing/contractors/{contractorId}/invoice", h.InvoiceContractorPeriod)
+			})
 
 			r.Route("/api/projects", func(r chi.Router) {
 				r.Get("/search", h.SearchProjects)
@@ -1324,19 +1346,24 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/resources", h.CreateProjectResource)
 					r.Put("/resources/{resourceId}", h.UpdateProjectResource)
 					r.Delete("/resources/{resourceId}", h.DeleteProjectResource)
-					r.Get("/billing/config", h.GetProjectBillingConfig)
-					r.Put("/billing/config", h.PutProjectBillingConfig)
-					r.Get("/billing/charges", h.ListProjectBillingCharges)
-					r.Post("/billing/sweep", h.SweepProjectBilling)
-					r.Get("/billing/disputes", h.ListProjectBillingDisputes)
-					r.Post("/billing/disputes/{disputeId}/resolve", h.ResolveProjectBillingDispute)
-					r.Get("/billing/periods", h.ListProjectBillingPeriods)
-					r.Get("/billing/periods/current", h.GetProjectBillingCurrentPeriod)
-					r.Get("/billing/periods/{periodId}/charges", h.ListBillingPeriodCharges)
-					r.Post("/billing/periods/{periodId}/close", h.CloseBillingPeriod)
-					r.Post("/billing/periods/{periodId}/reopen", h.ReopenBillingPeriod)
-					r.Post("/billing/periods/{periodId}/mark-paid", h.MarkBillingPeriodPaid)
-					r.Post("/billing/periods/{periodId}/invoice", h.InvoiceBillingPeriod)
+					// Human-only, see the /api/billing/* group above.
+					r.Group(func(r chi.Router) {
+						r.Use(handler.RequireHumanActor)
+
+						r.Get("/billing/config", h.GetProjectBillingConfig)
+						r.Put("/billing/config", h.PutProjectBillingConfig)
+						r.Get("/billing/charges", h.ListProjectBillingCharges)
+						r.Post("/billing/sweep", h.SweepProjectBilling)
+						r.Get("/billing/disputes", h.ListProjectBillingDisputes)
+						r.Post("/billing/disputes/{disputeId}/resolve", h.ResolveProjectBillingDispute)
+						r.Get("/billing/periods", h.ListProjectBillingPeriods)
+						r.Get("/billing/periods/current", h.GetProjectBillingCurrentPeriod)
+						r.Get("/billing/periods/{periodId}/charges", h.ListBillingPeriodCharges)
+						r.Post("/billing/periods/{periodId}/close", h.CloseBillingPeriod)
+						r.Post("/billing/periods/{periodId}/reopen", h.ReopenBillingPeriod)
+						r.Post("/billing/periods/{periodId}/mark-paid", h.MarkBillingPeriodPaid)
+						r.Post("/billing/periods/{periodId}/invoice", h.InvoiceBillingPeriod)
+					})
 				})
 			})
 
