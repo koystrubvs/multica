@@ -274,7 +274,20 @@
     "pull_request_merge_unstable": "Нестабилен",
     "pull_request_merge_has_hooks": "Есть хуки",
     "pull_request_snapshot_stale": "Обновлено {{time}}",
-    "pull_request_snapshot_stale_unknown": "Снимок может быть устаревшим"
+    "pull_request_snapshot_stale_unknown": "Снимок может быть устаревшим",
+    "section_quick_actions": "Быстрые действия",
+    "quick_actions_more": "Показать ещё {{count}}",
+    "quick_action_runs_as": "Запускается от имени {{name}}",
+    "quick_action_target_fallback": "агент",
+    "quick_action_posted": "Комментарий опубликован",
+    "quick_action_queued": "{{name}} взял задачу в работу",
+    "quick_action_coalesced": "Добавлено к текущему запуску {{name}}",
+    "quick_action_deferred": "{{name}} офлайн — запустится, когда вернётся в сеть",
+    "quick_action_blocked": "Не удалось запустить «{{name}}»",
+    "quick_action_blocked_title": "Это быстрое действие вам недоступно",
+    "quick_action_blocked_body": "«{{name}}» запускается от имени агента, которого вам запускать нельзя. Попросите администратора рабочего пространства открыть этого агента команде или указать в действии общедоступного агента.",
+    "quick_action_blocked_ok": "Понятно",
+    "thread_nav_resolved_label": "{{title}} (закрыт)"
   },
   "timeline": {
     "loading": "Загрузка..."
@@ -379,7 +392,8 @@
       "bar_authors_more_many": "{{names}} и ещё {{count}}",
       "bar_authors_more_other": "{{names}} и ещё {{count}}",
       "resolve_failed": "Не удалось закрыть тред",
-      "unresolve_failed": "Не удалось открыть тред заново"
+      "unresolve_failed": "Не удалось открыть тред заново",
+      "thread_resolved_badge": "Закрыт"
     },
     "trigger_will_start_count_few": "{{count}} агента начнут работать после отправки",
     "trigger_will_start_count_many": "{{count}} агентов начнут работать после отправки",

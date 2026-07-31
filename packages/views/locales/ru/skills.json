@@ -100,7 +100,12 @@
       "unsaved": "Несохранённые изменения — перезапишут текущий skill при сохранении",
       "discard": "Отменить",
       "save": "Сохранить изменения",
-      "saving": "Сохранение…"
+      "saving": "Сохранение…",
+      "changed_summary": "Изменено: {{parts}}",
+      "changed_files_one": "{{count}} файл",
+      "changed_files_few": "{{count}} файла",
+      "changed_files_many": "{{count}} файлов",
+      "changed_files_other": "{{count}} файла"
     },
     "sidebar": {
       "metadata": "Метаданные",
@@ -158,8 +163,60 @@
         "absolute": "Абсолютные пути недопустимы.",
         "double_dot": "Пути не могут содержать «..».",
         "reserved": "SKILL.md зарезервирован для основного файла.",
-        "exists": "Файл по этому пути уже существует."
+        "exists": "Файл по этому пути уже существует.",
+        "is_directory": "Папка с таким именем уже существует",
+        "under_file": "По этому пути уже есть файл"
       }
+    },
+    "files": {
+      "add_file": "Новый файл",
+      "list_aria": "Файлы навыка",
+      "main": "Главный файл",
+      "mode_aria": "Режим просмотра",
+      "mode_preview": "Просмотр",
+      "mode_raw": "Обычный текст",
+      "supporting_empty": "Дополнительных файлов нет.",
+      "supporting_one": "Дополнительных: {{count}}",
+      "supporting_few": "Дополнительных: {{count}}",
+      "supporting_many": "Дополнительных: {{count}}",
+      "supporting_other": "Дополнительных: {{count}}"
+    },
+    "header": {
+      "updated": "Обновлён {{when}}",
+      "updated_by": "Обновлён {{when}}, {{name}}",
+      "files_one": "{{count}} файл",
+      "files_few": "{{count}} файла",
+      "files_many": "{{count}} файлов",
+      "files_other": "{{count}} файла",
+      "used_by_one": "{{count}} агент",
+      "used_by_few": "{{count}} агента",
+      "used_by_many": "{{count}} агентов",
+      "used_by_other": "{{count}} агента"
+    },
+    "overview": {
+      "name": "Название",
+      "description": "Описание",
+      "description_hint": "{{count}} символов. Агенты читают это описание, чтобы решить, загружать ли навык.",
+      "labels": "Метки",
+      "properties": "Свойства",
+      "properties_hint": "Эти поля синхронизированы с frontmatter в SKILL.md.",
+      "permissions_owner": "Вы можете редактировать и удалять этот skill. Изменения вступят в силу при следующем запуске агента.",
+      "permissions_locked_creator": "Редактировать этот skill может только создатель ({{name}}) или администратор рабочего пространства.",
+      "permissions_locked": "Редактировать этот skill может только создатель или администратор рабочего пространства.",
+      "permissions_global_locked": "Только владелец навыка может его редактировать",
+      "used_by_empty": "Пока не назначен ни одному агенту. Откройте вкладку Skills агента, чтобы назначить.",
+      "used_by_one": "Используется {{count}} агентом",
+      "used_by_few": "Используется {{count}} агентами",
+      "used_by_many": "Используется {{count}} агентами",
+      "used_by_other": "Используется {{count}} агентами"
+    },
+    "tabs": {
+      "aria": "Разделы навыка",
+      "overview": "Обзор",
+      "files_one": "Файлы {{count}}",
+      "files_few": "Файлы {{count}}",
+      "files_many": "Файлы {{count}}",
+      "files_other": "Файлы {{count}}"
     }
   },
   "create": {
@@ -282,14 +339,20 @@
     "conflict_name_still_exists": "Это имя уже занято. Выберите другое или пропустите."
   },
   "file_tree": {
-    "no_files": "Нет файлов"
+    "no_files": "Нет файлов",
+    "actions": {
+      "label": "Действия для {{path}}",
+      "rename": "Переименовать",
+      "delete": "Удалить"
+    }
   },
   "file_viewer": {
     "edit_tooltip": "Редактировать",
     "preview_tooltip": "Превью",
     "no_content": "*Контента пока нет*",
     "markdown_placeholder": "Введите markdown-контент...",
-    "raw_placeholder": "Содержимое файла..."
+    "raw_placeholder": "Содержимое файла...",
+    "raw_aria": "Содержимое {{path}} в виде обычного текста"
   },
   "actions": {
     "add_confirm": "Добавить",

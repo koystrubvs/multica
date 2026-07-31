@@ -697,7 +697,11 @@
     "copy_workdir": "Скопировать рабочую папку",
     "close": "Закрыть",
     "fact_created": "Создано {{time}}",
-    "fact_took": "Заняло {{duration}}"
+    "fact_took": "Заняло {{duration}}",
+    "patch_body_truncated": "… (тело обрезано)",
+    "patch_no_content": "(содержимое не передано)",
+    "patch_summary_more": "{{path}} и ещё {{extra}}",
+    "patch_truncated": "… (обрезано)"
   },
   "task_failure": {
     "agent_error": "Ошибка выполнения агента",

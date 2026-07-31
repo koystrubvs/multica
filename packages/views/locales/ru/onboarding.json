@@ -41,7 +41,8 @@
     "continue": "Продолжить",
     "skip": "Пропустить",
     "cancel": "Отмена",
-    "close": "Закрыть"
+    "close": "Закрыть",
+    "log_out": "Выйти"
   },
   "questions": {
     "eyebrow_about_you": "О вас",
