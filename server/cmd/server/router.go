@@ -1418,7 +1418,15 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Post("/api/issues/{id}/squad-evaluated", h.RecordSquadLeaderEvaluation)
 
 			// Autopilots
+			// Sections the owner can close for a role. Autopilots, Skills and
+			// Runtimes are gated whole: nothing outside their own pages reads
+			// them, and the one exception — the task transcript labelling its
+			// runtime — already swallows the failure. Agents and Squads are
+			// NOT here: their lists feed the assignee picker, quick create and
+			// the board, so they are hidden in the sidebar and closed for
+			// writing instead. See middleware/nav_sections.go.
 			r.Route("/api/autopilots", func(r chi.Router) {
+				r.Use(middleware.RequireNavSection(queries, middleware.NavSectionAutopilots))
 				r.Get("/", h.ListAutopilots)
 				r.Post("/", h.CreateAutopilot)
 				r.Get("/cron-preview", h.CronPreview)
@@ -1474,13 +1482,19 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Agents
 			r.Route("/api/agents", func(r chi.Router) {
+				// The list stays open to everyone: it is what the assignee
+				// picker, quick create and the board cards read.
 				r.Get("/", h.ListAgents)
-				r.Post("/", h.CreateAgent)
+				// Creating one does not: an agent executes as the runtime
+				// owner and therefore reads the whole workspace, so a member
+				// able to create one could read past every restriction placed
+				// on them. Owner/admin only.
+				r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/", h.CreateAgent)
 				// Agent templates: pre-configured instructions + skill refs.
 				// Picking a template imports the referenced skills into the
 				// workspace (find-or-create by name) and creates the agent
 				// with the template's instructions in one transaction.
-				r.Post("/from-template", h.CreateAgentFromTemplate)
+				r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/from-template", h.CreateAgentFromTemplate)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetAgent)
 					r.Put("/", h.UpdateAgent)
@@ -1521,6 +1535,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Skills
 			r.Route("/api/skills", func(r chi.Router) {
+				r.Use(middleware.RequireNavSection(queries, middleware.NavSectionSkills))
 				r.Get("/", h.ListSkills)
 				r.Post("/", h.CreateSkill)
 				r.Get("/search", h.SearchSkills)
@@ -1562,6 +1577,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Runtimes
 			r.Route("/api/runtimes", func(r chi.Router) {
+				r.Use(middleware.RequireNavSection(queries, middleware.NavSectionRuntimes))
 				r.Get("/", h.ListAgentRuntimes)
 				r.Route("/{runtimeId}", func(r chi.Router) {
 					r.Patch("/", h.UpdateAgentRuntime)

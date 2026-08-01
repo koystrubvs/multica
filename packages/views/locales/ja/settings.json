@@ -400,6 +400,20 @@
     }
   },
   "workspace": {
+    "nav_access": {
+      "title": "セクションのアクセス",
+      "description": "ロールごとに開けるセクションを選びます。非表示のセクションはメニューから消え、サーバー側でも拒否されます。",
+      "role_member": "メンバー",
+      "role_guest": "ゲスト",
+      "section_autopilots": "オートパイロット",
+      "section_agents": "エージェント",
+      "section_squads": "スクワッド",
+      "section_runtimes": "ランタイム",
+      "section_skills": "スキル",
+      "hint": "エージェントとスクワッドの一覧はいずれの場合も利用できます。課題の担当者設定がこれに依存しているためです。",
+      "toast_saved": "セクションのアクセスを保存しました",
+      "toast_failed": "セクションのアクセスを保存できませんでした"
+    },
     "section_general": "ワークスペース情報",
     "logo_label": "ワークスペースロゴ",
     "name_label": "名前",

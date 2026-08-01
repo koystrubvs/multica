@@ -36,6 +36,7 @@ import type { Workspace } from "@multica/core/types";
 import { AvatarUploadControl } from "../../common/avatar-upload-control";
 import { useNavigation } from "../../navigation";
 import { DeleteWorkspaceDialog } from "./delete-workspace-dialog";
+import { NavAccessSection } from "./nav-access-section";
 import { useT } from "../../i18n";
 import {
   SettingsCard,
@@ -463,6 +464,10 @@ export function WorkspaceTab() {
             )}
         </SettingsCard>
       </SettingsSection>
+
+      {/* Who may open which section. Owner/admin only: it is the policy they
+          set, and the server refuses the edit from anyone else anyway. */}
+      {canManageWorkspace && <NavAccessSection workspace={workspace} />}
 
       {/* Danger Zone — gated on the member query settling so the owner-only
           Delete button and the sole-owner Leave guidance don't flash in

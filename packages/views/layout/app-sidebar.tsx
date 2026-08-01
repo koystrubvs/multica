@@ -59,6 +59,10 @@ import { useAuthStore } from "@multica/core/auth";
 import { useCurrentMember } from "@multica/core/permissions";
 import { useCurrentWorkspace, useWorkspacePaths, paths } from "@multica/core/paths";
 import { workspaceListOptions, myInvitationListOptions, workspaceKeys } from "@multica/core/workspace/queries";
+// Via the package's existing "./workspace" entry rather than a new export
+// subpath: each subpath added to packages/core invalidates the Docker layer
+// that installs 1186 packages, and this module needs nothing of its own.
+import { navSectionVisible, NAV_SECTIONS, type NavSection } from "@multica/core/workspace";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { inboxKeys, deduplicateInboxItems, inboxUnreadSummaryOptions, hasOtherWorkspaceUnread, unreadWorkspaceIds } from "@multica/core/inbox/queries";
@@ -373,6 +377,14 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
   const wsId = workspace?.id;
   const { role: currentRole } = useCurrentMember(wsId ?? "");
   const isBillingStaff = currentRole === "owner" || currentRole === "admin";
+  // Only the five configurable sections can be hidden; every other nav key
+  // (inbox, issues, settings…) falls through untouched.
+  const isHiddenNavSection = useCallback(
+    (key: string) =>
+      (NAV_SECTIONS as readonly string[]).includes(key) &&
+      !navSectionVisible(workspace, currentRole, key as NavSection),
+    [workspace, currentRole],
+  );
   const { data: inboxItems = EMPTY_INBOX } = useQuery({
     queryKey: wsId ? inboxKeys.list(wsId) : ["inbox", "disabled"],
     queryFn: () => api.listInbox(),
@@ -757,6 +769,10 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                   if ((item.key === "business" || item.key === "usage") && !isBillingStaff) {
                     return null;
                   }
+                  // Sections the owner closed for this role. The server
+                  // enforces the same list, so this only keeps the sidebar
+                  // from offering a destination that refuses.
+                  if (isHiddenNavSection(item.key)) return null;
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
                   const isActive = !isActivePinnedRoute && isNavActive(pathname, href);
@@ -782,6 +798,7 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
             <SidebarGroupContent>
               <SidebarMenu className="gap-0.5">
                 {configureNav.map((item) => {
+                  if (isHiddenNavSection(item.key)) return null;
                   const href = p[item.key]();
                   const Icon = routeIconForPath(href);
                   const isActive = isNavActive(pathname, href);

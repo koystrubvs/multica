@@ -401,6 +401,20 @@
     }
   },
   "workspace": {
+    "nav_access": {
+      "title": "Section access",
+      "description": "Choose which sections a role can open. A hidden section disappears from the menu and the server refuses it.",
+      "role_member": "Members",
+      "role_guest": "Guests",
+      "section_autopilots": "Autopilots",
+      "section_agents": "Agents",
+      "section_squads": "Squads",
+      "section_runtimes": "Runtimes",
+      "section_skills": "Skills",
+      "hint": "The agent and squad lists stay available either way — assigning an issue depends on them.",
+      "toast_saved": "Section access saved",
+      "toast_failed": "Could not save section access"
+    },
     "section_general": "Workspace details",
     "logo_label": "Workspace logo",
     "change_logo_aria": "Change workspace logo",

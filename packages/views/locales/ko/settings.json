@@ -400,6 +400,20 @@
     }
   },
   "workspace": {
+    "nav_access": {
+      "title": "섹션 접근",
+      "description": "역할별로 열 수 있는 섹션을 선택합니다. 숨긴 섹션은 메뉴에서 사라지고 서버에서도 거부합니다.",
+      "role_member": "멤버",
+      "role_guest": "게스트",
+      "section_autopilots": "오토파일럿",
+      "section_agents": "에이전트",
+      "section_squads": "스쿼드",
+      "section_runtimes": "런타임",
+      "section_skills": "스킬",
+      "hint": "에이전트와 스쿼드 목록은 어느 경우에도 유지됩니다. 이슈 담당자 지정이 목록에 의존하기 때문입니다.",
+      "toast_saved": "섹션 접근을 저장했습니다",
+      "toast_failed": "섹션 접근을 저장하지 못했습니다"
+    },
     "section_general": "워크스페이스 정보",
     "logo_label": "워크스페이스 로고",
     "change_logo_aria": "워크스페이스 로고 변경",

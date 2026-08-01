@@ -400,6 +400,20 @@
     }
   },
   "workspace": {
+    "nav_access": {
+      "title": "板块访问",
+      "description": "选择每个角色可以打开哪些板块。隐藏的板块会从菜单中消失，服务端也会拒绝访问。",
+      "role_member": "成员",
+      "role_guest": "访客",
+      "section_autopilots": "自动驾驶",
+      "section_agents": "智能体",
+      "section_squads": "小队",
+      "section_runtimes": "运行时",
+      "section_skills": "技能",
+      "hint": "智能体和小队列表始终可用，因为指派任务负责人依赖它们。",
+      "toast_saved": "板块访问已保存",
+      "toast_failed": "板块访问保存失败"
+    },
     "section_general": "工作区信息",
     "logo_label": "工作区标志",
     "change_logo_aria": "更换工作区图标",
