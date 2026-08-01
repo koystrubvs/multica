@@ -6,7 +6,8 @@ import (
 )
 
 func TestResourceLabelsCompatDecisionStaysEnabled(t *testing.T) {
-	flags := EvaluateFrontendPublicFlags(context.Background(), nil)
+	ctx := context.Background()
+	flags := EvaluateFrontendPublicFlags(ctx, nil)
 	if !flags[resourceLabelsCompat] {
 		t.Fatal("resource labels must stay enabled for installed clients")
 	}
