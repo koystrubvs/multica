@@ -232,6 +232,7 @@ export function rowMatchesFilters(
  */
 import { isAccessChangeReady } from "@multica/core/agents";
 import { AgentBatchToolbar } from "./agent-batch-toolbar";
+import { useNavSectionGuard } from "../../layout/use-nav-section-guard";
 export { isAccessChangeReady };
 
 export interface AgentsPageProps {
@@ -746,6 +747,11 @@ function LoadingSkeleton() {
 // ---------------------------------------------------------------------------
 
 export function AgentsPage(_props: AgentsPageProps = {}) {
+  // Typing the address must not get past a section the role cannot open;
+  // the sidebar item is only a link. The redirect lives in the hook and
+  // there is no early return here: bailing out before this page's other
+  // hooks would change hook order between renders.
+  useNavSectionGuard("agents");
   const { t } = useT("agents");
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();

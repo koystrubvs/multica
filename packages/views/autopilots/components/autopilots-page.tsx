@@ -60,6 +60,7 @@ import {
 } from "./autopilot-list-actions";
 import type { ScheduleConfig } from "./schedule-editor/model";
 import { useT, useTimeAgo } from "../../i18n";
+import { useNavSectionGuard } from "../../layout/use-nav-section-guard";
 
 // Column template — single source of truth for header, rows, and skeletons.
 // Same conventions as the skills list (see list-grid.tsx and the comment
@@ -595,6 +596,11 @@ function LoadingSkeleton() {
 // ---------------------------------------------------------------------------
 
 export function AutopilotsPage() {
+  // Typing the address must not get past a section the role cannot open;
+  // the sidebar item is only a link. The redirect lives in the hook and
+  // there is no early return here: bailing out before this page's other
+  // hooks would change hook order between renders.
+  useNavSectionGuard("autopilots");
   const { t } = useT("autopilots");
   const wsId = useWorkspaceId();
   const wsPaths = useWorkspacePaths();

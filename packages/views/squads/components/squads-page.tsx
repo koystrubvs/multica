@@ -88,6 +88,7 @@ import {
   CollectionPageState,
 } from "../../layout/collection-page";
 import { useT } from "../../i18n";
+import { useNavSectionGuard } from "../../layout/use-nav-section-guard";
 
 // Column template — the simplest member of the ListGrid family (squads are
 // the fewest entity, 1-5 rows): subgrid template + var tracks + two-zone
@@ -752,6 +753,11 @@ function SquadListToolbar({
 // ---------------------------------------------------------------------------
 
 export function SquadsPage() {
+  // Typing the address must not get past a section the role cannot open;
+  // the sidebar item is only a link. The redirect lives in the hook and
+  // there is no early return here: bailing out before this page's other
+  // hooks would change hook order between renders.
+  useNavSectionGuard("squads");
   const { t } = useT("squads");
   const workspace = useCurrentWorkspace();
   const wsId = workspace?.id ?? "";

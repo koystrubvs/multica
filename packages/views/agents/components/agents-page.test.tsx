@@ -126,7 +126,15 @@ vi.mock("@multica/core/paths", () => ({
   useWorkspacePaths: () => ({
     newAgent: () => "/test-workspace/agents/new",
     agentDetail: (id: string) => `/test-workspace/agents/${id}`,
+    issues: () => "/test-workspace/issues",
   }),
+  // Read by the section guard the page mounts: an owner with no sections
+  // hidden, i.e. the page renders as it always did.
+  useCurrentWorkspace: () => ({ id: "ws-1", settings: {} }),
+}));
+
+vi.mock("@multica/core/permissions", () => ({
+  useCurrentMember: () => ({ role: "owner" }),
 }));
 
 vi.mock("@multica/core/workspace/queries", () => ({

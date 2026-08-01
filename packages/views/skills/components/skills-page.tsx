@@ -74,6 +74,7 @@ import {
   type SkillActionsContext,
 } from "./skill-list-actions";
 import { useT, useTimeAgo } from "../../i18n";
+import { useNavSectionGuard } from "../../layout/use-nav-section-guard";
 
 // Column template — single source of truth for header, rows, and skeletons.
 // Tracks: [edge 0.75rem] [checkbox 1rem] [name, only fr track]
@@ -572,6 +573,11 @@ function LoadingSkeleton() {
 // ---------------------------------------------------------------------------
 
 export default function SkillsPage() {
+  // Typing the address must not get past a section the role cannot open;
+  // the sidebar item is only a link. The redirect lives in the hook and
+  // there is no early return here: bailing out before this page's other
+  // hooks would change hook order between renders.
+  useNavSectionGuard("skills");
   const { t } = useT("skills");
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();

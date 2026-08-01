@@ -35,6 +35,7 @@ import { buildRuntimeMachines, type RuntimeMachine } from "./runtime-machines";
 import { HealthDot, HealthIcon, useHealthLabel } from "./shared";
 import { useT, useTimeAgo } from "../../i18n";
 import { daemonRuntimesDocsHref } from "./runtime-docs";
+import { useNavSectionGuard } from "../../layout/use-nav-section-guard";
 
 export interface RuntimesPageProps {
   /** Desktop-only daemon id used to identify this device. */
@@ -65,6 +66,11 @@ export function RuntimesPage({
   bootstrapping,
   cloudRuntimeEnabled = false,
 }: RuntimesPageProps = {}) {
+  // Typing the address must not get past a section the role cannot open;
+  // the sidebar item is only a link. The redirect lives in the hook and
+  // there is no early return here: bailing out before this page's other
+  // hooks would change hook order between renders.
+  useNavSectionGuard("runtimes");
   const isAuthLoading = useAuthStore((state) => state.isLoading);
   const currentUserId = useAuthStore((state) => state.user?.id);
   const wsId = useWorkspaceId();

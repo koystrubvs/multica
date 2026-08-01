@@ -1297,33 +1297,53 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Issue quick actions (definitions; running one lives under
 			// /api/issues/{id}/quick-actions/{quickActionId}/run)
+			// Quick actions are workspace configuration, edited only from
+			// Settings; reading them stays open because the issue screens run
+			// them. Same shape for properties and labels below.
 			r.Route("/api/quick-actions", func(r chi.Router) {
 				r.Get("/", h.ListQuickActions)
-				r.Post("/", h.CreateQuickAction)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Patch("/", h.UpdateQuickAction)
-					r.Delete("/", h.DeleteQuickAction)
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
+					r.Post("/", h.CreateQuickAction)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Patch("/", h.UpdateQuickAction)
+						r.Delete("/", h.DeleteQuickAction)
+					})
 				})
 			})
 
 			// Custom issue properties (definitions; values live under /api/issues/{id}/properties)
 			r.Route("/api/properties", func(r chi.Router) {
+				// Reading the catalogue stays open: the issue screens render
+				// property values from it, and the hidden ones are already
+				// filtered out of the payload by visibility.
 				r.Get("/", h.ListProperties)
-				r.Post("/", h.CreateProperty)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetProperty)
-					r.Patch("/", h.UpdateProperty)
+				})
+				// Defining them is workspace configuration. It also decides
+				// what lands in a client invoice: the «Биллинг» property is
+				// what marks work internal.
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
+					r.Post("/", h.CreateProperty)
+					r.Patch("/{id}", h.UpdateProperty)
 				})
 			})
 
 			// Labels
 			r.Route("/api/labels", func(r chi.Router) {
 				r.Get("/", h.ListLabels)
+				// Creating stays open on purpose: the label picker on an issue
+				// makes one inline, and closing this would break tagging work
+				// for exactly the people who are meant to keep doing it.
+				// Renaming and deleting are workspace-wide edits — one delete
+				// strips the label off every issue that carries it.
 				r.Post("/", h.CreateLabel)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetLabel)
-					r.Put("/", h.UpdateLabel)
-					r.Delete("/", h.DeleteLabel)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Put("/", h.UpdateLabel)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Delete("/", h.DeleteLabel)
 				})
 			})
 
@@ -1400,17 +1420,26 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 
 			// Squads
 			r.Route("/api/squads", func(r chi.Router) {
+				// Reading stays open: the list feeds the assignee picker and
+				// quick create, exactly as the agent list does.
 				r.Get("/", h.ListSquads)
-				r.Post("/", h.CreateSquad)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetSquad)
-					r.Put("/", h.UpdateSquad)
-					r.Delete("/", h.DeleteSquad)
 					r.Get("/members", h.ListSquadMembers)
 					r.Get("/members/status", h.ListSquadMemberStatus)
-					r.Post("/members", h.AddSquadMember)
-					r.Delete("/members", h.RemoveSquadMember)
-					r.Patch("/members/role", h.UpdateSquadMemberRole)
+				})
+				// Composing a squad decides which agents a task routes to, so
+				// it belongs with the rest of the agent configuration.
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
+					r.Post("/", h.CreateSquad)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Put("/", h.UpdateSquad)
+						r.Delete("/", h.DeleteSquad)
+						r.Post("/members", h.AddSquadMember)
+						r.Delete("/members", h.RemoveSquadMember)
+						r.Patch("/members/role", h.UpdateSquadMemberRole)
+					})
 				})
 			})
 
@@ -1497,9 +1526,14 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/from-template", h.CreateAgentFromTemplate)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetAgent)
-					r.Put("/", h.UpdateAgent)
-					r.Post("/archive", h.ArchiveAgent)
-					r.Post("/restore", h.RestoreAgent)
+					// Editing an agent is editing what it is allowed to do:
+					// its instructions, runtime and skills are the whole of
+					// its behaviour, and it executes as the runtime owner.
+					// Closing creation while leaving editing open would be a
+					// side door to the same place.
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Put("/", h.UpdateAgent)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/archive", h.ArchiveAgent)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/restore", h.RestoreAgent)
 					r.Post("/cancel-tasks", h.CancelAgentTasks)
 					r.Get("/tasks", h.ListAgentTasks)
 					r.Get("/skills", h.ListAgentSkills)
