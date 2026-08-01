@@ -1302,32 +1302,31 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// them. Same shape for properties and labels below.
 			r.Route("/api/quick-actions", func(r chi.Router) {
 				r.Get("/", h.ListQuickActions)
-				r.Group(func(r chi.Router) {
-					r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
-					r.Post("/", h.CreateQuickAction)
-					r.Route("/{id}", func(r chi.Router) {
-						r.Patch("/", h.UpdateQuickAction)
-						r.Delete("/", h.DeleteQuickAction)
-					})
+				r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/", h.CreateQuickAction)
+				r.Route("/{id}", func(r chi.Router) {
+					staff := middleware.RequireWorkspaceRole(queries, "owner", "admin")
+					r.With(staff).Patch("/", h.UpdateQuickAction)
+					r.With(staff).Delete("/", h.DeleteQuickAction)
 				})
 			})
 
 			// Custom issue properties (definitions; values live under /api/issues/{id}/properties)
+			// Gates go on the individual methods rather than on a second
+			// r.Route("/{id}") or a Group wrapping one: chi panics while
+			// building the tree when a pattern is mounted twice, and that is a
+			// startup crash `go build` cannot see.
 			r.Route("/api/properties", func(r chi.Router) {
 				// Reading the catalogue stays open: the issue screens render
 				// property values from it, and the hidden ones are already
 				// filtered out of the payload by visibility.
 				r.Get("/", h.ListProperties)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Get("/", h.GetProperty)
-				})
 				// Defining them is workspace configuration. It also decides
 				// what lands in a client invoice: the «Биллинг» property is
 				// what marks work internal.
-				r.Group(func(r chi.Router) {
-					r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
-					r.Post("/", h.CreateProperty)
-					r.Patch("/{id}", h.UpdateProperty)
+				r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/", h.CreateProperty)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetProperty)
+					r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Patch("/", h.UpdateProperty)
 				})
 			})
 
@@ -1423,23 +1422,20 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				// Reading stays open: the list feeds the assignee picker and
 				// quick create, exactly as the agent list does.
 				r.Get("/", h.ListSquads)
+				// Composing a squad decides which agents a task routes to, so
+				// it belongs with the rest of the agent configuration. Gated
+				// per method — see the note on /api/properties above.
+				r.With(middleware.RequireWorkspaceRole(queries, "owner", "admin")).Post("/", h.CreateSquad)
 				r.Route("/{id}", func(r chi.Router) {
+					staff := middleware.RequireWorkspaceRole(queries, "owner", "admin")
 					r.Get("/", h.GetSquad)
 					r.Get("/members", h.ListSquadMembers)
 					r.Get("/members/status", h.ListSquadMemberStatus)
-				})
-				// Composing a squad decides which agents a task routes to, so
-				// it belongs with the rest of the agent configuration.
-				r.Group(func(r chi.Router) {
-					r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
-					r.Post("/", h.CreateSquad)
-					r.Route("/{id}", func(r chi.Router) {
-						r.Put("/", h.UpdateSquad)
-						r.Delete("/", h.DeleteSquad)
-						r.Post("/members", h.AddSquadMember)
-						r.Delete("/members", h.RemoveSquadMember)
-						r.Patch("/members/role", h.UpdateSquadMemberRole)
-					})
+					r.With(staff).Put("/", h.UpdateSquad)
+					r.With(staff).Delete("/", h.DeleteSquad)
+					r.With(staff).Post("/members", h.AddSquadMember)
+					r.With(staff).Delete("/members", h.RemoveSquadMember)
+					r.With(staff).Patch("/members/role", h.UpdateSquadMemberRole)
 				})
 			})
 
