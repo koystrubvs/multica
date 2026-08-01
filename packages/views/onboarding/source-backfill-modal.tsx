@@ -298,8 +298,17 @@ function SourceBackfillDialogBody({
   }, [busy, onComplete]);
 
   return (
-    <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden">
-      <div className="px-6 pt-6 pb-2">
+    // Thirteen options stack into a single column on a phone, which makes the
+    // panel taller than the viewport. The dialog is centred and has no height
+    // of its own, so without a cap it overflows off both ends: the footer
+    // buttons and the close X land outside the screen and `overflow-hidden`
+    // means nothing scrolls to reach them — the prompt becomes a dead end on
+    // mobile. Cap the panel and scroll the options only, keeping the question
+    // and the Skip/Submit row always reachable. `svh` rather than `vh`: mobile
+    // `vh` is measured against the viewport with browser chrome collapsed, so
+    // it still overflows while the URL bar is showing.
+    <DialogContent className="flex max-h-[85svh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <div className="shrink-0 px-6 pt-6 pb-2">
         <div className="text-micro font-medium uppercase tracking-[0.08em] text-muted-foreground">
           {t(($) => $.source_backfill.eyebrow)}
         </div>
@@ -314,7 +323,7 @@ function SourceBackfillDialogBody({
       <fieldset
         role="radiogroup"
         aria-label={t(($) => $.questions.source.question)}
-        className="m-0 grid grid-cols-1 gap-2 p-0 px-6 pt-4 sm:grid-cols-2"
+        className="m-0 grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-0 px-6 pt-4 pb-4 sm:grid-cols-2"
       >
         {options.map((option) =>
           option.isOther ? (
@@ -343,7 +352,7 @@ function SourceBackfillDialogBody({
         )}
       </fieldset>
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t bg-muted/40 px-6 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t bg-muted/40 px-6 py-3">
         <span
           aria-live="polite"
           className="mr-auto text-caption text-muted-foreground"
