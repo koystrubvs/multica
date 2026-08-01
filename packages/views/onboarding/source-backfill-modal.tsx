@@ -320,37 +320,47 @@ function SourceBackfillDialogBody({
         </p>
       </div>
 
-      <fieldset
-        role="radiogroup"
-        aria-label={t(($) => $.questions.source.question)}
-        className="m-0 grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto p-0 px-6 pt-4 pb-4 sm:grid-cols-2"
-      >
-        {options.map((option) =>
-          option.isOther ? (
-            <IconOtherOptionCard
-              key={option.slug}
-              icon={option.icon}
-              label={option.label}
-              selected={otherSelected}
-              onSelect={() => handleSelect(option)}
-              otherValue={answers.source_other ?? ""}
-              onOtherChange={handleOtherChange}
-              onConfirm={submit}
-              placeholder={t(($) => $.questions.source.other_placeholder)}
-              mode="radio"
-            />
-          ) : (
-            <IconOptionCard
-              key={option.slug}
-              icon={option.icon}
-              label={option.label}
-              selected={pickedSlug === option.slug}
-              onSelect={() => handleSelect(option)}
-              mode="radio"
-            />
-          ),
-        )}
-      </fieldset>
+      {/*
+        The scroll lives on a plain div, not on the fieldset. Blink lays a
+        fieldset's children out in an anonymous content box that `overflow` on
+        the fieldset itself does not clip: the box still takes its height from
+        `flex-1`, but the options spill out of it and paint over the footer
+        instead of scrolling. Every other scroll region in the app is a plain
+        `min-h-0 flex-1 overflow-y-auto` div for this reason.
+      */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-4 pb-4">
+        <fieldset
+          role="radiogroup"
+          aria-label={t(($) => $.questions.source.question)}
+          className="m-0 grid grid-cols-1 gap-2 p-0 sm:grid-cols-2"
+        >
+          {options.map((option) =>
+            option.isOther ? (
+              <IconOtherOptionCard
+                key={option.slug}
+                icon={option.icon}
+                label={option.label}
+                selected={otherSelected}
+                onSelect={() => handleSelect(option)}
+                otherValue={answers.source_other ?? ""}
+                onOtherChange={handleOtherChange}
+                onConfirm={submit}
+                placeholder={t(($) => $.questions.source.other_placeholder)}
+                mode="radio"
+              />
+            ) : (
+              <IconOptionCard
+                key={option.slug}
+                icon={option.icon}
+                label={option.label}
+                selected={pickedSlug === option.slug}
+                onSelect={() => handleSelect(option)}
+                mode="radio"
+              />
+            ),
+          )}
+        </fieldset>
+      </div>
 
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t bg-muted/40 px-6 py-3">
         <span
