@@ -13,6 +13,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/analytics"
 	"github.com/multica-ai/multica/server/internal/logger"
 	obsmetrics "github.com/multica-ai/multica/server/internal/metrics"
+	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/protocol"
@@ -238,6 +239,24 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		Context:     ptrToText(req.Context),
 		IssuePrefix: issuePrefix,
 	})
+	if err == nil {
+		// A new workspace starts with the operational sections closed to
+		// members, so nobody has to remember to go and close them. Stamped as
+		// a real value inside the same transaction, which means it shows up in
+		// the settings screen as switches the owner can flip back.
+		if defaults := middleware.DefaultWorkspaceSettings(); defaults != nil {
+			if withDefaults, defErr := qtx.UpdateWorkspace(r.Context(), db.UpdateWorkspaceParams{
+				ID:       ws.ID,
+				Settings: defaults,
+			}); defErr == nil {
+				ws = withDefaults
+			} else {
+				// Not worth failing creation over: the workspace is usable and
+				// the owner can set this in Settings.
+				slog.Warn("default nav sections not applied", append(logger.RequestAttrs(r), "error", defErr, "workspace_id", uuidToString(ws.ID))...)
+			}
+		}
+	}
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeError(w, http.StatusConflict, "workspace slug already exists")

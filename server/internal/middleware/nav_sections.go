@@ -73,6 +73,40 @@ func NavSectionHidden(settings []byte, role, section string) bool {
 	return HiddenNavSections(settings, role)[section]
 }
 
+// defaultHiddenForMember is what a workspace starts out hiding from members:
+// the operational tooling that runs the agent fleet. Skills is deliberately
+// absent — it is a library people read, not a control surface.
+var defaultHiddenForMember = []string{
+	NavSectionAutopilots,
+	NavSectionAgents,
+	NavSectionSquads,
+	NavSectionRuntimes,
+}
+
+// DefaultWorkspaceSettings is stamped onto a workspace at creation.
+//
+// Written as a real stored value rather than expressed as "absence means
+// hidden", because absence has to keep meaning "everything as before": that is
+// what stops a section introduced by a later upstream release from disappearing
+// for everyone the moment it lands. A stored default shows up in the settings
+// screen as switches the owner can see and flip; an implicit one would not.
+//
+// It is applied only at creation, so existing workspaces keep whatever they
+// have.
+func DefaultWorkspaceSettings() []byte {
+	out, err := json.Marshal(map[string]any{
+		NavSectionsSettingKey: map[string][]string{
+			"member": defaultHiddenForMember,
+		},
+	})
+	if err != nil {
+		// Marshalling a literal map of strings cannot fail; treat any future
+		// change that breaks it as "no default" rather than a broken workspace.
+		return nil
+	}
+	return out
+}
+
 // RequireNavSection refuses a route whose section the caller's role cannot
 // open. It runs after the workspace middleware and reads the member it
 // resolved, so it costs one workspace read and only on the routes it guards.

@@ -50,6 +50,40 @@ func TestNavSectionHidden(t *testing.T) {
 	}
 }
 
+func TestDefaultWorkspaceSettingsReadBackByTheSameRule(t *testing.T) {
+	settings := DefaultWorkspaceSettings()
+	if len(settings) == 0 {
+		t.Fatal("default settings are empty")
+	}
+
+	// The value a new workspace is stamped with has to be understood by the
+	// reader that gates the routes — otherwise the switches would show one
+	// thing and the server would do another.
+	for _, section := range []string{
+		NavSectionAutopilots, NavSectionAgents, NavSectionSquads, NavSectionRuntimes,
+	} {
+		if !NavSectionHidden(settings, "member", section) {
+			t.Errorf("member should start with %q hidden", section)
+		}
+	}
+
+	// Skills is a library people read, not a control surface.
+	if NavSectionHidden(settings, "skills", NavSectionSkills) {
+		t.Error("skills must not be hidden by default")
+	}
+	if NavSectionHidden(settings, "member", NavSectionSkills) {
+		t.Error("skills must not be hidden from members by default")
+	}
+	// Only members are defaulted: guests are left as they were so the default
+	// cannot silently change what a client already sees.
+	if NavSectionHidden(settings, "guest", NavSectionAgents) {
+		t.Error("guests must not be defaulted")
+	}
+	if NavSectionHidden(settings, "owner", NavSectionAgents) {
+		t.Error("owner must never be restricted")
+	}
+}
+
 func TestHiddenNavSectionsReturnsNilForUnrestrictedRoles(t *testing.T) {
 	const settings = `{"hidden_nav_sections":{"owner":["agents"],"member":["agents"]}}`
 	if got := HiddenNavSections([]byte(settings), "owner"); got != nil {
