@@ -399,7 +399,7 @@ type searchResult struct {
 // It uses LOWER(column) LIKE for case-insensitive matching compatible with pg_bigm 1.2 GIN indexes.
 // Search patterns are lowercased in Go to avoid redundant LOWER() on the pattern side in SQL.
 // LIKE patterns are pre-built in Go (e.g. "%html%") so pg_bigm can extract bigrams from a single parameter value.
-func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, includeClosed bool) (string, []any) {
+func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, includeClosed bool, scope middleware.ProjectScope) (string, []any) {
 	// Lowercase in Go so SQL only needs LOWER() on the column side.
 	phrase = strings.ToLower(phrase)
 	for i, t := range terms {
@@ -482,6 +482,13 @@ func buildSearchQuery(phrase string, terms []string, queryNum int, hasNum bool, 
 
 	if !includeClosed {
 		whereClause += " AND i.status NOT IN ('done', 'cancelled')"
+	}
+
+	// Search is the widest read in the product: it matches comment bodies
+	// across the workspace and returns a snippet, so an unscoped search hands
+	// out the contents of projects the person cannot open.
+	if fragment := scopeIssueSQL(scope, nextArg); fragment != "" {
+		whereClause += " AND " + fragment
 	}
 
 	// --- ORDER BY clause ---
@@ -665,7 +672,13 @@ func (h *Handler) SearchIssues(w http.ResponseWriter, r *http.Request) {
 	terms := splitSearchTerms(q)
 	queryNum, hasNum := parseQueryNumber(q)
 
-	sqlQuery, args := buildSearchQuery(q, terms, queryNum, hasNum, includeClosed)
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
+	sqlQuery, args := buildSearchQuery(q, terms, queryNum, hasNum, includeClosed, scope)
 	// Fill placeholder args: $4 = workspace_id, last two = limit, offset
 	args[3] = wsUUID
 	args[len(args)-2] = limit
@@ -793,6 +806,15 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolved once for both shapes this handler serves: the unpaginated
+	// open_only list below, which runs a static query, and the paginated one
+	// further down, which builds its own SQL.
+	listScope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
 	// Parse optional filter params. Malformed UUIDs in filters return 400 —
 	// silently coercing them to a zero UUID would mask a client bug and let
 	// the query return an empty result set (or worse, match a NULL row).
@@ -878,6 +900,8 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 		}
 		issues, err := h.Queries.ListOpenIssues(ctx, db.ListOpenIssuesParams{
 			WorkspaceID:      wsUUID,
+			ScopeAll:         !listScope.Restricted(),
+			ScopeProjectIds:  listScope.AllowedProjectIDs,
 			Priority:         priorityFilter,
 			AssigneeID:       assigneeFilter,
 			AssigneeIds:      assigneeIdsFilter,
@@ -1024,6 +1048,10 @@ func (h *Handler) ListIssues(w http.ResponseWriter, r *http.Request) {
 	addArg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
+	}
+
+	if fragment := scopeIssueSQL(listScope, addArg); fragment != "" {
+		where = append(where, fragment)
 	}
 
 	if len(statusesFilter) > 0 {
@@ -1481,6 +1509,15 @@ func (h *Handler) ListGroupedIssues(w http.ResponseWriter, r *http.Request) {
 	addArg := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
+	}
+
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+	if fragment := scopeIssueSQL(scope, addArg); fragment != "" {
+		where = append(where, fragment)
 	}
 
 	statuses := splitCommaParam(r.URL.Query().Get("statuses"))
@@ -2493,9 +2530,23 @@ func (h *Handler) CreateIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		parentIssueID = id
 	}
-	// P10 (Variant A): a guest may only file into one of their bound projects.
-	if allowed, isGuest := h.guestProjectAllowed(r, workspaceID, projectID); isGuest && !allowed {
-		writeError(w, http.StatusForbidden, "guests can only create issues in their assigned project")
+	// A scoped caller may only file into a project they were given — and the
+	// project that matters is the one that will be stored, not the one that was
+	// sent. IssueService.Create back-fills an omitted project from the parent
+	// issue (service/issue.go), so checking the request field alone would let
+	// `{parent_issue_id: <issue in a project they cannot see>}` place work in
+	// that project and hand its UUID back in the 201.
+	effectiveProjectID := projectID
+	if !effectiveProjectID.Valid && parentIssueID.Valid {
+		if parent, err := h.Queries.GetIssueInWorkspace(r.Context(), db.GetIssueInWorkspaceParams{
+			ID:          parentIssueID,
+			WorkspaceID: parseUUID(workspaceID),
+		}); err == nil {
+			effectiveProjectID = parent.ProjectID
+		}
+	}
+	if allowed, restricted := h.actorProjectAllowed(r, workspaceID, effectiveProjectID); restricted && !allowed {
+		writeError(w, http.StatusForbidden, "you can only create issues in projects you have access to")
 		return
 	}
 	// Cross-workspace parent / project existence is enforced inside
@@ -3106,30 +3157,39 @@ func (h *Handler) requesterIsGuest(ctx context.Context, r *http.Request, workspa
 	return err == nil && m.Role == "guest"
 }
 
-// guestProjectAllowed is the core P10 (Variant A) project-scoping predicate. For
-// a guest (SitePing client) member it reports whether projectID is one the guest
-// is bound to via guest_project; for every other actor — owner/admin/member and
-// A2A agent (X-Agent-ID) callers — it returns allowed=true with isGuest=false so
-// nothing changes for them. A guest with no project, or an unbound project, is
-// not allowed. Callers decide the failure surface: reads report 404 (a guest
-// must not learn issues exist outside their project), writes report 403.
-func (h *Handler) guestProjectAllowed(r *http.Request, workspaceID string, projectID pgtype.UUID) (allowed bool, isGuest bool) {
-	actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
-	if actorType != "member" {
-		return true, false
+// actorProjectAllowed is the single project-scoping predicate for an entity
+// that is already loaded. It reports whether the caller may touch projectID and
+// whether they are scoped at all: an unrestricted caller — the owner, anyone
+// still in 'workspace' mode, and agents, whose requests carry the runtime
+// owner's X-User-ID — comes back (true, false) and nothing changes for them.
+//
+// A scoped caller is refused a project they are not bound to, and an issue with
+// no project at all: those are where the billing autopilots keep client reports
+// and invoice drafts. Callers choose the surface: reads answer 404 (a scoped
+// member must not learn the issue exists), writes answer 403.
+//
+// The actor type is deliberately not consulted here. resolveActor decides a
+// request is an agent's from the client-supplied X-Agent-ID and X-Task-ID
+// headers, and both values are handed to any member by the agent snapshot and
+// active-task endpoints — so branching on actor type would let a member shed
+// their scope by setting two headers.
+func (h *Handler) actorProjectAllowed(r *http.Request, workspaceID string, projectID pgtype.UUID) (allowed bool, restricted bool) {
+	scope, ok := h.projectScope(r)
+	if !ok {
+		return false, true
 	}
-	m, err := h.getWorkspaceMember(r.Context(), actorID, workspaceID)
-	if err != nil || m.Role != "guest" {
+	if !scope.Restricted() {
 		return true, false
 	}
 	if !projectID.Valid {
 		return false, true
 	}
-	ok, err := h.Queries.MemberHasProjectAccess(r.Context(), db.MemberHasProjectAccessParams{
-		UserID:    parseUUID(actorID),
-		ProjectID: projectID,
-	})
-	return err == nil && ok, true
+	for _, granted := range scope.AllowedProjectIDs {
+		if granted.Valid && granted.Bytes == projectID.Bytes {
+			return true, true
+		}
+	}
+	return false, true
 }
 
 // shouldEnqueueAgentTask returns true when an issue creation or assignment

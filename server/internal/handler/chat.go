@@ -1473,6 +1473,11 @@ func (h *Handler) GetPendingChatTask(w http.ResponseWriter, r *http.Request) {
 //     id-only endpoint is never more permissive than the surface that exposes
 //     the task.
 func (h *Handler) CancelTaskByUser(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	userID, ok := requireUserID(w, r)
 	if !ok {
 		return

@@ -10,6 +10,13 @@ SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority,
        i.parent_issue_id, i.position, i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.metadata, i.stage, i.properties
 FROM issue i
 WHERE i.workspace_id = $1
+  -- Project scope: the caller's bound projects, or everything when
+  -- unrestricted. Written as an explicit flag rather than the
+  -- `cardinality(@project_ids) = 0 OR ...` idiom, which reads "no grants means
+  -- everything" — exactly backwards for an access check. An issue with no
+  -- project is not visible to a scoped caller: those carry the billing
+  -- autopilots' client reports and invoice drafts.
+  AND (sqlc.arg('scope_all')::bool OR i.project_id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
   AND (sqlc.narg('status')::text IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('priority')::text IS NULL OR i.priority = sqlc.narg('priority'))
   AND (sqlc.narg('assignee_id')::uuid IS NULL OR i.assignee_id = sqlc.narg('assignee_id'))
@@ -197,6 +204,13 @@ SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority,
        i.parent_issue_id, i.position, i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.metadata, i.stage, i.properties
 FROM issue i
 WHERE i.workspace_id = $1
+  -- Project scope: the caller's bound projects, or everything when
+  -- unrestricted. Written as an explicit flag rather than the
+  -- `cardinality(@project_ids) = 0 OR ...` idiom, which reads "no grants means
+  -- everything" — exactly backwards for an access check. An issue with no
+  -- project is not visible to a scoped caller: those carry the billing
+  -- autopilots' client reports and invoice drafts.
+  AND (sqlc.arg('scope_all')::bool OR i.project_id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
   AND i.status NOT IN ('done', 'cancelled')
   AND (sqlc.narg('priority')::text IS NULL OR i.priority = sqlc.narg('priority'))
   AND (sqlc.narg('assignee_id')::uuid IS NULL OR i.assignee_id = sqlc.narg('assignee_id'))
@@ -259,6 +273,13 @@ ORDER BY i.position ASC, i.created_at DESC;
 -- See ListIssues for the semantics of involves_user_id.
 SELECT count(*) FROM issue i
 WHERE i.workspace_id = $1
+  -- Project scope: the caller's bound projects, or everything when
+  -- unrestricted. Written as an explicit flag rather than the
+  -- `cardinality(@project_ids) = 0 OR ...` idiom, which reads "no grants means
+  -- everything" — exactly backwards for an access check. An issue with no
+  -- project is not visible to a scoped caller: those carry the billing
+  -- autopilots' client reports and invoice drafts.
+  AND (sqlc.arg('scope_all')::bool OR i.project_id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
   AND (sqlc.narg('status')::text IS NULL OR i.status = sqlc.narg('status'))
   AND (sqlc.narg('priority')::text IS NULL OR i.priority = sqlc.narg('priority'))
   AND (sqlc.narg('assignee_id')::uuid IS NULL OR i.assignee_id = sqlc.narg('assignee_id'))

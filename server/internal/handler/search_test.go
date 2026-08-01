@@ -3,10 +3,13 @@ package handler
 import (
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/middleware"
 )
 
 func TestBuildSearchQuery_SingleTerm(t *testing.T) {
-	query, args := buildSearchQuery("Hello", []string{"Hello"}, 0, false, false)
+	query, args := buildSearchQuery("Hello", []string{"Hello"}, 0, false, false, unrestrictedTestScope())
 
 	// Pattern should be lowercased in Go.
 	if args[0] != "hello" {
@@ -42,7 +45,7 @@ func TestBuildSearchQuery_SingleTerm(t *testing.T) {
 }
 
 func TestBuildSearchQuery_MultiTerm(t *testing.T) {
-	query, args := buildSearchQuery("Foo Bar", []string{"Foo", "Bar"}, 0, false, false)
+	query, args := buildSearchQuery("Foo Bar", []string{"Foo", "Bar"}, 0, false, false, unrestrictedTestScope())
 
 	// Both phrase and terms should be lowercased.
 	if args[0] != "foo bar" {
@@ -63,7 +66,7 @@ func TestBuildSearchQuery_MultiTerm(t *testing.T) {
 }
 
 func TestBuildSearchQuery_WithNumber(t *testing.T) {
-	query, args := buildSearchQuery("MUL-42", []string{"MUL-42"}, 42, true, false)
+	query, args := buildSearchQuery("MUL-42", []string{"MUL-42"}, 42, true, false, unrestrictedTestScope())
 
 	_ = args
 	// Number match should be in WHERE.
@@ -77,7 +80,7 @@ func TestBuildSearchQuery_WithNumber(t *testing.T) {
 }
 
 func TestBuildSearchQuery_IncludeClosed(t *testing.T) {
-	query, _ := buildSearchQuery("test", []string{"test"}, 0, false, true)
+	query, _ := buildSearchQuery("test", []string{"test"}, 0, false, true, unrestrictedTestScope())
 
 	if strings.Contains(query, "NOT IN ('done', 'cancelled')") {
 		t.Error("query should not exclude done/cancelled when includeClosed=true")
@@ -85,7 +88,7 @@ func TestBuildSearchQuery_IncludeClosed(t *testing.T) {
 }
 
 func TestBuildSearchQuery_SpecialChars(t *testing.T) {
-	query, args := buildSearchQuery("100%", []string{"100%"}, 0, false, false)
+	query, args := buildSearchQuery("100%", []string{"100%"}, 0, false, false, unrestrictedTestScope())
 
 	_ = query
 	// % should be escaped in the phrase arg.
@@ -204,7 +207,7 @@ func TestExtractSnippet_CJKContent(t *testing.T) {
 // --- Ranking regression tests ---
 
 func TestBuildSearchQuery_CommentRankTiers(t *testing.T) {
-	query, _ := buildSearchQuery("test phrase", []string{"test", "phrase"}, 0, false, false)
+	query, _ := buildSearchQuery("test phrase", []string{"test", "phrase"}, 0, false, false, unrestrictedTestScope())
 
 	// Comment phrase match should be tier 7
 	if !strings.Contains(query, "THEN 7") {
@@ -221,7 +224,7 @@ func TestBuildSearchQuery_CommentRankTiers(t *testing.T) {
 }
 
 func TestBuildSearchQuery_DescriptionRankTiers(t *testing.T) {
-	query, _ := buildSearchQuery("foo bar", []string{"foo", "bar"}, 0, false, false)
+	query, _ := buildSearchQuery("foo bar", []string{"foo", "bar"}, 0, false, false, unrestrictedTestScope())
 
 	// Description phrase match should be tier 5
 	if !strings.Contains(query, "THEN 5") {
@@ -234,7 +237,7 @@ func TestBuildSearchQuery_DescriptionRankTiers(t *testing.T) {
 }
 
 func TestBuildSearchQuery_SingleTermNoAllTermTiers(t *testing.T) {
-	query, _ := buildSearchQuery("html", []string{"html"}, 0, false, false)
+	query, _ := buildSearchQuery("html", []string{"html"}, 0, false, false, unrestrictedTestScope())
 
 	// Extract the rank CASE expression (ends with "ELSE 9 END") to avoid
 	// false matches against statusRank which also contains THEN 4/6.
@@ -268,7 +271,7 @@ func TestBuildSearchQuery_SingleTermNoAllTermTiers(t *testing.T) {
 // $4 is buildSearchQuery's canonical workspace_id placeholder (the
 // caller writes wsUUID into args[3] before executing).
 func TestBuildSearchQuery_CommentSubqueryWorkspaceScope(t *testing.T) {
-	singleQuery, _ := buildSearchQuery("html", []string{"html"}, 0, false, false)
+	singleQuery, _ := buildSearchQuery("html", []string{"html"}, 0, false, false, unrestrictedTestScope())
 
 	// Every occurrence of `FROM comment c` must be followed by the
 	// c.workspace_id = $4 constraint. Counting is safer than a single
@@ -286,11 +289,36 @@ func TestBuildSearchQuery_CommentSubqueryWorkspaceScope(t *testing.T) {
 
 	// Multi-term uses one extra comment subquery in the WHERE and one in
 	// the rank CASE for the all-terms match — same invariant applies.
-	multiQuery, _ := buildSearchQuery("foo bar", []string{"foo", "bar"}, 0, false, false)
+	multiQuery, _ := buildSearchQuery("foo bar", []string{"foo", "bar"}, 0, false, false, unrestrictedTestScope())
 	fromCountMulti := strings.Count(multiQuery, "FROM comment c")
 	scopedCountMulti := strings.Count(multiQuery, "c.workspace_id = $4")
 	if scopedCountMulti < fromCountMulti {
 		t.Errorf("multi-term query has %d comment subqueries but only %d workspace_id filters",
 			fromCountMulti, scopedCountMulti)
+	}
+}
+
+// Search is the widest read in the product: it matches comment bodies across
+// the whole workspace and returns a snippet of the match, so an unscoped search
+// is a way to read a project you were never given.
+func TestBuildSearchQueryRestrictsToBoundProjects(t *testing.T) {
+	scope := middleware.ProjectScope{AllowedProjectIDs: []pgtype.UUID{{Bytes: [16]byte{7}, Valid: true}}}
+	query, args := buildSearchQuery("html", []string{"html"}, 0, false, false, scope)
+
+	if !strings.Contains(query, "i.project_id = ANY(") {
+		t.Fatal("a restricted search is not bounded by the caller's projects")
+	}
+	// The caller fills limit and offset by position from the end
+	// (args[len(args)-2], args[len(args)-1]). The scope argument must never
+	// land after them, or search starts paginating by a project id.
+	if args[len(args)-1] != nil || args[len(args)-2] != nil {
+		t.Fatalf("limit/offset placeholders are no longer last: ...%v", args[len(args)-2:])
+	}
+}
+
+func TestBuildSearchQueryWithoutGrantsFindsNothing(t *testing.T) {
+	query, _ := buildSearchQuery("html", []string{"html"}, 0, false, false, middleware.DenyAllProjectScope())
+	if !strings.Contains(query, "AND false") {
+		t.Fatal("a caller with no bound projects must match nothing, not everything")
 	}
 }

@@ -104,10 +104,18 @@ func (h *Handler) ListInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
 	items, err := h.Queries.ListInboxItems(r.Context(), db.ListInboxItemsParams{
 		WorkspaceID:   wsUUID,
 		RecipientType: "member",
 		RecipientID:   parseUUID(userID),
+		ScopeAll:        !scope.Restricted(),
+		ScopeProjectIds: scope.AllowedProjectIDs,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list inbox")
@@ -141,10 +149,18 @@ func (h *Handler) ListArchivedInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
 	items, err := h.Queries.ListArchivedInboxItems(r.Context(), db.ListArchivedInboxItemsParams{
 		WorkspaceID:   wsUUID,
 		RecipientType: "member",
 		RecipientID:   parseUUID(userID),
+		ScopeAll:        !scope.Restricted(),
+		ScopeProjectIds: scope.AllowedProjectIDs,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list archived inbox")
@@ -298,10 +314,18 @@ func (h *Handler) CountUnreadInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
+
 	count, err := h.Queries.CountUnreadInbox(r.Context(), db.CountUnreadInboxParams{
 		WorkspaceID:   wsUUID,
 		RecipientType: "member",
 		RecipientID:   parseUUID(userID),
+		ScopeAll:        !scope.Restricted(),
+		ScopeProjectIds: scope.AllowedProjectIDs,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count unread inbox")

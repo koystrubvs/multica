@@ -1021,6 +1021,11 @@ func decodeJSONBodyWithRawFields(body io.Reader, dst any) (map[string]json.RawMe
 }
 
 func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 
 	var req CreateAgentRequest
@@ -2176,6 +2181,11 @@ func (h *Handler) CancelAgentTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListAgentTasks(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	agent, ok := h.loadAgentForUser(w, r, id)
 	if !ok {
@@ -2242,6 +2252,11 @@ type WorkspaceWorkingAgent struct {
 // workspace-wide agent aggregations so a private/non-allow-listed agent is
 // never exposed by its name, avatar, count, or even presence.
 func (h *Handler) ListWorkspaceWorkingAgents(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	member, ok := h.workspaceMember(w, r, workspaceID)
 	if !ok {
@@ -2450,6 +2465,11 @@ func (h *Handler) GetWorkspaceAgentActivity30d(w http.ResponseWriter, r *http.Re
 // The outcome half is deliberately still served here so shipped desktop builds
 // keep working; MUL-5436 tracks moving it to a dedicated lazy endpoint.
 func (h *Handler) ListWorkspaceAgentTaskSnapshot(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	member, ok := h.workspaceMember(w, r, workspaceID)
 	if !ok {

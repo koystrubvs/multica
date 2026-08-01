@@ -119,6 +119,7 @@ import type {
   CreateProjectRequest,
   UpdateProjectRequest,
   ListProjectsResponse,
+  ProjectMemberAccess,
   ProjectResource,
   CreateProjectResourceRequest,
   UpdateProjectResourceRequest,
@@ -282,6 +283,7 @@ import {
   SquadMemberStatusListResponseSchema,
   SubscribersListSchema,
   TimelineEntriesSchema,
+  ListProjectMembersResponseSchema,
   UserSchema,
   WebhookDeliveryResponseSchema,
   BillingBalanceSchema,
@@ -2874,6 +2876,45 @@ export class ApiClient {
   }
 
   // Project resources
+  /** Who sees this project. The same member_project bindings the members
+   *  screen edits, read from the project's side. Owner/admin only. */
+  async listProjectMembers(projectId: string): Promise<ProjectMemberAccess[]> {
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/members`);
+    return parseWithFallback(
+      raw,
+      ListProjectMembersResponseSchema,
+      { members: [] },
+      { endpoint: "GET /api/projects/{id}/members" },
+    ).members;
+  }
+
+  async bindProjectMember(projectId: string, userId: string): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  /** Revoking has to say where work assigned in this project goes. Without
+   *  `onAssignedIssues` the server answers 409 with the count, which is what
+   *  the UI turns into a question. */
+  async unbindProjectMember(
+    projectId: string,
+    userId: string,
+    options?: {
+      onAssignedIssues?: "unassign" | "reassign";
+      reassignTo?: string;
+    },
+  ): Promise<void> {
+    await this.fetch(`/api/projects/${projectId}/members/${userId}`, {
+      method: "DELETE",
+      body: JSON.stringify({
+        on_assigned_issues: options?.onAssignedIssues,
+        reassign_to: options?.reassignTo,
+      }),
+    });
+  }
+
   async listProjectResources(
     projectId: string,
   ): Promise<ListProjectResourcesResponse> {

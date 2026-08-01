@@ -22,11 +22,18 @@ import (
 const testWorkspaceID = "test-workspace"
 const testUserID = "test-user"
 
-// mockMembershipChecker always returns true.
-type mockMembershipChecker struct{}
+// mockMembershipChecker always returns true, and reports the member as
+// unrestricted unless a test says otherwise.
+type mockMembershipChecker struct {
+	projectScoped bool
+}
 
 func (m *mockMembershipChecker) IsMember(_ context.Context, _, _ string) bool {
 	return true
+}
+
+func (m *mockMembershipChecker) IsProjectScoped(_ context.Context, _, _ string) bool {
+	return m.projectScoped
 }
 
 func makeTestToken(t *testing.T) string {
@@ -571,5 +578,86 @@ func TestReadPump_AcceptsFrameUnderReadLimit(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "pong") {
 		t.Fatalf("got %s, want a pong frame", raw)
+	}
+}
+
+// newScopedTestHub is newTestHub with a member who only sees some projects.
+func newScopedTestHub(t *testing.T) (*Hub, *httptest.Server) {
+	t.Helper()
+	hub := NewHub()
+	go hub.Run()
+
+	mc := &mockMembershipChecker{projectScoped: true}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		HandleWebSocket(hub, mc, nil, nil, w, r)
+	})
+	return hub, httptest.NewServer(mux)
+}
+
+// The workspace room is an unfiltered feed of every issue event in the
+// workspace: titles, statuses and assignees of projects the member was never
+// given. Keeping a scoped client out of that room is what makes the filtering
+// on the read paths worth anything — otherwise the same data arrives by socket
+// a second later.
+func TestScopedClientNeverJoinsTheWorkspaceRoom(t *testing.T) {
+	hub, server := newScopedTestHub(t)
+	defer server.Close()
+	conn := connectWS(t, server)
+	defer conn.Close()
+
+	waitFor(t, "the client to register", func() bool { return totalClients(hub) == 1 })
+	hub.BroadcastToWorkspace(testWorkspaceID, []byte(`{"type":"issue:created","payload":{"title":"Work in a project they cannot see"}}`))
+
+	conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_, message, err := conn.ReadMessage()
+	if err == nil {
+		t.Fatalf("a project-scoped client received a workspace broadcast: %s", message)
+	}
+}
+
+// Containment that only happens at connect time is not containment: the client
+// would simply ask for the room.
+func TestScopedClientCannotSubscribeToTheWorkspaceRoom(t *testing.T) {
+	_, server := newScopedTestHub(t)
+	defer server.Close()
+	conn := connectWS(t, server)
+	defer conn.Close()
+
+	subscribe, _ := json.Marshal(map[string]any{
+		"type":    "subscribe",
+		"payload": map[string]string{"scope": ScopeWorkspace, "id": testWorkspaceID},
+	})
+	if err := conn.WriteMessage(websocket.TextMessage, subscribe); err != nil {
+		t.Fatalf("write subscribe: %v", err)
+	}
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read reply: %v", err)
+	}
+	if !strings.Contains(string(message), "subscribe_error") {
+		t.Fatalf("workspace subscription was granted to a scoped client: %s", message)
+	}
+}
+
+// The owner must be unaffected — this is a containment for scoped members, not
+// a downgrade of realtime for everyone.
+func TestUnscopedClientStillGetsWorkspaceBroadcasts(t *testing.T) {
+	hub, server := newTestHub(t)
+	defer server.Close()
+	conn := connectWS(t, server)
+	defer conn.Close()
+
+	waitFor(t, "the client to register", func() bool { return totalClients(hub) == 1 })
+	hub.BroadcastToWorkspace(testWorkspaceID, []byte(`{"type":"issue:created"}`))
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("unrestricted client lost live updates: %v", err)
+	}
+	if !strings.Contains(string(message), "issue:created") {
+		t.Fatalf("unexpected frame: %s", message)
 	}
 }

@@ -107,6 +107,11 @@ type RuntimeUsageResponse struct {
 // Daemon-executed tasks only (i.e. excludes users' local CLI usage of the
 // same tool).
 func (h *Handler) GetRuntimeUsage(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	runtimeID := chi.URLParam(r, "runtimeId")
 	runtimeUUID, ok := parseUUIDOrBadRequest(w, runtimeID, "runtime_id")
 	if !ok {
@@ -239,6 +244,11 @@ type RuntimeUsageByAgentResponse struct {
 // GetRuntimeUsageByAgent returns per-agent token aggregates for a runtime
 // since the cutoff window. Drives the runtime-detail "Cost by agent" tab.
 func (h *Handler) GetRuntimeUsageByAgent(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	runtimeID := chi.URLParam(r, "runtimeId")
 	runtimeUUID, ok := parseUUIDOrBadRequest(w, runtimeID, "runtime_id")
 	if !ok {
@@ -321,6 +331,11 @@ type RuntimeUsageByHourResponse struct {
 // report — the same timezone resolved by resolveViewingTZ from the request's
 // `?tz=` param or the authenticated user's stored user.timezone.
 func (h *Handler) GetRuntimeUsageByHour(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	runtimeID := chi.URLParam(r, "runtimeId")
 	runtimeUUID, ok := parseUUIDOrBadRequest(w, runtimeID, "runtime_id")
 	if !ok {

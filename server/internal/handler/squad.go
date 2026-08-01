@@ -585,6 +585,11 @@ func deriveSquadMemberStatus(
 // workspace-membership guard from the route middleware — any member of the
 // workspace can read it.
 func (h *Handler) ListSquadMemberStatus(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	squad, _, ok := h.loadSquadInWorkspace(w, r)
 	if !ok {
 		return

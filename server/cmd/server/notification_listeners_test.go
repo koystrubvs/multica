@@ -21,6 +21,12 @@ func inboxItemsForRecipient(t *testing.T, queries *db.Queries, recipientID strin
 		WorkspaceID:   util.MustParseUUID(testWorkspaceID),
 		RecipientType: "member",
 		RecipientID:   util.MustParseUUID(recipientID),
+		// These tests assert that notifications are delivered at all; the
+		// project scope is asserted separately in the handler package. Reading
+		// unscoped here keeps the two concerns from masking each other — with
+		// the default zero value the query denies everything and every
+		// notification test would fail for the wrong reason.
+		ScopeAll: true,
 	})
 	if err != nil {
 		t.Fatalf("ListInboxItems: %v", err)

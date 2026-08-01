@@ -3754,6 +3754,11 @@ func taskMessageToPayload(m db.TaskMessage, taskID, issueID string) protocol.Tas
 
 // ListTaskMessages returns the persisted messages for a task (for catch-up after reconnect).
 func (h *Handler) ListTaskMessages(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	taskID := chi.URLParam(r, "taskId")
 
 	// Verify the caller owns this task's workspace.
@@ -3883,6 +3888,11 @@ func (h *Handler) ListTasksByIssue(w http.ResponseWriter, r *http.Request) {
 // Used by the frontend under regular user auth (not daemon auth).
 // Verifies the task belongs to the caller's workspace.
 func (h *Handler) ListTaskMessagesByUser(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	taskID := chi.URLParam(r, "taskId")
 	taskUUID, ok := parseUUIDOrBadRequest(w, taskID, "task_id")
 	if !ok {

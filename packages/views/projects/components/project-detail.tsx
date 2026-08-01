@@ -36,6 +36,7 @@ import { PriorityIcon } from "../../issues/components/priority-icon";
 import { ProjectResourcesSection } from "./project-resources-section";
 import { SitepingIntegrationSection } from "./siteping-integration-section";
 import { ProjectBillingSection } from "./project-billing-section";
+import { ProjectAccessSection } from "./project-access-section";
 import { ProjectStartDatePicker } from "./project-start-date-picker";
 import { ProjectDueDatePicker } from "./project-due-date-picker";
 import { IssueSurface } from "../../issues/surface/issue-surface";
@@ -728,6 +729,11 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
           talks to is gated on the billing role server-side; mounting it for an
           employee would render a section of failed requests. */}
       {isBillingStaff && <ProjectBillingSection projectId={projectId} />}
+
+      {/* Who may see this project. Same owner/admin audience as billing: the
+          endpoints behind it enumerate the workspace's people, and they are
+          gated on that role server-side. */}
+      {isBillingStaff && <ProjectAccessSection projectId={projectId} />}
     </div>
   );
 

@@ -604,13 +604,23 @@ func (h *Handler) UnsetGuestProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "member not found")
 		return
 	}
+	h.unbindMemberFromProject(w, r, wsUUID, projUUID, member.UserID, req)
+}
 
+// unbindMemberFromProject removes one binding and settles the work that was
+// assigned inside it, writing the response itself.
+//
+// Shared by both doors into the same fact — the member's project list and the
+// project's member list. The rule that revoking access must say where the
+// assigned issues go is not something a second entry point may skip, and a
+// copy of this logic is exactly how it would.
+func (h *Handler) unbindMemberFromProject(w http.ResponseWriter, r *http.Request, wsUUID, projUUID, memberUserID pgtype.UUID, req GuestProjectRequest) {
 	// Work assigned to this person in this project would otherwise be left
 	// with an assignee who can no longer see it. Make the caller decide.
 	assigned, err := h.Queries.CountIssuesAssignedToMemberInProject(r.Context(), db.CountIssuesAssignedToMemberInProjectParams{
 		WorkspaceID: wsUUID,
 		ProjectID:   projUUID,
-		AssigneeID:  member.UserID,
+		AssigneeID:  memberUserID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to count assigned issues")
@@ -659,7 +669,7 @@ func (h *Handler) UnsetGuestProject(w http.ResponseWriter, r *http.Request) {
 		reassigned, err = qtx.ReassignIssuesInProject(r.Context(), db.ReassignIssuesInProjectParams{
 			WorkspaceID:   wsUUID,
 			ProjectID:     projUUID,
-			FromUserID:    member.UserID,
+			FromUserID:    memberUserID,
 			NewAssigneeID: newAssignee,
 		})
 		if err != nil {
@@ -668,7 +678,7 @@ func (h *Handler) UnsetGuestProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := qtx.DeleteMemberProject(r.Context(), db.DeleteMemberProjectParams{
-		UserID:    member.UserID,
+		UserID:    memberUserID,
 		ProjectID: projUUID,
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to unbind project")

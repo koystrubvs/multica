@@ -413,6 +413,19 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 		return "$" + strconv.Itoa(len(args))
 	}
 
+	// Private projects are removed here, before any filter the caller chose,
+	// because this one compiler feeds the board, the table, the swimlanes, the
+	// facet counts, the cost totals and the CSV export. A scope that cannot be
+	// resolved is refused rather than ignored.
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return issueTableSQL{}, false
+	}
+	if fragment := scopeIssueSQL(scope, addArg); fragment != "" {
+		where = append(where, fragment)
+	}
+
 	for _, status := range spec.Filters.Statuses {
 		if !issueTableContainsString(validIssueStatuses, status) {
 			writeError(w, http.StatusBadRequest, "invalid filters.statuses")

@@ -17,6 +17,25 @@ type fakeScopeQuerier struct {
 	tasks    map[[16]byte]db.AgentTaskQueue
 	issues   map[[16]byte]db.Issue
 	sessions map[[16]byte]db.ChatSession
+	// members defaults to an unrestricted member, which is what the existing
+	// cases assume; a case that cares sets the row explicitly.
+	members  map[[16]byte]db.Member
+	bindings map[[16]byte][]pgtype.UUID
+}
+
+func (f *fakeScopeQuerier) GetMemberByUserAndWorkspace(
+	_ context.Context, arg db.GetMemberByUserAndWorkspaceParams,
+) (db.Member, error) {
+	if m, ok := f.members[arg.UserID.Bytes]; ok {
+		return m, nil
+	}
+	return db.Member{UserID: arg.UserID, WorkspaceID: arg.WorkspaceID, Role: "member", AccessScope: "workspace"}, nil
+}
+
+func (f *fakeScopeQuerier) ListMemberProjectsByUser(
+	_ context.Context, arg db.ListMemberProjectsByUserParams,
+) ([]pgtype.UUID, error) {
+	return f.bindings[arg.UserID.Bytes], nil
 }
 
 func (f *fakeScopeQuerier) GetAgentTask(_ context.Context, id pgtype.UUID) (db.AgentTaskQueue, error) {
@@ -201,6 +220,16 @@ func (failingScopeQuerier) GetIssue(context.Context, pgtype.UUID) (db.Issue, err
 func (failingScopeQuerier) GetChatSession(context.Context, pgtype.UUID) (db.ChatSession, error) {
 	return db.ChatSession{}, errors.New("connection reset by peer")
 }
+func (failingScopeQuerier) GetMemberByUserAndWorkspace(
+	context.Context, db.GetMemberByUserAndWorkspaceParams,
+) (db.Member, error) {
+	return db.Member{}, errors.New("connection reset by peer")
+}
+func (failingScopeQuerier) ListMemberProjectsByUser(
+	context.Context, db.ListMemberProjectsByUserParams,
+) ([]pgtype.UUID, error) {
+	return nil, errors.New("connection reset by peer")
+}
 
 // errOnInnerQuerier succeeds for GetAgentTask (so the task path reaches its
 // inner lookups) but fails GetIssue / GetChatSession with a non-ErrNoRows
@@ -217,6 +246,19 @@ func (*errOnInnerQuerier) GetIssue(context.Context, pgtype.UUID) (db.Issue, erro
 }
 func (*errOnInnerQuerier) GetChatSession(context.Context, pgtype.UUID) (db.ChatSession, error) {
 	return db.ChatSession{}, errors.New("connection reset by peer")
+}
+
+// The scope lookups are not what this fake is isolating: they answer as an
+// unrestricted member so the inner issue/chat lookup stays the failure point.
+func (*errOnInnerQuerier) GetMemberByUserAndWorkspace(
+	_ context.Context, arg db.GetMemberByUserAndWorkspaceParams,
+) (db.Member, error) {
+	return db.Member{UserID: arg.UserID, WorkspaceID: arg.WorkspaceID, Role: "member", AccessScope: "workspace"}, nil
+}
+func (*errOnInnerQuerier) ListMemberProjectsByUser(
+	context.Context, db.ListMemberProjectsByUserParams,
+) ([]pgtype.UUID, error) {
+	return nil, nil
 }
 
 // TestScopeAuthorizer_DoesNotSwallowQueryErrors pins #6037: a real database
@@ -278,5 +320,60 @@ func TestScopeAuthorizer_MissingResourceIsPlainDenial(t *testing.T) {
 	}
 	if ok, err := a.AuthorizeScope(ctx, userStr, wsStr, realtime.ScopeChat, missingChat); err != nil || ok {
 		t.Fatalf("missing chat session must be a plain denial: ok=%v err=%v", ok, err)
+	}
+}
+
+// A task room carries the agent's live transcript for one issue. Keeping a
+// scoped member out of the workspace room means nothing if they can subscribe
+// to another project's task one id at a time — and task ids are handed to any
+// member by the agent snapshot.
+func TestScopeAuthorizer_TaskRoomFollowsProjectScope(t *testing.T) {
+	wsStr, wsUUID := mustUUID(t)
+	userStr, userUUID := mustUUID(t)
+	_, boundProject := mustUUID(t)
+	_, unboundProject := mustUUID(t)
+
+	boundTaskStr, boundTaskUUID := mustUUID(t)
+	unboundTaskStr, unboundTaskUUID := mustUUID(t)
+	_, boundIssueUUID := mustUUID(t)
+	_, unboundIssueUUID := mustUUID(t)
+
+	q := &fakeScopeQuerier{
+		tasks: map[[16]byte]db.AgentTaskQueue{
+			boundTaskUUID.Bytes:   {IssueID: boundIssueUUID},
+			unboundTaskUUID.Bytes: {IssueID: unboundIssueUUID},
+		},
+		issues: map[[16]byte]db.Issue{
+			boundIssueUUID.Bytes:   {WorkspaceID: wsUUID, ProjectID: boundProject},
+			unboundIssueUUID.Bytes: {WorkspaceID: wsUUID, ProjectID: unboundProject},
+		},
+		members: map[[16]byte]db.Member{
+			userUUID.Bytes: {UserID: userUUID, WorkspaceID: wsUUID, Role: "member", AccessScope: "projects"},
+		},
+		bindings: map[[16]byte][]pgtype.UUID{
+			userUUID.Bytes: {boundProject},
+		},
+	}
+	auth := newScopeAuthorizer(q)
+
+	ok, err := auth.AuthorizeScope(context.Background(), userStr, wsStr, realtime.ScopeTask, boundTaskStr)
+	if err != nil || !ok {
+		t.Fatalf("bound project task refused: ok=%v err=%v", ok, err)
+	}
+	ok, err = auth.AuthorizeScope(context.Background(), userStr, wsStr, realtime.ScopeTask, unboundTaskStr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatal("a scoped member was allowed into another project's task room")
+	}
+
+	// Nothing changes for someone who sees the whole workspace.
+	q.members[userUUID.Bytes] = db.Member{
+		UserID: userUUID, WorkspaceID: wsUUID, Role: "member", AccessScope: "workspace",
+	}
+	ok, err = auth.AuthorizeScope(context.Background(), userStr, wsStr, realtime.ScopeTask, unboundTaskStr)
+	if err != nil || !ok {
+		t.Fatalf("unrestricted member refused: ok=%v err=%v", ok, err)
 	}
 }

@@ -196,10 +196,17 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if p := r.URL.Query().Get("priority"); p != "" {
 		priorityFilter = pgtype.Text{String: p, Valid: true}
 	}
+	scope, scopeOK := h.projectScope(r)
+	if !scopeOK {
+		writeError(w, http.StatusForbidden, "insufficient permissions")
+		return
+	}
 	projects, err := h.Queries.ListProjects(r.Context(), db.ListProjectsParams{
-		WorkspaceID: wsUUID,
-		Status:      statusFilter,
-		Priority:    priorityFilter,
+		WorkspaceID:     wsUUID,
+		ScopeAll:        !scope.Restricted(),
+		ScopeProjectIds: scope.AllowedProjectIDs,
+		Status:          statusFilter,
+		Priority:        priorityFilter,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list projects")
@@ -1025,4 +1032,150 @@ func (h *Handler) SearchProjects(w http.ResponseWriter, r *http.Request) {
 		"projects": resp,
 		"total":    total,
 	})
+}
+
+// ProjectMemberAccess is one row of "who can see this project", answered from
+// the project's side. The same fact as a member's project list, read the other
+// way round — both write the same member_project rows.
+type ProjectMemberAccess struct {
+	MemberID    string `json:"member_id"`
+	UserID      string `json:"user_id"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Role        string `json:"role"`
+	AccessScope string `json:"access_scope"`
+	// Bound is an explicit binding to this project.
+	Bound bool `json:"bound"`
+	// Sees is what the screen actually asks. It is not the same as Bound: the
+	// owner and anyone still in 'workspace' mode sees the project with no
+	// binding at all, and showing them as unchecked would read as "denied".
+	Sees bool `json:"sees"`
+}
+
+// loadProjectForAccess resolves the project in the caller's workspace.
+func (h *Handler) loadProjectForAccess(w http.ResponseWriter, r *http.Request) (db.Project, pgtype.UUID, bool) {
+	var zero db.Project
+	projUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "id"), "project id")
+	if !ok {
+		return zero, pgtype.UUID{}, false
+	}
+	wsUUID, ok := parseUUIDOrBadRequest(w, h.resolveWorkspaceID(r), "workspace id")
+	if !ok {
+		return zero, pgtype.UUID{}, false
+	}
+	project, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+		ID: projUUID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return zero, pgtype.UUID{}, false
+	}
+	return project, wsUUID, true
+}
+
+// ListProjectMembers answers "who sees this project". Owner/admin only — it
+// enumerates the workspace's people.
+func (h *Handler) ListProjectMembers(w http.ResponseWriter, r *http.Request) {
+	project, wsUUID, ok := h.loadProjectForAccess(w, r)
+	if !ok {
+		return
+	}
+	members, err := h.Queries.ListMembersWithUser(r.Context(), wsUUID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list members")
+		return
+	}
+	boundUserIDs, err := h.Queries.ListMemberUserIDsByProject(r.Context(), project.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list project bindings")
+		return
+	}
+	bound := make(map[string]bool, len(boundUserIDs))
+	for _, id := range boundUserIDs {
+		bound[uuidToString(id)] = true
+	}
+
+	rows := make([]ProjectMemberAccess, 0, len(members))
+	for _, m := range members {
+		userID := uuidToString(m.UserID)
+		isBound := bound[userID]
+		// Mirrors ResolveProjectScope: owner is never scoped, a guest is always
+		// scoped by bindings whatever the mode says, everyone else follows the
+		// mode. Diverging from that resolver here would draw a checkbox that
+		// does not match what the person can actually open.
+		unrestricted := m.Role == "owner" || (m.Role != "guest" && m.AccessScope != "projects")
+		rows = append(rows, ProjectMemberAccess{
+			MemberID:    uuidToString(m.ID),
+			UserID:      userID,
+			Name:        m.UserName,
+			Email:       m.UserEmail,
+			Role:        m.Role,
+			AccessScope: m.AccessScope,
+			Bound:       isBound,
+			Sees:        unrestricted || isBound,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"members": rows})
+}
+
+// BindProjectMember grants one person access to this project.
+func (h *Handler) BindProjectMember(w http.ResponseWriter, r *http.Request) {
+	project, wsUUID, ok := h.loadProjectForAccess(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		UserID string `json:"user_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	userUUID, ok := parseUUIDOrBadRequest(w, req.UserID, "user_id")
+	if !ok {
+		return
+	}
+	if _, err := h.Queries.GetMemberByUserAndWorkspace(r.Context(), db.GetMemberByUserAndWorkspaceParams{
+		UserID: userUUID, WorkspaceID: wsUUID,
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, "user is not a member of this workspace")
+		return
+	}
+	actor, _ := util.ParseUUID(requestUserID(r))
+	if _, err := h.Queries.CreateMemberProject(r.Context(), db.CreateMemberProjectParams{
+		WorkspaceID: wsUUID,
+		UserID:      userUUID,
+		ProjectID:   project.ID,
+		CreatedBy:   actor,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to bind project")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "bound"})
+}
+
+// UnbindProjectMember revokes one person's access to this project, through the
+// same path as the member-side revoke: if work is assigned to them here, the
+// caller has to say where it goes.
+func (h *Handler) UnbindProjectMember(w http.ResponseWriter, r *http.Request) {
+	project, wsUUID, ok := h.loadProjectForAccess(w, r)
+	if !ok {
+		return
+	}
+	var req GuestProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	userUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "userId"), "userId")
+	if !ok {
+		return
+	}
+	if _, err := h.Queries.GetMemberByUserAndWorkspace(r.Context(), db.GetMemberByUserAndWorkspaceParams{
+		UserID: userUUID, WorkspaceID: wsUUID,
+	}); err != nil {
+		writeError(w, http.StatusNotFound, "user is not a member of this workspace")
+		return
+	}
+	h.unbindMemberFromProject(w, r, wsUUID, project.ID, userUUID, req)
 }

@@ -158,18 +158,36 @@ func (q *Queries) ArchiveInboxItem(ctx context.Context, id pgtype.UUID) (InboxIt
 }
 
 const countUnreadInbox = `-- name: CountUnreadInbox :one
-SELECT count(*) FROM inbox_item
-WHERE workspace_id = $1 AND recipient_type = $2 AND recipient_id = $3 AND read = false AND archived = false
+SELECT count(*) FROM inbox_item i
+LEFT JOIN issue iss ON iss.id = i.issue_id
+WHERE i.workspace_id = $1 AND i.recipient_type = $2 AND i.recipient_id = $3
+  AND i.read = false AND i.archived = false
+  -- Project scope. A notification addressed to this person about an issue
+  -- they cannot open would be a dead link that still shows the title, so the
+  -- item is withheld with the issue. Items with no issue (workspace-level
+  -- notices) always arrive.
+  AND ($4::bool OR i.issue_id IS NULL
+       OR iss.project_id = ANY($5::uuid[]))
 `
 
 type CountUnreadInboxParams struct {
-	WorkspaceID   pgtype.UUID `json:"workspace_id"`
-	RecipientType string      `json:"recipient_type"`
-	RecipientID   pgtype.UUID `json:"recipient_id"`
+	WorkspaceID     pgtype.UUID   `json:"workspace_id"`
+	RecipientType   string        `json:"recipient_type"`
+	RecipientID     pgtype.UUID   `json:"recipient_id"`
+	ScopeAll        bool          `json:"scope_all"`
+	ScopeProjectIds []pgtype.UUID `json:"scope_project_ids"`
 }
 
+// Scoped exactly like ListInboxItems: a badge counting items the list withholds
+// lights up for an inbox that renders empty.
 func (q *Queries) CountUnreadInbox(ctx context.Context, arg CountUnreadInboxParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUnreadInbox, arg.WorkspaceID, arg.RecipientType, arg.RecipientID)
+	row := q.db.QueryRow(ctx, countUnreadInbox,
+		arg.WorkspaceID,
+		arg.RecipientType,
+		arg.RecipientID,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -351,6 +369,12 @@ SELECT i.id, i.workspace_id, i.recipient_type, i.recipient_id, i.type, i.severit
 FROM inbox_item i
 LEFT JOIN issue iss ON iss.id = i.issue_id
 WHERE i.workspace_id = $1 AND i.recipient_type = $2 AND i.recipient_id = $3 AND i.archived = true
+  -- Project scope. A notification addressed to this person about an issue
+  -- they cannot open would be a dead link that still shows the title, so the
+  -- item is withheld with the issue. Items with no issue (workspace-level
+  -- notices) always arrive.
+  AND ($4::bool OR i.issue_id IS NULL
+       OR iss.project_id = ANY($5::uuid[]))
   AND (i.issue_id IS NULL OR NOT EXISTS (
       SELECT 1
       FROM inbox_item active
@@ -365,9 +389,11 @@ LIMIT 200
 `
 
 type ListArchivedInboxItemsParams struct {
-	WorkspaceID   pgtype.UUID `json:"workspace_id"`
-	RecipientType string      `json:"recipient_type"`
-	RecipientID   pgtype.UUID `json:"recipient_id"`
+	WorkspaceID     pgtype.UUID   `json:"workspace_id"`
+	RecipientType   string        `json:"recipient_type"`
+	RecipientID     pgtype.UUID   `json:"recipient_id"`
+	ScopeAll        bool          `json:"scope_all"`
+	ScopeProjectIds []pgtype.UUID `json:"scope_project_ids"`
 }
 
 type ListArchivedInboxItemsRow struct {
@@ -405,7 +431,13 @@ type ListArchivedInboxItemsRow struct {
 // pagination). Rows are newest-first, so truncation drops the OLDEST rows and
 // can never hide a group's newest row — the one the deduplicated UI renders.
 func (q *Queries) ListArchivedInboxItems(ctx context.Context, arg ListArchivedInboxItemsParams) ([]ListArchivedInboxItemsRow, error) {
-	rows, err := q.db.Query(ctx, listArchivedInboxItems, arg.WorkspaceID, arg.RecipientType, arg.RecipientID)
+	rows, err := q.db.Query(ctx, listArchivedInboxItems,
+		arg.WorkspaceID,
+		arg.RecipientType,
+		arg.RecipientID,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -447,13 +479,21 @@ SELECT i.id, i.workspace_id, i.recipient_type, i.recipient_id, i.type, i.severit
 FROM inbox_item i
 LEFT JOIN issue iss ON iss.id = i.issue_id
 WHERE i.workspace_id = $1 AND i.recipient_type = $2 AND i.recipient_id = $3 AND i.archived = false
+  -- Project scope. A notification addressed to this person about an issue
+  -- they cannot open would be a dead link that still shows the title, so the
+  -- item is withheld with the issue. Items with no issue (workspace-level
+  -- notices) always arrive.
+  AND ($4::bool OR i.issue_id IS NULL
+       OR iss.project_id = ANY($5::uuid[]))
 ORDER BY i.created_at DESC
 `
 
 type ListInboxItemsParams struct {
-	WorkspaceID   pgtype.UUID `json:"workspace_id"`
-	RecipientType string      `json:"recipient_type"`
-	RecipientID   pgtype.UUID `json:"recipient_id"`
+	WorkspaceID     pgtype.UUID   `json:"workspace_id"`
+	RecipientType   string        `json:"recipient_type"`
+	RecipientID     pgtype.UUID   `json:"recipient_id"`
+	ScopeAll        bool          `json:"scope_all"`
+	ScopeProjectIds []pgtype.UUID `json:"scope_project_ids"`
 }
 
 type ListInboxItemsRow struct {
@@ -476,7 +516,13 @@ type ListInboxItemsRow struct {
 }
 
 func (q *Queries) ListInboxItems(ctx context.Context, arg ListInboxItemsParams) ([]ListInboxItemsRow, error) {
-	rows, err := q.db.Query(ctx, listInboxItems, arg.WorkspaceID, arg.RecipientType, arg.RecipientID)
+	rows, err := q.db.Query(ctx, listInboxItems,
+		arg.WorkspaceID,
+		arg.RecipientType,
+		arg.RecipientID,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
+	)
 	if err != nil {
 		return nil, err
 	}

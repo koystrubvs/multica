@@ -603,6 +603,11 @@ type runtimeIDAndWorkspace struct {
 }
 
 func (h *Handler) InitiateListLocalSkills(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	runtimeID := chi.URLParam(r, "runtimeId")
 	rt, _, ok := h.requireRuntimeCapabilityReadAccess(w, r, runtimeID)
 	if !ok {
@@ -622,6 +627,11 @@ func (h *Handler) InitiateListLocalSkills(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) GetLocalSkillListRequest(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	runtimeID := chi.URLParam(r, "runtimeId")
 	rt, _, ok := h.requireRuntimeCapabilityReadAccess(w, r, runtimeID)
 	if !ok {

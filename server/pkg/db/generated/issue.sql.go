@@ -96,20 +96,27 @@ func (q *Queries) CountCreatedIssueAssignees(ctx context.Context, arg CountCreat
 const countIssues = `-- name: CountIssues :one
 SELECT count(*) FROM issue i
 WHERE i.workspace_id = $1
-  AND ($2::text IS NULL OR i.status = $2)
-  AND ($3::text IS NULL OR i.priority = $3)
-  AND ($4::uuid IS NULL OR i.assignee_id = $4)
-  AND ($5::uuid[] IS NULL OR i.assignee_id = ANY($5::uuid[]))
-  AND ($6::uuid IS NULL OR i.creator_id = $6)
-  AND ($7::uuid IS NULL OR i.project_id = $7)
-  AND ($8::bool IS NULL OR (i.start_date IS NOT NULL OR i.due_date IS NOT NULL))
-  AND ($9::jsonb IS NULL OR i.metadata @> $9::jsonb)
+  -- Project scope: the caller's bound projects, or everything when
+  -- unrestricted. Written as an explicit flag rather than the
+  -- ` + "`" + `cardinality(@project_ids) = 0 OR ...` + "`" + ` idiom, which reads "no grants means
+  -- everything" — exactly backwards for an access check. An issue with no
+  -- project is not visible to a scoped caller: those carry the billing
+  -- autopilots' client reports and invoice drafts.
+  AND ($2::bool OR i.project_id = ANY($3::uuid[]))
+  AND ($4::text IS NULL OR i.status = $4)
+  AND ($5::text IS NULL OR i.priority = $5)
+  AND ($6::uuid IS NULL OR i.assignee_id = $6)
+  AND ($7::uuid[] IS NULL OR i.assignee_id = ANY($7::uuid[]))
+  AND ($8::uuid IS NULL OR i.creator_id = $8)
+  AND ($9::uuid IS NULL OR i.project_id = $9)
+  AND ($10::bool IS NULL OR (i.start_date IS NOT NULL OR i.due_date IS NOT NULL))
+  AND ($11::jsonb IS NULL OR i.metadata @> $11::jsonb)
   AND (
-    $10::uuid IS NULL
+    $12::uuid IS NULL
     OR (i.assignee_type = 'agent' AND i.assignee_id IN (
           SELECT a.id FROM agent a
            WHERE a.workspace_id = $1
-             AND a.owner_id     = $10::uuid
+             AND a.owner_id     = $12::uuid
     ))
     OR (i.assignee_type = 'squad' AND i.assignee_id IN (
           SELECT sm.squad_id
@@ -117,14 +124,14 @@ WHERE i.workspace_id = $1
             JOIN squad s ON s.id = sm.squad_id
            WHERE s.workspace_id = $1
              AND sm.member_type = 'member'
-             AND sm.member_id   = $10::uuid
+             AND sm.member_id   = $12::uuid
           UNION
           SELECT s.id
             FROM squad s
             JOIN agent a ON a.id = s.leader_id
            WHERE s.workspace_id = $1
              AND a.workspace_id = $1
-             AND a.owner_id     = $10::uuid
+             AND a.owner_id     = $12::uuid
           UNION
           SELECT sm.squad_id
             FROM squad_member sm
@@ -133,28 +140,32 @@ WHERE i.workspace_id = $1
            WHERE s.workspace_id = $1
              AND sm.member_type = 'agent'
              AND a.workspace_id = $1
-             AND a.owner_id     = $10::uuid
+             AND a.owner_id     = $12::uuid
     ))
   )
 `
 
 type CountIssuesParams struct {
-	WorkspaceID    pgtype.UUID   `json:"workspace_id"`
-	Status         pgtype.Text   `json:"status"`
-	Priority       pgtype.Text   `json:"priority"`
-	AssigneeID     pgtype.UUID   `json:"assignee_id"`
-	AssigneeIds    []pgtype.UUID `json:"assignee_ids"`
-	CreatorID      pgtype.UUID   `json:"creator_id"`
-	ProjectID      pgtype.UUID   `json:"project_id"`
-	Scheduled      pgtype.Bool   `json:"scheduled"`
-	MetadataFilter []byte        `json:"metadata_filter"`
-	InvolvesUserID pgtype.UUID   `json:"involves_user_id"`
+	WorkspaceID     pgtype.UUID   `json:"workspace_id"`
+	ScopeAll        bool          `json:"scope_all"`
+	ScopeProjectIds []pgtype.UUID `json:"scope_project_ids"`
+	Status          pgtype.Text   `json:"status"`
+	Priority        pgtype.Text   `json:"priority"`
+	AssigneeID      pgtype.UUID   `json:"assignee_id"`
+	AssigneeIds     []pgtype.UUID `json:"assignee_ids"`
+	CreatorID       pgtype.UUID   `json:"creator_id"`
+	ProjectID       pgtype.UUID   `json:"project_id"`
+	Scheduled       pgtype.Bool   `json:"scheduled"`
+	MetadataFilter  []byte        `json:"metadata_filter"`
+	InvolvesUserID  pgtype.UUID   `json:"involves_user_id"`
 }
 
 // See ListIssues for the semantics of involves_user_id.
 func (q *Queries) CountIssues(ctx context.Context, arg CountIssuesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countIssues,
 		arg.WorkspaceID,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
 		arg.Status,
 		arg.Priority,
 		arg.AssigneeID,
@@ -917,21 +928,28 @@ SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority,
        i.parent_issue_id, i.position, i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.metadata, i.stage, i.properties
 FROM issue i
 WHERE i.workspace_id = $1
-  AND ($4::text IS NULL OR i.status = $4)
-  AND ($5::text IS NULL OR i.priority = $5)
-  AND ($6::uuid IS NULL OR i.assignee_id = $6)
-  AND ($7::uuid[] IS NULL OR i.assignee_id = ANY($7::uuid[]))
-  AND ($8::uuid IS NULL OR i.creator_id = $8)
-  AND ($9::uuid IS NULL OR i.project_id = $9)
-  AND ($10::bool IS NULL OR (i.start_date IS NOT NULL OR i.due_date IS NOT NULL))
-  AND ($11::jsonb IS NULL OR i.metadata @> $11::jsonb)
+  -- Project scope: the caller's bound projects, or everything when
+  -- unrestricted. Written as an explicit flag rather than the
+  -- ` + "`" + `cardinality(@project_ids) = 0 OR ...` + "`" + ` idiom, which reads "no grants means
+  -- everything" — exactly backwards for an access check. An issue with no
+  -- project is not visible to a scoped caller: those carry the billing
+  -- autopilots' client reports and invoice drafts.
+  AND ($4::bool OR i.project_id = ANY($5::uuid[]))
+  AND ($6::text IS NULL OR i.status = $6)
+  AND ($7::text IS NULL OR i.priority = $7)
+  AND ($8::uuid IS NULL OR i.assignee_id = $8)
+  AND ($9::uuid[] IS NULL OR i.assignee_id = ANY($9::uuid[]))
+  AND ($10::uuid IS NULL OR i.creator_id = $10)
+  AND ($11::uuid IS NULL OR i.project_id = $11)
+  AND ($12::bool IS NULL OR (i.start_date IS NOT NULL OR i.due_date IS NOT NULL))
+  AND ($13::jsonb IS NULL OR i.metadata @> $13::jsonb)
   AND (
-    $12::uuid IS NULL
+    $14::uuid IS NULL
     -- (1) assignee is an agent owned by the user
     OR (i.assignee_type = 'agent' AND i.assignee_id IN (
           SELECT a.id FROM agent a
            WHERE a.workspace_id = $1
-             AND a.owner_id     = $12::uuid
+             AND a.owner_id     = $14::uuid
     ))
     -- (2)(3)(4) assignee is a squad related to the user — three relations
     OR (i.assignee_type = 'squad' AND i.assignee_id IN (
@@ -941,7 +959,7 @@ WHERE i.workspace_id = $1
             JOIN squad s ON s.id = sm.squad_id
            WHERE s.workspace_id = $1
              AND sm.member_type = 'member'
-             AND sm.member_id   = $12::uuid
+             AND sm.member_id   = $14::uuid
           UNION
           -- (3) the squad's canonical leader is an agent owned by the user.
           -- We read squad.leader_id directly rather than relying on a
@@ -952,7 +970,7 @@ WHERE i.workspace_id = $1
             JOIN agent a ON a.id = s.leader_id
            WHERE s.workspace_id = $1
              AND a.workspace_id = $1
-             AND a.owner_id     = $12::uuid
+             AND a.owner_id     = $14::uuid
           UNION
           -- (4) the squad has an agent member owned by the user
           SELECT sm.squad_id
@@ -962,7 +980,7 @@ WHERE i.workspace_id = $1
            WHERE s.workspace_id = $1
              AND sm.member_type = 'agent'
              AND a.workspace_id = $1
-             AND a.owner_id     = $12::uuid
+             AND a.owner_id     = $14::uuid
     ))
   )
 ORDER BY i.position ASC, i.created_at DESC
@@ -970,18 +988,20 @@ LIMIT $2 OFFSET $3
 `
 
 type ListIssuesParams struct {
-	WorkspaceID    pgtype.UUID   `json:"workspace_id"`
-	Limit          int32         `json:"limit"`
-	Offset         int32         `json:"offset"`
-	Status         pgtype.Text   `json:"status"`
-	Priority       pgtype.Text   `json:"priority"`
-	AssigneeID     pgtype.UUID   `json:"assignee_id"`
-	AssigneeIds    []pgtype.UUID `json:"assignee_ids"`
-	CreatorID      pgtype.UUID   `json:"creator_id"`
-	ProjectID      pgtype.UUID   `json:"project_id"`
-	Scheduled      pgtype.Bool   `json:"scheduled"`
-	MetadataFilter []byte        `json:"metadata_filter"`
-	InvolvesUserID pgtype.UUID   `json:"involves_user_id"`
+	WorkspaceID     pgtype.UUID   `json:"workspace_id"`
+	Limit           int32         `json:"limit"`
+	Offset          int32         `json:"offset"`
+	ScopeAll        bool          `json:"scope_all"`
+	ScopeProjectIds []pgtype.UUID `json:"scope_project_ids"`
+	Status          pgtype.Text   `json:"status"`
+	Priority        pgtype.Text   `json:"priority"`
+	AssigneeID      pgtype.UUID   `json:"assignee_id"`
+	AssigneeIds     []pgtype.UUID `json:"assignee_ids"`
+	CreatorID       pgtype.UUID   `json:"creator_id"`
+	ProjectID       pgtype.UUID   `json:"project_id"`
+	Scheduled       pgtype.Bool   `json:"scheduled"`
+	MetadataFilter  []byte        `json:"metadata_filter"`
+	InvolvesUserID  pgtype.UUID   `json:"involves_user_id"`
 }
 
 type ListIssuesRow struct {
@@ -1019,6 +1039,8 @@ func (q *Queries) ListIssues(ctx context.Context, arg ListIssuesParams) ([]ListI
 		arg.WorkspaceID,
 		arg.Limit,
 		arg.Offset,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
 		arg.Status,
 		arg.Priority,
 		arg.AssigneeID,
@@ -1075,23 +1097,30 @@ SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority,
        i.parent_issue_id, i.position, i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.metadata, i.stage, i.properties
 FROM issue i
 WHERE i.workspace_id = $1
+  -- Project scope: the caller's bound projects, or everything when
+  -- unrestricted. Written as an explicit flag rather than the
+  -- ` + "`" + `cardinality(@project_ids) = 0 OR ...` + "`" + ` idiom, which reads "no grants means
+  -- everything" — exactly backwards for an access check. An issue with no
+  -- project is not visible to a scoped caller: those carry the billing
+  -- autopilots' client reports and invoice drafts.
+  AND ($2::bool OR i.project_id = ANY($3::uuid[]))
   AND i.status NOT IN ('done', 'cancelled')
-  AND ($2::text IS NULL OR i.priority = $2)
-  AND ($3::uuid IS NULL OR i.assignee_id = $3)
-  AND ($4::uuid[] IS NULL OR i.assignee_id = ANY($4::uuid[]))
-  AND ($5::uuid IS NULL OR i.creator_id = $5)
-  AND ($6::uuid IS NULL OR i.project_id = $6)
-  AND ($7::jsonb IS NULL OR i.metadata @> $7::jsonb)
+  AND ($4::text IS NULL OR i.priority = $4)
+  AND ($5::uuid IS NULL OR i.assignee_id = $5)
+  AND ($6::uuid[] IS NULL OR i.assignee_id = ANY($6::uuid[]))
+  AND ($7::uuid IS NULL OR i.creator_id = $7)
+  AND ($8::uuid IS NULL OR i.project_id = $8)
+  AND ($9::jsonb IS NULL OR i.metadata @> $9::jsonb)
   -- properties_filter is a jsonb array of groups, each group an array of
   -- containment patterns (built by parsePropertiesFilterParam): the issue
   -- must match at least one pattern from EVERY group (AND of ORs). The
   -- correlated form skips the GIN index, which is fine here: open_only is
   -- an unpaginated workspace scan already narrowed by status.
   AND (
-    $8::jsonb IS NULL
+    $10::jsonb IS NULL
     OR NOT EXISTS (
       SELECT 1
-      FROM jsonb_array_elements($8::jsonb) AS pf(alternatives)
+      FROM jsonb_array_elements($10::jsonb) AS pf(alternatives)
       WHERE NOT EXISTS (
         SELECT 1
         FROM jsonb_array_elements(pf.alternatives) AS alt(pattern)
@@ -1100,11 +1129,11 @@ WHERE i.workspace_id = $1
     )
   )
   AND (
-    $9::uuid IS NULL
+    $11::uuid IS NULL
     OR (i.assignee_type = 'agent' AND i.assignee_id IN (
           SELECT a.id FROM agent a
            WHERE a.workspace_id = $1
-             AND a.owner_id     = $9::uuid
+             AND a.owner_id     = $11::uuid
     ))
     OR (i.assignee_type = 'squad' AND i.assignee_id IN (
           SELECT sm.squad_id
@@ -1112,14 +1141,14 @@ WHERE i.workspace_id = $1
             JOIN squad s ON s.id = sm.squad_id
            WHERE s.workspace_id = $1
              AND sm.member_type = 'member'
-             AND sm.member_id   = $9::uuid
+             AND sm.member_id   = $11::uuid
           UNION
           SELECT s.id
             FROM squad s
             JOIN agent a ON a.id = s.leader_id
            WHERE s.workspace_id = $1
              AND a.workspace_id = $1
-             AND a.owner_id     = $9::uuid
+             AND a.owner_id     = $11::uuid
           UNION
           SELECT sm.squad_id
             FROM squad_member sm
@@ -1128,7 +1157,7 @@ WHERE i.workspace_id = $1
            WHERE s.workspace_id = $1
              AND sm.member_type = 'agent'
              AND a.workspace_id = $1
-             AND a.owner_id     = $9::uuid
+             AND a.owner_id     = $11::uuid
     ))
   )
 ORDER BY i.position ASC, i.created_at DESC
@@ -1136,6 +1165,8 @@ ORDER BY i.position ASC, i.created_at DESC
 
 type ListOpenIssuesParams struct {
 	WorkspaceID      pgtype.UUID   `json:"workspace_id"`
+	ScopeAll         bool          `json:"scope_all"`
+	ScopeProjectIds  []pgtype.UUID `json:"scope_project_ids"`
 	Priority         pgtype.Text   `json:"priority"`
 	AssigneeID       pgtype.UUID   `json:"assignee_id"`
 	AssigneeIds      []pgtype.UUID `json:"assignee_ids"`
@@ -1175,6 +1206,8 @@ type ListOpenIssuesRow struct {
 func (q *Queries) ListOpenIssues(ctx context.Context, arg ListOpenIssuesParams) ([]ListOpenIssuesRow, error) {
 	rows, err := q.db.Query(ctx, listOpenIssues,
 		arg.WorkspaceID,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
 		arg.Priority,
 		arg.AssigneeID,
 		arg.AssigneeIds,

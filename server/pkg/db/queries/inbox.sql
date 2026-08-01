@@ -4,6 +4,12 @@ SELECT i.*,
 FROM inbox_item i
 LEFT JOIN issue iss ON iss.id = i.issue_id
 WHERE i.workspace_id = $1 AND i.recipient_type = $2 AND i.recipient_id = $3 AND i.archived = false
+  -- Project scope. A notification addressed to this person about an issue
+  -- they cannot open would be a dead link that still shows the title, so the
+  -- item is withheld with the issue. Items with no issue (workspace-level
+  -- notices) always arrive.
+  AND (sqlc.arg('scope_all')::bool OR i.issue_id IS NULL
+       OR iss.project_id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
 ORDER BY i.created_at DESC;
 
 -- name: ListArchivedInboxItems :many
@@ -27,6 +33,12 @@ SELECT i.*,
 FROM inbox_item i
 LEFT JOIN issue iss ON iss.id = i.issue_id
 WHERE i.workspace_id = $1 AND i.recipient_type = $2 AND i.recipient_id = $3 AND i.archived = true
+  -- Project scope. A notification addressed to this person about an issue
+  -- they cannot open would be a dead link that still shows the title, so the
+  -- item is withheld with the issue. Items with no issue (workspace-level
+  -- notices) always arrive.
+  AND (sqlc.arg('scope_all')::bool OR i.issue_id IS NULL
+       OR iss.project_id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
   AND (i.issue_id IS NULL OR NOT EXISTS (
       SELECT 1
       FROM inbox_item active
@@ -101,8 +113,19 @@ WHERE workspace_id = $1 AND issue_id = $2 AND type = $3 AND archived = false
 RETURNING recipient_type, recipient_id;
 
 -- name: CountUnreadInbox :one
-SELECT count(*) FROM inbox_item
-WHERE workspace_id = $1 AND recipient_type = $2 AND recipient_id = $3 AND read = false AND archived = false;
+-- Scoped exactly like ListInboxItems: a badge counting items the list withholds
+-- lights up for an inbox that renders empty.
+SELECT count(*) FROM inbox_item i
+LEFT JOIN issue iss ON iss.id = i.issue_id
+WHERE i.workspace_id = $1 AND i.recipient_type = $2 AND i.recipient_id = $3
+  AND i.read = false AND i.archived = false
+  -- Project scope. A notification addressed to this person about an issue
+  -- they cannot open would be a dead link that still shows the title, so the
+  -- item is withheld with the issue. Items with no issue (workspace-level
+  -- notices) always arrive.
+  AND (sqlc.arg('scope_all')::bool OR i.issue_id IS NULL
+       OR iss.project_id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
+;
 
 -- name: CountUnreadInboxByWorkspace :many
 -- Per-workspace unread inbox counts for a recipient member, matching the

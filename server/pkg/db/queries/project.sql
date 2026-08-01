@@ -1,6 +1,9 @@
 -- name: ListProjects :many
 SELECT * FROM project
 WHERE workspace_id = $1
+  -- Project scope, same explicit-flag form as the issue queries: a caller
+  -- bound to nothing sees nothing, never the whole workspace.
+  AND (sqlc.arg('scope_all')::bool OR id = ANY(sqlc.arg('scope_project_ids')::uuid[]))
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('priority')::text IS NULL OR priority = sqlc.narg('priority'))
 ORDER BY created_at DESC;

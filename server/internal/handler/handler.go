@@ -794,7 +794,7 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 	// silently returns false for non-identifier strings, falling through to
 	// the UUID path below.
 	if issue, ok := h.resolveIssueByIdentifier(r.Context(), issueID, workspaceID); ok {
-		if allowed, isGuest := h.guestProjectAllowed(r, workspaceID, issue.ProjectID); isGuest && !allowed {
+		if allowed, restricted := h.actorProjectAllowed(r, workspaceID, issue.ProjectID); restricted && !allowed {
 			writeError(w, http.StatusNotFound, "issue not found")
 			return db.Issue{}, false
 		}
@@ -821,7 +821,7 @@ func (h *Handler) loadIssueForUser(w http.ResponseWriter, r *http.Request, issue
 		writeError(w, http.StatusNotFound, "issue not found")
 		return db.Issue{}, false
 	}
-	if allowed, isGuest := h.guestProjectAllowed(r, workspaceID, issue.ProjectID); isGuest && !allowed {
+	if allowed, restricted := h.actorProjectAllowed(r, workspaceID, issue.ProjectID); restricted && !allowed {
 		writeError(w, http.StatusNotFound, "issue not found")
 		return db.Issue{}, false
 	}

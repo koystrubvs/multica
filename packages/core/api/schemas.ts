@@ -2061,3 +2061,24 @@ export const MALFORMED_RUNTIME_MODEL_LIST_REQUEST: RuntimeModelListRequest = {
   created_at: "",
   updated_at: "",
 };
+
+/** One row of "who sees this project", from the project's side.
+ *
+ * `bound` and `sees` are deliberately separate: the owner and anyone who sees
+ * the whole workspace need no binding, and rendering them as unchecked would
+ * read as "denied". Defaults are the safe reading — an unparseable row shows
+ * as no access rather than access. */
+export const ProjectMemberAccessSchema = z.object({
+  member_id: z.string(),
+  user_id: z.string(),
+  name: z.string().default(""),
+  email: z.string().default(""),
+  role: z.string().default("member"),
+  access_scope: z.string().default("workspace"),
+  bound: z.boolean().default(false),
+  sees: z.boolean().default(false),
+});
+
+export const ListProjectMembersResponseSchema = z.object({
+  members: z.array(ProjectMemberAccessSchema).default([]),
+});

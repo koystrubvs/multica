@@ -16,6 +16,7 @@ type contextKey int
 const (
 	ctxKeyWorkspaceID contextKey = iota
 	ctxKeyMember
+	ctxKeyProjectScope
 )
 
 // MemberFromContext returns the workspace member injected by the workspace middleware.
@@ -258,7 +259,17 @@ func buildMiddleware(queries *db.Queries, resolve workspaceResolver, roles []str
 				}
 			}
 
+			// Resolved before the handler runs and never cached: membership
+			// caching is explicitly barred from holding authorization inputs
+			// (internal/auth/membership_cache.go), and this is one.
+			scope, scopeErr := ResolveProjectScope(r.Context(), queries, wsUUID, member)
+			if scopeErr != nil {
+				writeError(w, http.StatusForbidden, "insufficient permissions")
+				return
+			}
+
 			ctx := SetMemberContext(r.Context(), workspaceID, member)
+			ctx = SetProjectScopeContext(ctx, scope)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

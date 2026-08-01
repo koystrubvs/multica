@@ -19,3 +19,9 @@ export {
   useUpdateProjectResource,
   useDeleteProjectResource,
 } from "./resource-queries";
+export {
+  projectAccessKeys,
+  projectMembersOptions,
+  useBindProjectMember,
+  useUnbindProjectMember,
+} from "./access-queries";

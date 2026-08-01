@@ -1366,6 +1366,17 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/resources", h.CreateProjectResource)
 					r.Put("/resources/{resourceId}", h.UpdateProjectResource)
 					r.Delete("/resources/{resourceId}", h.DeleteProjectResource)
+					// Who sees this project — the same member_project bindings
+					// the members screen edits, entered from the project. Both
+					// doors go through unbindMemberFromProject, so revoking
+					// here still has to say where assigned work goes.
+					// Owner/admin: these enumerate the workspace's people.
+					r.Group(func(r chi.Router) {
+						r.Use(middleware.RequireWorkspaceRole(queries, "owner", "admin"))
+						r.Get("/members", h.ListProjectMembers)
+						r.Post("/members", h.BindProjectMember)
+						r.Delete("/members/{userId}", h.UnbindProjectMember)
+					})
 					// Human-only, see the /api/billing/* group above.
 					r.Group(func(r chi.Router) {
 						r.Use(handler.RequireHumanActor)
@@ -1767,6 +1778,26 @@ func (mc *membershipChecker) IsMember(ctx context.Context, userID, workspaceID s
 		WorkspaceID: parseUUID(workspaceID),
 	})
 	return err == nil
+}
+
+// IsProjectScoped mirrors middleware.ResolveProjectScope: the owner is never
+// scoped, a guest always is, everyone else follows their access mode. A lookup
+// failure answers "scoped", because the caller uses this to decide whether to
+// hand out the workspace-wide event feed.
+func (mc *membershipChecker) IsProjectScoped(ctx context.Context, userID, workspaceID string) bool {
+	workspaceUUID := parseUUID(workspaceID)
+	member, err := mc.queries.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
+		UserID:      parseUUID(userID),
+		WorkspaceID: workspaceUUID,
+	})
+	if err != nil {
+		return true
+	}
+	scope, err := middleware.ResolveProjectScope(ctx, mc.queries, workspaceUUID, member)
+	if err != nil {
+		return true
+	}
+	return scope.Restricted()
 }
 
 // patResolver implements realtime.PATResolver using database queries.

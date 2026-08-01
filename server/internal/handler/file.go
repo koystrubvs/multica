@@ -699,6 +699,13 @@ func (h *Handler) loadAttachmentForRequest(w http.ResponseWriter, r *http.Reques
 		return db.Attachment{}, false
 	}
 
+	// Same rule as the download path: the file is only as reachable as the
+	// issue it hangs on.
+	if !h.attachmentReadable(r, att) {
+		writeError(w, http.StatusNotFound, "attachment not found")
+		return db.Attachment{}, false
+	}
+
 	return att, true
 }
 
@@ -745,14 +752,20 @@ func (h *Handler) loadAttachmentForDownload(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusNotFound, "attachment not found")
 		return db.Attachment{}, false
 	}
-	if h.MembershipCache.Get(r.Context(), userID, workspaceID) {
-		return att, true
+	if !h.MembershipCache.Get(r.Context(), userID, workspaceID) {
+		if _, err := h.getWorkspaceMember(r.Context(), userID, workspaceID); err != nil {
+			writeError(w, http.StatusNotFound, "attachment not found")
+			return db.Attachment{}, false
+		}
+		h.MembershipCache.Set(r.Context(), userID, workspaceID)
 	}
-	if _, err := h.getWorkspaceMember(r.Context(), userID, workspaceID); err != nil {
+	// Membership is not the whole answer: the file hangs on an issue, and a
+	// caller who may not open the issue may not have its attachments either.
+	// 404 for the same reason as above — existence is not confirmed.
+	if !h.attachmentReadable(r, att) {
 		writeError(w, http.StatusNotFound, "attachment not found")
 		return db.Attachment{}, false
 	}
-	h.MembershipCache.Set(r.Context(), userID, workspaceID)
 	return att, true
 }
 

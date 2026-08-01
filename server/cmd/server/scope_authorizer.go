@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/middleware"
 	"github.com/multica-ai/multica/server/internal/realtime"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -18,6 +19,8 @@ type scopeAuthQuerier interface {
 	GetAgentTask(ctx context.Context, id pgtype.UUID) (db.AgentTaskQueue, error)
 	GetIssue(ctx context.Context, id pgtype.UUID) (db.Issue, error)
 	GetChatSession(ctx context.Context, id pgtype.UUID) (db.ChatSession, error)
+	GetMemberByUserAndWorkspace(ctx context.Context, arg db.GetMemberByUserAndWorkspaceParams) (db.Member, error)
+	ListMemberProjectsByUser(ctx context.Context, arg db.ListMemberProjectsByUserParams) ([]pgtype.UUID, error)
 }
 
 // dbScopeAuthorizer implements realtime.ScopeAuthorizer for the per-task and
@@ -62,13 +65,19 @@ func (a *dbScopeAuthorizer) AuthorizeScope(ctx context.Context, userID, workspac
 		if err != nil {
 			return scopeLookupErr(err)
 		}
-		// Issue tasks: visible to any workspace member.
+		// Issue tasks: any workspace member, narrowed to the subscriber's
+		// projects. Without this the containment above is decorative — a member
+		// kept out of the workspace room subscribes to one task at a time
+		// instead, and a task room carries the live agent transcript.
 		if task.IssueID.Valid {
 			issue, err := a.q.GetIssue(ctx, task.IssueID)
 			if err != nil {
 				return scopeLookupErr(err)
 			}
-			return issue.WorkspaceID == wsUUID, nil
+			if issue.WorkspaceID != wsUUID {
+				return false, nil
+			}
+			return a.subscriberSeesProject(ctx, userID, wsUUID, issue.ProjectID)
 		}
 		// Chat tasks: only the chat session's creator may subscribe, mirroring
 		// the HTTP layer's creator-only access on chat resources.
@@ -109,4 +118,44 @@ func (a *dbScopeAuthorizer) AuthorizeScope(ctx context.Context, userID, workspac
 	default:
 		return false, nil
 	}
+}
+
+// subscriberSeesProject answers the realtime side of the same question the HTTP
+// handlers ask, and by the same rule: the owner and anyone in 'workspace' mode
+// see everything, a guest and a member in 'projects' mode see their bindings.
+// A lookup that fails denies, because the caller is deciding whether to open a
+// live feed of another project's work.
+func (a *dbScopeAuthorizer) subscriberSeesProject(
+	ctx context.Context,
+	userID string,
+	workspaceID pgtype.UUID,
+	projectID pgtype.UUID,
+) (bool, error) {
+	uidUUID, err := util.ParseUUID(userID)
+	if err != nil {
+		return false, nil
+	}
+	member, err := a.q.GetMemberByUserAndWorkspace(ctx, db.GetMemberByUserAndWorkspaceParams{
+		UserID:      uidUUID,
+		WorkspaceID: workspaceID,
+	})
+	if err != nil {
+		return scopeLookupErr(err)
+	}
+	scope, err := middleware.ResolveProjectScope(ctx, a.q, workspaceID, member)
+	if err != nil {
+		return scopeLookupErr(err)
+	}
+	if !scope.Restricted() {
+		return true, nil
+	}
+	if !projectID.Valid {
+		return false, nil
+	}
+	for _, granted := range scope.AllowedProjectIDs {
+		if granted.Valid && granted.Bytes == projectID.Bytes {
+			return true, nil
+		}
+	}
+	return false, nil
 }

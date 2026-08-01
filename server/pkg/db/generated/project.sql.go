@@ -192,19 +192,30 @@ func (q *Queries) GetProjectIssueStats(ctx context.Context, projectIds []pgtype.
 const listProjects = `-- name: ListProjects :many
 SELECT id, workspace_id, title, description, icon, status, lead_type, lead_id, created_at, updated_at, priority, start_date, due_date, project_type FROM project
 WHERE workspace_id = $1
-  AND ($2::text IS NULL OR status = $2)
-  AND ($3::text IS NULL OR priority = $3)
+  -- Project scope, same explicit-flag form as the issue queries: a caller
+  -- bound to nothing sees nothing, never the whole workspace.
+  AND ($2::bool OR id = ANY($3::uuid[]))
+  AND ($4::text IS NULL OR status = $4)
+  AND ($5::text IS NULL OR priority = $5)
 ORDER BY created_at DESC
 `
 
 type ListProjectsParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	Status      pgtype.Text `json:"status"`
-	Priority    pgtype.Text `json:"priority"`
+	WorkspaceID     pgtype.UUID   `json:"workspace_id"`
+	ScopeAll        bool          `json:"scope_all"`
+	ScopeProjectIds []pgtype.UUID `json:"scope_project_ids"`
+	Status          pgtype.Text   `json:"status"`
+	Priority        pgtype.Text   `json:"priority"`
 }
 
 func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error) {
-	rows, err := q.db.Query(ctx, listProjects, arg.WorkspaceID, arg.Status, arg.Priority)
+	rows, err := q.db.Query(ctx, listProjects,
+		arg.WorkspaceID,
+		arg.ScopeAll,
+		arg.ScopeProjectIds,
+		arg.Status,
+		arg.Priority,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -122,3 +122,18 @@ export interface ListProjectResourcesResponse {
   resources: ProjectResource[];
   total: number;
 }
+
+/** One person's access to a project, read from the project's side.
+ *
+ * `bound` is an explicit binding; `sees` is the answer the screen asks — the
+ * owner and anyone who sees the whole workspace need no binding at all. */
+export interface ProjectMemberAccess {
+  member_id: string;
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  access_scope: string;
+  bound: boolean;
+  sees: boolean;
+}

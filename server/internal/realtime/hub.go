@@ -23,6 +23,10 @@ import (
 // MembershipChecker verifies a user belongs to a workspace.
 type MembershipChecker interface {
 	IsMember(ctx context.Context, userID, workspaceID string) bool
+	// IsProjectScoped reports whether this member sees only certain projects.
+	// Such a client is kept out of the workspace room, which broadcasts every
+	// issue event in the workspace regardless of project.
+	IsProjectScoped(ctx context.Context, userID, workspaceID string) bool
 }
 
 // SlugResolver translates a workspace slug to its UUID.
@@ -226,6 +230,9 @@ type Client struct {
 	send        chan []byte
 	userID      string
 	workspaceID string
+	// projectScoped clients are not auto-subscribed to the workspace room and
+	// may not ask for it. Resolved once, at handshake.
+	projectScoped bool
 
 	// subscriptions is guarded by hub.mu. Tracks the scopes this client is
 	// currently in. Used to clean up rooms on disconnect.
@@ -328,8 +335,13 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 			M.ConnectsTotal.Add(1)
 			M.ActiveConnections.Add(1)
-			// Auto-subscribe to the workspace and user scopes.
-			h.subscribe(client, ScopeWorkspace, client.workspaceID)
+			// Auto-subscribe to the workspace and user scopes. A
+			// project-scoped client gets only the user scope: the workspace
+			// room is an unfiltered feed of every issue event, and containing
+			// it here costs nothing on the producer side.
+			if !client.projectScoped {
+				h.subscribe(client, ScopeWorkspace, client.workspaceID)
+			}
 			if client.userID != "" {
 				h.subscribe(client, ScopeUser, client.userID)
 			}
@@ -865,6 +877,9 @@ func HandleWebSocket(hub *Hub, mc MembershipChecker, pr PATResolver, resolveSlug
 		send:        make(chan []byte, 256),
 		userID:      userID,
 		workspaceID: workspaceID,
+		// Asked once per connection rather than per frame: membership was just
+		// verified above, and this is the same row.
+		projectScoped: mc.IsProjectScoped(r.Context(), userID, workspaceID),
 	}
 	hub.register <- client
 
@@ -967,11 +982,42 @@ func (c *Client) handleSubscribe(scope, id string) {
 			})
 			return
 		}
+		// The workspace room carries every issue event in the workspace, so a
+		// client restricted to some projects is kept out of it at connect time.
+		// Refusing the explicit frame too is the point: otherwise the client
+		// simply asks for the room it was not given.
+		if scope == ScopeWorkspace && c.projectScoped {
+			M.SubscribeDeniedTotal(scope).Add(1)
+			c.sendJSON(map[string]any{
+				"type": "subscribe_error",
+				"payload": map[string]string{
+					"scope": scope,
+					"id":    id,
+					"error": "forbidden",
+				},
+			})
+			return
+		}
 		// Already auto-subscribed at connect time; reply ack idempotently.
 		c.hub.subscribe(c, scope, id)
 	case ScopeTask, ScopeChat:
 		auth := c.hub.authorizer
-		if auth != nil {
+		// No authorizer means nothing can vouch for this room, and the rooms
+		// carry another project's work. Missing wiring must not read as
+		// permission.
+		if auth == nil {
+			M.SubscribeDeniedTotal(scope).Add(1)
+			c.sendJSON(map[string]any{
+				"type": "subscribe_error",
+				"payload": map[string]string{
+					"scope": scope,
+					"id":    id,
+					"error": "forbidden",
+				},
+			})
+			return
+		}
+		{
 			ok, err := auth.AuthorizeScope(context.Background(), c.userID, c.workspaceID, scope, id)
 			if err != nil || !ok {
 				M.SubscribeDeniedTotal(scope).Add(1)

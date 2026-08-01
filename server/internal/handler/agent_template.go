@@ -160,6 +160,11 @@ type fetchFailureResponse struct {
 }
 
 func (h *Handler) CreateAgentFromTemplate(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 
 	ownerID, ok := requireUserID(w, r)

@@ -294,5 +294,20 @@
       "admin_no_site_url": "先にサイト URL を設定してください",
       "admin_open_failed": "サイトを開けませんでした"
     }
+  },
+  "access": {
+    "title": "Project access",
+    "subtitle": "Who is let into this project. The same link is edited from the person's side — it is one and the same binding.",
+    "loading": "Loading…",
+    "sees_whole_workspace": "sees the whole workspace",
+    "toggle_label": "Access for {{name}}",
+    "grant_failed": "Could not grant access",
+    "revoke_failed": "Could not close access",
+    "handover_title": "Where does the work go?",
+    "handover_description": "{{name}} has {{count}} issue(s) assigned in this project. After access is closed they will not see them, so the assignee must be cleared or handed over.",
+    "handover_placeholder": "Hand over to someone",
+    "handover_select_label": "Who takes over the issues",
+    "unassign": "Clear assignee",
+    "reassign": "Hand over"
   }
 }

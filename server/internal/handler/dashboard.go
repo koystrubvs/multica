@@ -176,6 +176,11 @@ type DashboardUsageDailyResponse struct {
 // workspace, optionally scoped to a project. Backed by task_usage_hourly,
 // sliced into calendar days under the viewer's tz.
 func (h *Handler) GetDashboardUsageDaily(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	if _, ok := h.workspaceMember(w, r, workspaceID); !ok {
 		return
@@ -260,6 +265,11 @@ type DashboardUsageByAgentResponse struct {
 // for the workspace, optionally scoped to a project. Backed by
 // task_usage_hourly with the viewer's tz applied to the `?days=` cutoff.
 func (h *Handler) GetDashboardUsageByAgent(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	member, ok := h.workspaceMember(w, r, workspaceID)
 	if !ok {
@@ -378,6 +388,11 @@ type DashboardAgentRunTimeResponse struct {
 // completed_at populated contribute, since queued/running tasks have no
 // finite duration.
 func (h *Handler) GetDashboardAgentRunTime(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	member, ok := h.workspaceMember(w, r, workspaceID)
 	if !ok {
@@ -462,6 +477,11 @@ type DashboardRunTimeDailyResponse struct {
 // populated contribute. Bucketed by completed_at so the day boundaries
 // line up with the per-agent run-time card.
 func (h *Handler) GetDashboardRunTimeDaily(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	if _, ok := h.workspaceMember(w, r, workspaceID); !ok {
 		return
@@ -528,6 +548,11 @@ type DashboardFailureDailyResponse struct {
 // counts for the workspace, optionally scoped to a project. Powers the Usage
 // page's Errors trend and errors-by-class breakdown.
 func (h *Handler) GetDashboardFailuresDaily(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	if _, ok := h.workspaceMember(w, r, workspaceID); !ok {
 		return
@@ -575,6 +600,11 @@ type DashboardFailureByAgentResponse struct {
 // terminal-task counts for the workspace, optionally scoped to a project.
 // Powers the Usage page's "top offenders" list.
 func (h *Handler) GetDashboardFailuresByAgent(w http.ResponseWriter, r *http.Request) {
+	// Not decomposable by project, or it hands out the means to leave the
+	// scope — see refuseIfScoped.
+	if !h.refuseIfScoped(w, r) {
+		return
+	}
 	workspaceID := h.resolveWorkspaceID(r)
 	member, ok := h.workspaceMember(w, r, workspaceID)
 	if !ok {
