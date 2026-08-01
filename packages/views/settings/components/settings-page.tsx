@@ -21,6 +21,7 @@ import { GitHubMark } from "./github-mark";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@multica/ui/components/ui/tabs";
 import { useIsMobile } from "@multica/ui/hooks/use-mobile";
 import { useCurrentWorkspace } from "@multica/core/paths";
+import { useCurrentMember } from "@multica/core/permissions";
 import { useNavigation } from "../../navigation";
 import { AccountTab } from "./account-tab";
 import { PreferencesTab } from "./preferences-tab";
@@ -115,9 +116,18 @@ interface SettingsPageProps {
 
 export function SettingsPage({ extraAccountTabs }: SettingsPageProps = {}) {
   const { t } = useT("settings");
-  const workspaceName = useCurrentWorkspace()?.name;
+  const workspace = useCurrentWorkspace();
+  const workspaceName = workspace?.name;
   const navigation = useNavigation();
   const isMobile = useIsMobile();
+
+  // The second group configures the workspace itself — repositories, GitHub,
+  // integrations, members, labels, properties. None of it is a personal
+  // preference, and the server already refuses the writes from anyone else, so
+  // showing the tabs only offered screens that fail. The first group stays for
+  // everyone: it is that person's own profile, shortcuts and tokens.
+  const { role } = useCurrentMember(workspace?.id ?? "");
+  const canManageWorkspace = role === "owner" || role === "admin";
 
   // Whitelist of valid tab values; unknown ?tab=… values silently fall back to
   // the default. Whitelisting also blocks junk like ?tab=<script> from
@@ -126,10 +136,13 @@ export function SettingsPage({ extraAccountTabs }: SettingsPageProps = {}) {
     () =>
       new Set<string>([
         ...ACCOUNT_TAB_KEYS,
-        ...Object.values(WORKSPACE_TAB_VALUES),
+        // Dropping these from the whitelist is what actually closes them: a
+        // hidden trigger still leaves ?tab=members typeable, and the fallback
+        // lands such a link on the profile tab instead.
+        ...(canManageWorkspace ? Object.values(WORKSPACE_TAB_VALUES) : []),
         ...(extraAccountTabs?.map((tab) => tab.value) ?? []),
       ]),
-    [extraAccountTabs],
+    [extraAccountTabs, canManageWorkspace],
   );
 
   const tabFromUrl = navigation.searchParams.get(TAB_QUERY_KEY);
@@ -192,23 +205,28 @@ export function SettingsPage({ extraAccountTabs }: SettingsPageProps = {}) {
             </TabsTrigger>
           ))}
 
-          {/* Workspace group */}
-          <span className="hidden truncate px-2 pb-1 pt-4 text-caption font-medium text-muted-foreground md:block">
-            {workspaceName ?? t(($) => $.page.workspace_fallback)}
-          </span>
-          {WORKSPACE_TAB_KEYS.map((key) => {
-            const Icon = WORKSPACE_TAB_ICONS[key];
-            return (
-              <TabsTrigger
-                key={key}
-                value={WORKSPACE_TAB_VALUES[key]}
-                className={SETTINGS_TAB_TRIGGER_CLASS}
-              >
-                <Icon className="h-4 w-4" />
-                {t(($) => $.page.tabs[key])}
-              </TabsTrigger>
-            );
-          })}
+          {/* Workspace group — owner/admin only, header included: an empty
+              group heading reads as "something is missing here". */}
+          {canManageWorkspace && (
+            <>
+              <span className="hidden truncate px-2 pb-1 pt-4 text-caption font-medium text-muted-foreground md:block">
+                {workspaceName ?? t(($) => $.page.workspace_fallback)}
+              </span>
+              {WORKSPACE_TAB_KEYS.map((key) => {
+                const Icon = WORKSPACE_TAB_ICONS[key];
+                return (
+                  <TabsTrigger
+                    key={key}
+                    value={WORKSPACE_TAB_VALUES[key]}
+                    className={SETTINGS_TAB_TRIGGER_CLASS}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {t(($) => $.page.tabs[key])}
+                  </TabsTrigger>
+                );
+              })}
+            </>
+          )}
         </TabsList>
       </div>
 
