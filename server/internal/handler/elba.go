@@ -21,8 +21,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -178,29 +181,91 @@ func elbaDocPayload(contractorID string, items []elbaDocItem, opts elbaDocOption
 	return payload
 }
 
-// CreateBill creates a счёт and returns its Elba document id.
-func (c *elbaClient) CreateBill(ctx context.Context, orgID, contractorID string, items []elbaDocItem, opts elbaDocOptions) (string, error) {
-	data, err := c.do(ctx, http.MethodPost, "/organizations/"+orgID+"/bills", elbaDocPayload(contractorID, items, opts, true))
-	if err != nil {
-		return "", err
-	}
-	return elbaDocumentID(data), nil
+// elbaDocument is what we keep from a created document. The number matters as
+// much as the id: payers name it in the payment purpose ("Оплата по счету № 93
+// от 30 июня 2026"), so it is the only field of ours that ever comes back in a
+// bank statement. The id is a UUID and never does.
+type elbaDocument struct {
+	ID     string
+	Number string
+	Date   string // YYYY-MM-DD, as Elba issued it
 }
 
-// CreateAct creates an акт and returns its Elba document id.
+// CreateBill creates a счёт and returns its id, number and issue date.
+func (c *elbaClient) CreateBill(ctx context.Context, orgID, contractorID string, items []elbaDocItem, opts elbaDocOptions) (elbaDocument, error) {
+	data, err := c.do(ctx, http.MethodPost, "/organizations/"+orgID+"/bills", elbaDocPayload(contractorID, items, opts, true))
+	if err != nil {
+		return elbaDocument{}, err
+	}
+	doc := parseElbaDocument(data)
+	// v1 answers the create call with the stored document, but the contract
+	// does not promise the number, and a bill recorded without one can never be
+	// recognised in a bank statement. One extra read is cheaper than that.
+	if doc.ID != "" && doc.Number == "" {
+		if fetched, ferr := c.GetBill(ctx, orgID, doc.ID); ferr == nil {
+			doc.Number = fetched.Number
+			if fetched.Date != "" {
+				doc.Date = fetched.Date
+			}
+		} else {
+			slog.Warn("elba: bill created without a number and re-read failed",
+				"bill_id", doc.ID, "error", ferr)
+		}
+	}
+	if doc.Date == "" {
+		doc.Date = opts.Date
+	}
+	return doc, nil
+}
+
+// CreateAct creates an акт and returns its Elba document id. Acts carry a
+// number too, but nobody pays against an act, so it is not recorded.
 func (c *elbaClient) CreateAct(ctx context.Context, orgID, contractorID string, items []elbaDocItem, opts elbaDocOptions) (string, error) {
 	data, err := c.do(ctx, http.MethodPost, "/organizations/"+orgID+"/acts", elbaDocPayload(contractorID, items, opts, false))
 	if err != nil {
 		return "", err
 	}
-	return elbaDocumentID(data), nil
+	return parseElbaDocument(data).ID, nil
 }
 
-func elbaDocumentID(data any) string {
-	if m, ok := data.(map[string]any); ok {
-		if id, ok := m["id"].(string); ok {
-			return id
-		}
+// GetBill reads one счёт back, which is how a bill created without a number in
+// the create response gets one.
+func (c *elbaClient) GetBill(ctx context.Context, orgID, billID string) (elbaDocument, error) {
+	data, err := c.do(ctx, http.MethodGet, "/organizations/"+orgID+"/bills/"+billID, nil)
+	if err != nil {
+		return elbaDocument{}, err
+	}
+	return parseElbaDocument(data), nil
+}
+
+func parseElbaDocument(data any) elbaDocument {
+	m, ok := data.(map[string]any)
+	if !ok {
+		return elbaDocument{}
+	}
+	doc := elbaDocument{}
+	if id, ok := m["id"].(string); ok {
+		doc.ID = id
+	}
+	doc.Number = elbaScalarString(m["number"])
+	doc.Date = elbaScalarString(m["date"])
+	if len(doc.Date) > 10 {
+		// Tolerate a timestamp where a date is documented.
+		doc.Date = doc.Date[:10]
+	}
+	return doc
+}
+
+// elbaScalarString reads a field that the API documents as a string but may
+// send as a number (invoice numbers are digits).
+func elbaScalarString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case json.Number:
+		return v.String()
 	}
 	return ""
 }

@@ -398,3 +398,99 @@ func TestBusinessCapAgreementPlansFromTrackedWork(t *testing.T) {
 	businessRequest(t, http.MethodPatch, businessID, "/agreements/"+strictID, map[string]any{"status": "expired"}, http.StatusOK)
 	businessRequest(t, http.MethodPatch, businessID, "/agreements/"+strictID, map[string]any{"status": "archived"}, http.StatusBadRequest)
 }
+
+// A payment that names its invoice settles that invoice, whatever the dates and
+// amounts suggest. The line below is unreachable by every other route: its
+// period starts more than two weeks out, so the window that keeps stale
+// receipts off current periods hides it, and the money would land on the
+// nearest open line instead. That is the shape of both wrong settlements this
+// matcher has made on real money.
+func TestBusinessAutoMatchPrefersInvoiceNumber(t *testing.T) {
+	ctx := context.Background()
+	var businessID, projectID string
+	if err := testPool.QueryRow(ctx, `INSERT INTO business_account(name,owner_user_id) VALUES ('Invoice Number Business',$1) RETURNING id`, testUserID).Scan(&businessID); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cleanupBusinessIntegrationFixture(context.Background(), t, businessID) })
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_account_member(business_id,user_id,role) VALUES ($1,$2,'owner')`, businessID, testUserID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testPool.Exec(ctx, `INSERT INTO business_workspace(business_id,workspace_id,kind) VALUES ($1,$2,'operational')`, businessID, testWorkspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if err := testPool.QueryRow(ctx, `INSERT INTO project(workspace_id,title,status) VALUES ($1,'Invoice number support','in_progress') RETURNING id`, testWorkspaceID).Scan(&projectID); err != nil {
+		t.Fatal(err)
+	}
+
+	client := businessRequest(t, http.MethodPost, businessID, "/clients", map[string]any{
+		"canonical_name": "Invoice Number Client", "status": "active", "primary_payment_channel": "bank",
+	}, http.StatusCreated)
+	clientID := client["id"].(string)
+	businessRequest(t, http.MethodPost, businessID, "/clients/"+clientID+"/payers", map[string]any{
+		"name": "Invoice Number Payer", "inn": "7798765432", "status": "active", "payment_channel": "bank",
+	}, http.StatusCreated)
+
+	now := time.Now().UTC()
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	thisMonth := monthStart.Format("2006-01")
+	nextMonth := monthStart.AddDate(0, 1, 0).Format("2006-01")
+	businessRequest(t, http.MethodPost, businessID, "/agreements", map[string]any{
+		"client_id": clientID, "project_id": nil, "service_type": "support",
+		"agreement_key": "invoice-number-support", "version": 1, "name": "Invoice number support",
+		"model": "fixed", "amount_rub": "7000", "invoice_day": 1, "due_days": 7,
+		"period_months": 1, "payment_channel": "bank", "effective_from": monthStart.Format("2006-01-02"),
+		"status": "active", "terms": map[string]any{},
+	}, http.StatusCreated)
+	businessRequest(t, http.MethodPost, businessID, "/receivables/generate", map[string]any{"from_month": thisMonth, "months": 2}, http.StatusOK)
+
+	// Only the far line carries the invoice. Both lines plan the same amount, so
+	// nothing but the number can tell them apart.
+	invoiceDate := now.Format("2006-01-02")
+	command, err := testPool.Exec(ctx, `
+		UPDATE business_receivable
+		SET status = 'invoiced', elba_invoice_number = '93', elba_invoice_date = $2::date
+		WHERE business_id = $1 AND period_key = $3
+	`, businessID, invoiceDate, nextMonth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.RowsAffected() != 1 {
+		t.Fatalf("expected one line for %s to invoice, updated %d", nextMonth, command.RowsAffected())
+	}
+
+	businessRequest(t, http.MethodPost, businessID, "/bank/transactions", map[string]any{
+		"booked_on": now.Format("2006-01-02"), "direction": "inbound", "amount_rub": "7000",
+		"counterparty_name": "Invoice Number Payer", "counterparty_inn": "7798765432",
+		"classification": "client_income", "idempotency_key": "invoice-number-payment",
+		"purpose": "Оплата по счету № 93 от " + now.Format("02.01.2006") + " за работы по сайту Сумма 7000-00",
+	}, http.StatusCreated)
+
+	settled := func(periodKey string) (string, string) {
+		var paid, status string
+		if err := testPool.QueryRow(ctx, `
+			SELECT paid_amount_rub::text, status FROM business_receivable
+			WHERE business_id = $1 AND period_key = $2
+		`, businessID, periodKey).Scan(&paid, &status); err != nil {
+			t.Fatal(err)
+		}
+		return paid, status
+	}
+	if paid, status := settled(nextMonth); paid != "7000.00" || status != "paid" {
+		t.Fatalf("the invoice named in the purpose was not settled: paid=%s status=%s", paid, status)
+	}
+	if paid, status := settled(thisMonth); paid != "0.00" || status == "paid" {
+		t.Fatalf("the money landed on the wrong line: paid=%s status=%s", paid, status)
+	}
+
+	var matches int
+	if err := testPool.QueryRow(ctx, `
+		SELECT count(*) FROM business_transaction_match m
+		JOIN business_receivable r ON r.id = m.target_id AND m.target_type = 'receivable'
+		WHERE r.business_id = $1 AND m.status = 'confirmed'
+	`, businessID).Scan(&matches); err != nil {
+		t.Fatal(err)
+	}
+	if matches != 1 {
+		t.Fatalf("expected exactly one settlement, got %d", matches)
+	}
+}

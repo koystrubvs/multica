@@ -513,29 +513,78 @@ func (h *Handler) pushPeriodToElba(ctx context.Context, project db.Project, peri
 
 	orgID := wsCfg.ElbaOrgID.String
 	contractorID := cfg.ElbaContractorID.String
-	billID, err := client.CreateBill(ctx, orgID, contractorID, items, opts)
+	bill, err := client.CreateBill(ctx, orgID, contractorID, items, opts)
 	if err != nil {
 		return zero, fmt.Errorf("create bill: %w", err)
 	}
 	actID, err := client.CreateAct(ctx, orgID, contractorID, items, opts)
 	if err != nil {
 		// The bill exists — still record it so a retry doesn't duplicate it.
-		slog.Error("billing: elba act creation failed after bill", "period_id", uuidToString(period.ID), "bill_id", billID, "error", err)
+		slog.Error("billing: elba act creation failed after bill", "period_id", uuidToString(period.ID), "bill_id", bill.ID, "error", err)
 	}
 	updated, uerr := h.Queries.SetClientBillingPeriodElba(ctx, db.SetClientBillingPeriodElbaParams{
-		ID:        period.ID,
-		InvoiceID: pgtype.Text{String: billID, Valid: billID != ""},
-		ActID:     pgtype.Text{String: actID, Valid: actID != ""},
+		ID:            period.ID,
+		InvoiceID:     pgtype.Text{String: bill.ID, Valid: bill.ID != ""},
+		ActID:         pgtype.Text{String: actID, Valid: actID != ""},
+		InvoiceNumber: pgtype.Text{String: bill.Number, Valid: bill.Number != ""},
+		InvoiceDate:   parseElbaDate(bill.Date),
 	})
 	if uerr != nil {
 		return zero, fmt.Errorf("record elba documents: %w", uerr)
 	}
+	h.stampReceivablesInvoiced(ctx, period.ID, period.ProjectID, period.StartsOn, bill, actID)
 	if err != nil {
-		return updated, fmt.Errorf("act creation failed (bill %s created): %w", billID, err)
+		return updated, fmt.Errorf("act creation failed (bill %s created): %w", bill.ID, err)
 	}
 	slog.Info("billing: period invoiced in Elba",
-		"period_id", uuidToString(period.ID), "bill_id", billID, "act_id", actID, "total_rub", total)
+		"period_id", uuidToString(period.ID), "bill_id", bill.ID, "bill_number", bill.Number,
+		"act_id", actID, "total_rub", total)
 	return updated, nil
+}
+
+func parseElbaDate(value string) pgtype.Date {
+	if value == "" {
+		return pgtype.Date{}
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return pgtype.Date{}
+	}
+	return pgtype.Date{Time: parsed, Valid: true}
+}
+
+// stampReceivablesInvoiced carries the Elba document down onto the money plan.
+// The bank matcher settles business_receivable rows, so an invoice number that
+// stays on the billing period is invisible to it — which is exactly the state
+// production was in: every receivable had a NULL elba_invoice_id because the
+// only code that filled it ran from the billing-run confirm, never from the
+// retry path that actually issued the invoices.
+//
+// Keyed on project and period key, which is how a receivable names its month.
+// A line whose agreement spans several projects carries no project_id and stays
+// out of reach here; it keeps settling by the date-and-amount heuristic. The
+// business is not in the filter because project_id already pins one workspace.
+func (h *Handler) stampReceivablesInvoiced(ctx context.Context, periodID, projectID pgtype.UUID, startsOn pgtype.Date, bill elbaDocument, actID string) {
+	if !startsOn.Valid || !projectID.Valid || bill.ID == "" {
+		return
+	}
+	periodKey := startsOn.Time.Format("2006-01")
+	_, err := h.DB.Exec(ctx, `
+		UPDATE business_receivable
+		SET status = CASE WHEN status IN ('paid', 'partially_paid', 'skipped', 'written_off')
+		                  THEN status ELSE 'invoiced' END,
+		    elba_invoice_id     = $3,
+		    elba_act_id         = COALESCE(NULLIF($4, ''), elba_act_id),
+		    elba_invoice_number = COALESCE(NULLIF($5, ''), elba_invoice_number),
+		    elba_invoice_date   = COALESCE(NULLIF($6, '')::date, elba_invoice_date),
+		    client_billing_period_id = $1,
+		    updated_at = now()
+		WHERE project_id = $2 AND period_key = $7
+	`, periodID, projectID, bill.ID, actID, bill.Number, bill.Date, periodKey)
+	if err != nil {
+		slog.Warn("billing: receivable invoice stamp failed",
+			"period_id", uuidToString(periodID), "error", err)
+	}
 }
 
 // InvoiceBillingPeriod pushes a closed period to Elba on demand (retry path

@@ -168,9 +168,11 @@ WHERE project_id = @project_id AND status = 'draft';
 -- `invoiced`. Allowed from `closed` (normal flow: close -> push).
 UPDATE client_billing_period
 SET status = 'invoiced', elba_invoice_id = @invoice_id, elba_act_id = @act_id,
+    elba_invoice_number = sqlc.narg('invoice_number'),
+    elba_invoice_date = sqlc.narg('invoice_date'),
     report_file = sqlc.narg('report_file'), updated_at = now()
 WHERE id = @id AND status = 'closed'
 RETURNING id, project_id, workspace_id, starts_on, ends_on, status,
        total_rub::float8 AS total_rub, last_alert_percent,
-       elba_invoice_id, elba_act_id, report_file,
+       elba_invoice_id, elba_act_id, elba_invoice_number, elba_invoice_date, report_file,
        closed_at, paid_at, created_at, updated_at;

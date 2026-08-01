@@ -711,37 +711,43 @@ func (q *Queries) SetClientBillingPeriodAlertPercent(ctx context.Context, arg Se
 const setClientBillingPeriodElba = `-- name: SetClientBillingPeriodElba :one
 UPDATE client_billing_period
 SET status = 'invoiced', elba_invoice_id = $1, elba_act_id = $2,
-    report_file = $3, updated_at = now()
-WHERE id = $4 AND status = 'closed'
+    elba_invoice_number = $3,
+    elba_invoice_date = $4,
+    report_file = $5, updated_at = now()
+WHERE id = $6 AND status = 'closed'
 RETURNING id, project_id, workspace_id, starts_on, ends_on, status,
        total_rub::float8 AS total_rub, last_alert_percent,
-       elba_invoice_id, elba_act_id, report_file,
+       elba_invoice_id, elba_act_id, elba_invoice_number, elba_invoice_date, report_file,
        closed_at, paid_at, created_at, updated_at
 `
 
 type SetClientBillingPeriodElbaParams struct {
-	InvoiceID  pgtype.Text `json:"invoice_id"`
-	ActID      pgtype.Text `json:"act_id"`
-	ReportFile pgtype.Text `json:"report_file"`
-	ID         pgtype.UUID `json:"id"`
+	InvoiceID     pgtype.Text `json:"invoice_id"`
+	ActID         pgtype.Text `json:"act_id"`
+	InvoiceNumber pgtype.Text `json:"invoice_number"`
+	InvoiceDate   pgtype.Date `json:"invoice_date"`
+	ReportFile    pgtype.Text `json:"report_file"`
+	ID            pgtype.UUID `json:"id"`
 }
 
 type SetClientBillingPeriodElbaRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	ProjectID        pgtype.UUID        `json:"project_id"`
-	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
-	StartsOn         pgtype.Date        `json:"starts_on"`
-	EndsOn           pgtype.Date        `json:"ends_on"`
-	Status           string             `json:"status"`
-	TotalRub         float64            `json:"total_rub"`
-	LastAlertPercent int32              `json:"last_alert_percent"`
-	ElbaInvoiceID    pgtype.Text        `json:"elba_invoice_id"`
-	ElbaActID        pgtype.Text        `json:"elba_act_id"`
-	ReportFile       pgtype.Text        `json:"report_file"`
-	ClosedAt         pgtype.Timestamptz `json:"closed_at"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                pgtype.UUID        `json:"id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	StartsOn          pgtype.Date        `json:"starts_on"`
+	EndsOn            pgtype.Date        `json:"ends_on"`
+	Status            string             `json:"status"`
+	TotalRub          float64            `json:"total_rub"`
+	LastAlertPercent  int32              `json:"last_alert_percent"`
+	ElbaInvoiceID     pgtype.Text        `json:"elba_invoice_id"`
+	ElbaActID         pgtype.Text        `json:"elba_act_id"`
+	ElbaInvoiceNumber pgtype.Text        `json:"elba_invoice_number"`
+	ElbaInvoiceDate   pgtype.Date        `json:"elba_invoice_date"`
+	ReportFile        pgtype.Text        `json:"report_file"`
+	ClosedAt          pgtype.Timestamptz `json:"closed_at"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Records the Elba documents created for the period and flips it to
@@ -750,6 +756,8 @@ func (q *Queries) SetClientBillingPeriodElba(ctx context.Context, arg SetClientB
 	row := q.db.QueryRow(ctx, setClientBillingPeriodElba,
 		arg.InvoiceID,
 		arg.ActID,
+		arg.InvoiceNumber,
+		arg.InvoiceDate,
 		arg.ReportFile,
 		arg.ID,
 	)
@@ -765,6 +773,8 @@ func (q *Queries) SetClientBillingPeriodElba(ctx context.Context, arg SetClientB
 		&i.LastAlertPercent,
 		&i.ElbaInvoiceID,
 		&i.ElbaActID,
+		&i.ElbaInvoiceNumber,
+		&i.ElbaInvoiceDate,
 		&i.ReportFile,
 		&i.ClosedAt,
 		&i.PaidAt,

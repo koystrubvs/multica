@@ -656,6 +656,8 @@ type BusinessReceivable struct {
 	IdempotencyKey        string             `json:"idempotency_key"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ElbaInvoiceNumber     pgtype.Text        `json:"elba_invoice_number"`
+	ElbaInvoiceDate       pgtype.Date        `json:"elba_invoice_date"`
 }
 
 type BusinessReceivableTask struct {
@@ -1015,21 +1017,23 @@ type ClientBillingDispute struct {
 }
 
 type ClientBillingPeriod struct {
-	ID               pgtype.UUID        `json:"id"`
-	ProjectID        pgtype.UUID        `json:"project_id"`
-	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
-	StartsOn         pgtype.Date        `json:"starts_on"`
-	EndsOn           pgtype.Date        `json:"ends_on"`
-	Status           string             `json:"status"`
-	TotalRub         pgtype.Numeric     `json:"total_rub"`
-	LastAlertPercent int32              `json:"last_alert_percent"`
-	ElbaInvoiceID    pgtype.Text        `json:"elba_invoice_id"`
-	ElbaActID        pgtype.Text        `json:"elba_act_id"`
-	ReportFile       pgtype.Text        `json:"report_file"`
-	ClosedAt         pgtype.Timestamptz `json:"closed_at"`
-	PaidAt           pgtype.Timestamptz `json:"paid_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                pgtype.UUID        `json:"id"`
+	ProjectID         pgtype.UUID        `json:"project_id"`
+	WorkspaceID       pgtype.UUID        `json:"workspace_id"`
+	StartsOn          pgtype.Date        `json:"starts_on"`
+	EndsOn            pgtype.Date        `json:"ends_on"`
+	Status            string             `json:"status"`
+	TotalRub          pgtype.Numeric     `json:"total_rub"`
+	LastAlertPercent  int32              `json:"last_alert_percent"`
+	ElbaInvoiceID     pgtype.Text        `json:"elba_invoice_id"`
+	ElbaActID         pgtype.Text        `json:"elba_act_id"`
+	ReportFile        pgtype.Text        `json:"report_file"`
+	ClosedAt          pgtype.Timestamptz `json:"closed_at"`
+	PaidAt            pgtype.Timestamptz `json:"paid_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ElbaInvoiceNumber pgtype.Text        `json:"elba_invoice_number"`
+	ElbaInvoiceDate   pgtype.Date        `json:"elba_invoice_date"`
 }
 
 type ClientBillingWorkspaceConfig struct {

@@ -497,7 +497,7 @@ func (h *Handler) InvoiceContractorPeriod(w http.ResponseWriter, r *http.Request
 	}
 
 	orgID := wsCfg.ElbaOrgID.String
-	billID, err := client.CreateBill(r.Context(), orgID, contractorID, items, opts)
+	bill, err := client.CreateBill(r.Context(), orgID, contractorID, items, opts)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("create bill: %v", err))
 		return
@@ -506,34 +506,40 @@ func (h *Handler) InvoiceContractorPeriod(w http.ResponseWriter, r *http.Request
 	if actErr != nil {
 		// The bill exists — record it anyway so a retry doesn't duplicate it.
 		slog.Error("billing: contractor act creation failed after bill",
-			"workspace_id", wsID, "contractor_id", contractorID, "bill_id", billID, "error", actErr)
+			"workspace_id", wsID, "contractor_id", contractorID, "bill_id", bill.ID, "error", actErr)
 	}
 
 	// Stamp every period in the batch with the shared documents (closed -> invoiced).
+	// One number covers several projects here, so every plan line in the batch
+	// answers to the same invoice — which is what the payer will quote.
 	invoicedIDs := make([]string, 0, len(periods))
 	for _, p := range periods {
 		if _, uerr := h.Queries.SetClientBillingPeriodElba(r.Context(), db.SetClientBillingPeriodElbaParams{
-			ID:        p.ID,
-			InvoiceID: pgtype.Text{String: billID, Valid: billID != ""},
-			ActID:     pgtype.Text{String: actID, Valid: actID != ""},
+			ID:            p.ID,
+			InvoiceID:     pgtype.Text{String: bill.ID, Valid: bill.ID != ""},
+			ActID:         pgtype.Text{String: actID, Valid: actID != ""},
+			InvoiceNumber: pgtype.Text{String: bill.Number, Valid: bill.Number != ""},
+			InvoiceDate:   parseElbaDate(bill.Date),
 		}); uerr != nil {
 			slog.Error("billing: contractor period elba stamp failed",
-				"period_id", uuidToString(p.ID), "bill_id", billID, "error", uerr)
+				"period_id", uuidToString(p.ID), "bill_id", bill.ID, "error", uerr)
 			continue
 		}
+		h.stampReceivablesInvoiced(r.Context(), p.ID, p.ProjectID, p.StartsOn, bill, actID)
 		invoicedIDs = append(invoicedIDs, uuidToString(p.ID))
 	}
 
 	slog.Info("billing: contractor invoiced in Elba",
-		"workspace_id", wsID, "contractor_id", contractorID, "bill_id", billID, "act_id", actID,
-		"gross_rub", grossTotal, "bill_rub", billTotal, "periods", len(invoicedIDs))
+		"workspace_id", wsID, "contractor_id", contractorID, "bill_id", bill.ID, "bill_number", bill.Number,
+		"act_id", actID, "gross_rub", grossTotal, "bill_rub", billTotal, "periods", len(invoicedIDs))
 
 	resp := map[string]any{
 		"contractor_id": contractorID,
 		"starts_on":     req.StartsOn,
 		"ends_on":       req.EndsOn,
 		"mode":          mode,
-		"bill_id":       billID,
+		"bill_id":       bill.ID,
+		"bill_number":   bill.Number,
 		"act_id":        actID,
 		"gross_rub":     grossTotal,
 		"bill_rub":      billTotal,

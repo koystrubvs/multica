@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS business_receivable_elba_number_idx;

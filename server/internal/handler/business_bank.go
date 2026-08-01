@@ -1110,15 +1110,16 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 	var (
 		direction, classification, counterpartyName string
 		counterpartyINN                             *string
+		purpose                                     string
 		amountKopecks                               int64
 		bookedOn                                    time.Time
 	)
 	err := tx.QueryRow(ctx, `
 		SELECT direction, classification, counterparty_name, counterparty_inn,
-		       round(amount_rub * 100)::bigint, booked_on
+		       COALESCE(purpose, ''), round(amount_rub * 100)::bigint, booked_on
 		FROM business_bank_transaction
 		WHERE business_id = $1 AND id = $2 AND voided_at IS NULL
-	`, businessID, transactionID).Scan(&direction, &classification, &counterpartyName, &counterpartyINN, &amountKopecks, &bookedOn)
+	`, businessID, transactionID).Scan(&direction, &classification, &counterpartyName, &counterpartyINN, &purpose, &amountKopecks, &bookedOn)
 	if err != nil {
 		return err
 	}
@@ -1141,6 +1142,22 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 	clientID, ok := resolveClientIDForBankAutoMatch(ctx, tx, businessID, counterpartyName, stringValue(counterpartyINN))
 	if !ok {
 		return nil
+	}
+
+	// An invoice named in the purpose says which document the money answers.
+	// That beats every inference below it, which is why it runs first: both
+	// wrong settlements this matcher has made on real money — a June payment
+	// closing a July line, and one closing an agreement that did not exist on
+	// the day it was paid — named their invoice in plain text.
+	if ref, refOK := parseInvoiceReference(purpose); refOK {
+		receivableID, takenKopecks, found, ferr := findReceivableByInvoiceNumber(ctx, tx, businessID, clientID, ref, amountKopecks)
+		if ferr != nil {
+			return ferr
+		}
+		if found {
+			return insertBankReceivableMatch(ctx, tx, businessID, userID, transactionID, receivableID,
+				takenKopecks, "auto bank match by invoice "+ref.Number)
+		}
 	}
 
 	// Money can arrive late for a period that is already over, but it cannot
@@ -1197,24 +1214,82 @@ func autoMatchBankTransactionToReceivable(ctx context.Context, tx pgx.Tx, busine
 	if !ok {
 		return nil
 	}
+	return insertBankReceivableMatch(ctx, tx, businessID, userID, transactionID, receivableID, matchedKopecks, "auto bank match")
+}
 
+func insertBankReceivableMatch(ctx context.Context, tx pgx.Tx, businessID, userID, transactionID, receivableID string, amountKopecks int64, notes string) error {
 	idempotencyKey := "auto-bank:" + transactionID + ":" + receivableID
 	var matchID string
-	err = tx.QueryRow(ctx, `
+	err := tx.QueryRow(ctx, `
 		INSERT INTO business_transaction_match (
 			business_id, transaction_id, target_type, target_id, amount_rub, status,
 			suggested_by, confirmed_by, confirmed_at, idempotency_key, notes
 		) VALUES (
 			$1, $2, 'receivable', $3, $4::numeric / 100, 'confirmed',
-			$5, $5, now(), $6, 'auto bank match'
+			$5, $5, now(), $6, $7
 		)
 		ON CONFLICT (business_id, idempotency_key) DO UPDATE SET updated_at = now()
 		RETURNING id::text
-	`, businessID, transactionID, receivableID, matchedKopecks, userID, idempotencyKey).Scan(&matchID)
+	`, businessID, transactionID, receivableID, amountKopecks, userID, idempotencyKey, notes).Scan(&matchID)
 	if err != nil {
 		return err
 	}
 	return recalculateBusinessReceivableFunding(ctx, tx, businessID, receivableID)
+}
+
+// findReceivableByInvoiceNumber locates the one open plan line that carries the
+// invoice the payment names. Scoped to the client because a number is not an
+// identifier on its own — Elba restarts numbering every year, and № 16 exists
+// in 2023, 2025 and 2026 across three clients. When the purpose names a date
+// and the line records one, they must agree; a line invoiced before this change
+// has no date recorded and matches on the number alone.
+//
+// Two candidates mean the number is ambiguous for this client, and the payment
+// is left for a human rather than guessed at.
+func findReceivableByInvoiceNumber(ctx context.Context, tx pgx.Tx, businessID, clientID string, ref invoiceReference, amountKopecks int64) (string, int64, bool, error) {
+	invoiceDate := ""
+	if !ref.Date.IsZero() {
+		invoiceDate = ref.Date.Format("2006-01-02")
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT r.id::text, round((r.planned_amount_rub - r.paid_amount_rub) * 100)::bigint
+		FROM business_receivable r
+		WHERE r.business_id = $1
+		  AND r.client_id = $2::uuid
+		  AND r.elba_invoice_number = $3
+		  AND r.status IN ('expected', 'invoiced', 'overdue', 'partially_paid')
+		  AND (r.planned_amount_rub - r.paid_amount_rub) > 0
+		  AND (
+		        NULLIF($4, '')::date IS NULL
+		     OR r.elba_invoice_date IS NULL
+		     OR r.elba_invoice_date = NULLIF($4, '')::date
+		  )
+	`, businessID, clientID, ref.Number, invoiceDate)
+	if err != nil {
+		return "", 0, false, err
+	}
+	defer rows.Close()
+	var (
+		receivableID string
+		remaining    int64
+		matches      int
+	)
+	for rows.Next() {
+		var id string
+		var rem int64
+		if err := rows.Scan(&id, &rem); err != nil {
+			return "", 0, false, err
+		}
+		matches++
+		receivableID, remaining = id, rem
+	}
+	if err := rows.Err(); err != nil {
+		return "", 0, false, err
+	}
+	if matches != 1 {
+		return "", 0, false, nil
+	}
+	return receivableID, minInt64(amountKopecks, remaining), true, nil
 }
 
 func recalculateBusinessPayoutPayment(ctx context.Context, tx pgx.Tx, businessID, payoutID string) error {

@@ -370,7 +370,6 @@ func (h *Handler) ConfirmBusinessBillingPeriod(w http.ResponseWriter, r *http.Re
 		if invoiced.ElbaActID.Valid {
 			resp["elba_act_url"] = elbaDocURL("Acts", invoiced.ElbaActID.String)
 		}
-		h.markReceivablesInvoiced(r.Context(), businessID, projectID, closed, invoiced.ElbaInvoiceID, invoiced.ElbaActID)
 	} else if !errors.Is(pushErr, errElbaSkipped) {
 		resp["elba_error"] = pushErr.Error()
 	} else {
@@ -441,27 +440,6 @@ func (h *Handler) acceptPeriodEconomics(ctx context.Context, businessID, userID 
 		accepted++
 	}
 	return accepted
-}
-
-func (h *Handler) markReceivablesInvoiced(ctx context.Context, businessID string, projectID pgtype.UUID, period db.CloseClientBillingPeriodRow, invoiceID, actID pgtype.Text) {
-	if !period.StartsOn.Valid {
-		return
-	}
-	periodKey := period.StartsOn.Time.Format("2006-01")
-	_, err := h.DB.Exec(ctx, `
-		UPDATE business_receivable
-		SET status = CASE WHEN status IN ('paid', 'partially_paid', 'skipped', 'written_off') THEN status ELSE 'invoiced' END,
-		    elba_invoice_id = COALESCE(NULLIF($4, ''), elba_invoice_id),
-		    elba_act_id = COALESCE(NULLIF($5, ''), elba_act_id),
-		    client_billing_period_id = $3,
-		    updated_at = now()
-		WHERE business_id = $1
-		  AND project_id = $2
-		  AND period_key = $6
-	`, businessID, projectID, period.ID, textOrEmpty(invoiceID), textOrEmpty(actID), periodKey)
-	if err != nil {
-		slog.Warn("billing confirm: receivable update failed", "period_id", uuidToString(period.ID), "error", err)
-	}
 }
 
 func (h *Handler) generateBillingPeriodReport(ctx context.Context, project db.Project, period db.CloseClientBillingPeriodRow) (string, error) {
