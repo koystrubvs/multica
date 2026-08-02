@@ -313,6 +313,8 @@
     "event_filter_actions_placeholder": "completed, failed",
     "event_filter_hint": "Обрабатывать только webhook-и с этими событиями. Оставьте пустым, чтобы принимать все.",
     "schedule_disabled_reason": "У этого автопилота несколько расписаний — редактируйте их на странице автопилота.",
+    "error_title_required": "Укажите название автопилота.",
+    "error_assignee_required": "Выберите агента или команду, которые будут выполнять автопилот.",
     "output_modes": {
       "create_issue": {
         "label": "Создать задачу",
