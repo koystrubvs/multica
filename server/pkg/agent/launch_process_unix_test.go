@@ -200,3 +200,47 @@ exit 0
 		waitProcessGone(t, pid)
 	}
 }
+
+// TestRuntimeCommandNormalExitReapsDescendants is the other half of the
+// guarantee: a descendant must not outlive the leader when the leader exits on
+// its own, not only when the task is cancelled. Cancellation was the only path
+// that signalled the group, and releaseProcessGroup on Unix used to be a no-op,
+// so a tool subprocess the agent forgot to close (a headless Chrome opened for
+// a site check, a playwright server) kept running after the task completed —
+// one such Chrome held 15 cores for 15 hours. On Windows the Job Object closes
+// with releaseProcessGroup; this pins the same outcome for Unix.
+func TestRuntimeCommandNormalExitReapsDescendants(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	pidFile := filepath.Join(tempDir, "pids")
+	fakePath := filepath.Join(tempDir, "runtime")
+	writeTestExecutable(t, fakePath, []byte("#!/bin/sh\n"+
+		`( sleep 300 ) </dev/null >/dev/null 2>&1 &
+printf '%s %s\n' "$$" "$!" > "$1"
+exit 0
+`))
+
+	cmd := NewCommand(fakePath, nil).exec(context.Background(), pidFile)
+	if err := startOwnedProcessTree(cmd, slog.Default()); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	pids := waitForPids(t, pidFile)
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("the leader should have exited cleanly on its own: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the leader never exited")
+	}
+	releaseProcessGroup(cmd)
+
+	for _, pid := range pids {
+		waitProcessGone(t, pid)
+	}
+}

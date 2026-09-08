@@ -169,8 +169,8 @@ func runOwned(cmd *exec.Cmd, logger *slog.Logger) error {
 	err := cmd.Wait()
 	// The probe is over the moment its leader is: nothing it spawned should
 	// outlive the answer. Signalling before the release covers Unix, where
-	// releasing a process group is a no-op; on Windows closing the Job Object
-	// would take the tree down on its own.
+	// the release SIGKILLs the group as well (idempotent); on Windows closing
+	// the Job Object would take the tree down on its own.
 	signalProcessGroup(cmd, syscall.SIGKILL)
 	releaseProcessGroup(cmd)
 	return err

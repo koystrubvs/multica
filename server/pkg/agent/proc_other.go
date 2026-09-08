@@ -40,9 +40,23 @@ func configureProcessGroup(cmd *exec.Cmd) {
 // so the two platforms share one call site per backend.
 func startOwnedProcessTree(cmd *exec.Cmd, _ *slog.Logger) error { return cmd.Start() }
 
-// releaseProcessGroup is a no-op on non-Windows platforms: a process group needs
-// no handle and is gone once its members are.
-func releaseProcessGroup(cmd *exec.Cmd) {}
+// releaseProcessGroup drops ownership of the tree once its leader has been
+// reaped. On Windows that closes the Job Object, which kills anything still
+// inside it. On Unix a process group needs no handle, but it is NOT gone once
+// the leader is: descendants that inherited the group keep running, and no
+// caller signals the group after a normal exit — cancellation is the only path
+// that does. A headless Chrome the agent opened for a site check and never
+// closed survived its task this way and burned 15 cores for 15 hours
+// (9 tabs rendered through SwiftShader). Every caller reaches this after
+// cmd.Wait (or from a defer that follows it), so SIGKILL the group here to give
+// Unix the same "nothing outlives the leader" guarantee the Job Object gives
+// Windows. An already-empty group yields ESRCH, which signalProcessGroup
+// absorbs; a cmd that never started has no Process and returns early.
+//
+// A descendant that left the group with setsid is still out of reach (#7615).
+func releaseProcessGroup(cmd *exec.Cmd) {
+	signalProcessGroup(cmd, syscall.SIGKILL)
+}
 
 func codexInitializeRetrySupported() bool { return true }
 
